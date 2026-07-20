@@ -1,0 +1,14 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700&family=DM+Mono:wght@400;500&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  --font-sora: "Sora", sans-serif;
+  --font-mono: "DM Mono", monospace;
+}
+
+body {
+  background: #0c0e14;
+  color: #f1f5f9;
+  font-family: "Sora", sans-serif;
+}
