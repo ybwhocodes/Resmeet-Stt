@@ -1,4 +1,16 @@
 backend/models/models--mobiuslabsgmbh--faster-whisper-large-v3-turbo/
+backend/transcription_cache.json
+backend/transcription_cache.json.tmp
+backend/transcripts_md/*.md
+
+# OS files
+.DS_Store
+
+# Backend
+backend/.env
+backend/whisperx-env/
+backend/**/.DS_Store
+backend/knowledge/.DS_Store
 
 # Frontend logs
 frontend/logs

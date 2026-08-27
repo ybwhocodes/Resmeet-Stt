@@ -17,5 +17,10 @@ CREATE TABLE IF NOT EXISTS transcripts (
                     DEFAULT CURRENT_TIMESTAMP         COMMENT 'Waktu proses selesai',
     duration_s      FLOAT           DEFAULT NULL      COMMENT 'Durasi audio dalam detik',
     language        VARCHAR(10)     DEFAULT 'id'      COMMENT 'Kode bahasa (id = Indonesia)',
-    word_timestamps JSON            DEFAULT NULL      COMMENT 'Word-level timestamps dari whisperx alignment'
+    word_timestamps JSON            DEFAULT NULL      COMMENT 'Word-level timestamps dari whisperx alignment',
+    raw_text        LONGTEXT        DEFAULT NULL      COMMENT 'Teks mentah sebelum koreksi AI',
+    ai_corrected_text LONGTEXT      DEFAULT NULL      COMMENT 'Teks hasil koreksi AI',
+    ai_summary      LONGTEXT        DEFAULT NULL      COMMENT 'Ringkasan dari AI',
+    md_path         VARCHAR(500)    DEFAULT NULL      COMMENT 'Path file Markdown hasil transkrip',
+    ai_correction_status VARCHAR(50) DEFAULT 'skipped' COMMENT 'Status koreksi AI'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

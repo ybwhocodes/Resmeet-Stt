@@ -1,16 +1,129 @@
-# React + Vite
+# Frontend Setup dan Run
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Frontend: React + Vite + Socket.IO client.
 
-Currently, two official plugins are available:
+## Prasyarat
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Node.js 20.19+ atau 22.13+ direkomendasikan.
+- Backend sudah jalan di `http://localhost:8081`.
 
-## React Compiler
+Cek Node:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+node -v
+npm -v
+```
 
-## Expanding the ESLint configuration
+## Setup
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Masuk folder frontend:
+
+```bash
+cd frontend
+```
+
+Install dependency:
+
+```bash
+npm install
+```
+
+## Konfigurasi API
+
+Frontend membaca backend URL dari environment Vite.
+
+Buat file `.env.local` di folder `frontend` jika ingin override:
+
+```env
+VITE_API_BASE_URL=http://localhost:8081/api
+```
+
+Jika tidak ada `.env.local`, default tetap:
+
+```text
+http://localhost:8081/api
+```
+
+Untuk ngrok/contoh server remote:
+
+```env
+VITE_API_BASE_URL=https://example.ngrok-free.app/api
+```
+
+## Run Development
+
+```bash
+npm run dev
+```
+
+Buka URL yang muncul, biasanya:
+
+```text
+http://localhost:5173
+```
+
+## Build Production
+
+```bash
+npm run build
+```
+
+Preview hasil build:
+
+```bash
+npm run preview
+```
+
+## Fitur Yang Terhubung Ke Backend
+
+- Upload file audio ke `POST /api/upload-and-transcribe`.
+- Toggle `Koreksi AI` mengirim `ai_correction=true/false`.
+- Toggle `Output Markdown` mengirim `output_format=md/json`.
+- Progress realtime via Socket.IO.
+- Preflight check via `GET /api/preflight`.
+- Riwayat transkrip via `GET /api/transcripts`.
+- Download `.txt` lokal dari teks final.
+- Download `.md` dari `GET /api/jobs/<job_id>/download-md`.
+
+## Urutan Run Full App
+
+Terminal 1:
+
+```bash
+cd backend
+source .venv/bin/activate
+python app.py
+```
+
+Terminal 2:
+
+```bash
+cd frontend
+npm run dev
+```
+
+## Troubleshooting
+
+Frontend tidak connect backend:
+
+- Pastikan backend jalan di `http://localhost:8081`.
+- Cek `VITE_API_BASE_URL`.
+- Refresh browser setelah ubah `.env.local`.
+
+Socket disconnected:
+
+- Backend belum jalan.
+- URL backend salah.
+- Ngrok URL berubah.
+
+Build gagal native binding Vite:
+
+```bash
+npm install
+npm run build
+```
+
+Warning engine Node:
+
+- Upgrade Node ke versi yang diminta dependency.
+- Build bisa tetap sukses, tapi versi Node lama bisa bikin masalah install.
