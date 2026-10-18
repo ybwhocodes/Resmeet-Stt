@@ -367,9 +367,6 @@ export default function App() {
         ai_correction_status: "paraphrased",
       };
       updateTargetFn(next);
-      if (updateTargetFn === setResult && data.directed_topics?.length > 0) {
-        setDirectedTopics(data.directed_topics);
-      }
       fetchHistory();
     } catch (e) {
       setError(e.message);
