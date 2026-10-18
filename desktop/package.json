@@ -1,0 +1,51 @@
+{
+  "name": "resmeet-stt-desktop",
+  "version": "1.0.0",
+  "description": "Resmeet STT Desktop Native App (macOS DMG & Windows EXE)",
+  "main": "main.cjs",
+  "author": "ybwhocodes",
+  "scripts": {
+    "start": "electron main.cjs",
+    "pack": "electron-builder --dir",
+    "dist:mac": "electron-builder --mac dmg",
+    "dist:win": "electron-builder --win nsis portable",
+    "dist:all": "electron-builder -mw"
+  },
+  "build": {
+    "appId": "com.resmeet.stt",
+    "productName": "Resmeet-STT",
+    "directories": {
+      "output": "../release"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "../frontend/dist/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "assets/icon.png"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  }
+}

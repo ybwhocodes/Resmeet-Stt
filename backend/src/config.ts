@@ -7,6 +7,7 @@ const baseDir = path.resolve(__dirname, "..");
 dotenv.config({ path: path.join(baseDir, ".env") });
 
 export interface AppSettings {
+  port: number;
   aiBaseUrl: string;
   aiApiKey: string;
   aiModelId: string;
@@ -20,7 +21,8 @@ export interface AppSettings {
   cpuThreads: number;
   enableDenoise: boolean;
   ffmpegTimeoutS: number;
-  port: number;
+  dbType: "sqlite" | "mysql" | "postgres";
+  dbSqlitePath: string;
   dbHost: string;
   dbPort: number;
   dbName: string;
@@ -44,7 +46,13 @@ function loadSavedSettings(): Partial<AppSettings> {
 
 const saved = loadSavedSettings();
 
+const defaultDbType: "sqlite" | "mysql" | "postgres" =
+  (saved.dbType as any) ||
+  (process.env.DB_TYPE as any) ||
+  "sqlite";
+
 export const config: AppSettings = {
+  port: Number(saved.port || process.env.PORT || 8200),
   aiBaseUrl: saved.aiBaseUrl || (process.env.AI_BASE_URL || "http://localhost:20128/v1").replace(/\/+$/, ""),
   aiApiKey: saved.aiApiKey || (process.env.AI_API_KEY || "sk-ff353870199354cb-rvq507-8ef93405"),
   aiModelId: saved.aiModelId || (process.env.AI_MODEL_ID || "9R-Gemini"),
@@ -58,12 +66,13 @@ export const config: AppSettings = {
   cpuThreads: Number(process.env.CPU_THREADS || 4),
   enableDenoise: (process.env.ENABLE_AUDIO_DENOISE || "false").toLowerCase() === "true",
   ffmpegTimeoutS: Number(process.env.FFMPEG_TIMEOUT_S || 600),
-  port: Number(process.env.PORT || 8081),
-  dbHost: process.env.DB_HOST || "127.0.0.1",
-  dbPort: Number(process.env.DB_PORT || 3307),
-  dbName: process.env.DB_NAME || "stt_db",
-  dbUser: process.env.DB_USER || "root",
-  dbPassword: process.env.DB_PASSWORD || "password",
+  dbType: defaultDbType,
+  dbSqlitePath: path.join(baseDir, "resmeet.sqlite"),
+  dbHost: saved.dbHost || process.env.DB_HOST || "127.0.0.1",
+  dbPort: Number(saved.dbPort || process.env.DB_PORT || (defaultDbType === "postgres" ? 5432 : 3307)),
+  dbName: saved.dbName || process.env.DB_NAME || "stt_db",
+  dbUser: saved.dbUser || process.env.DB_USER || (defaultDbType === "postgres" ? "postgres" : "root"),
+  dbPassword: saved.dbPassword !== undefined ? saved.dbPassword : (process.env.DB_PASSWORD || "password"),
 };
 
 export const PATHS = {
@@ -73,7 +82,30 @@ export const PATHS = {
   transcriptsMdDir: path.join(baseDir, "transcripts_md"),
   cacheFile: path.join(baseDir, "transcription_cache.json"),
   settingsFile: SETTINGS_FILE,
+  sqliteFile: path.join(baseDir, "resmeet.sqlite"),
 };
+
+export function saveSettingsToFile() {
+  try {
+    const toSave = {
+      port: config.port,
+      aiBaseUrl: config.aiBaseUrl,
+      aiApiKey: config.aiApiKey,
+      aiModelId: config.aiModelId,
+      aiParaphraseStyle: config.aiParaphraseStyle,
+      dbType: config.dbType,
+      dbHost: config.dbHost,
+      dbPort: config.dbPort,
+      dbName: config.dbName,
+      dbUser: config.dbUser,
+      dbPassword: config.dbPassword,
+      updatedAt: new Date().toISOString(),
+    };
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(toSave, null, 2), "utf-8");
+  } catch (e) {
+    console.error("[Config] Gagal menyimpan settings.json:", e);
+  }
+}
 
 export function updateAiSettings(newSettings: {
   baseUrl?: string;
@@ -86,17 +118,23 @@ export function updateAiSettings(newSettings: {
   if (newSettings.modelId !== undefined) config.aiModelId = newSettings.modelId;
   if (newSettings.paraphraseStyle !== undefined) config.aiParaphraseStyle = newSettings.paraphraseStyle;
 
-  // Persist to settings.json
-  try {
-    const toSave = {
-      aiBaseUrl: config.aiBaseUrl,
-      aiApiKey: config.aiApiKey,
-      aiModelId: config.aiModelId,
-      aiParaphraseStyle: config.aiParaphraseStyle,
-      updatedAt: new Date().toISOString(),
-    };
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(toSave, null, 2), "utf-8");
-  } catch (e) {
-    console.error("[Config] Gagal menyimpan settings.json:", e);
-  }
+  saveSettingsToFile();
+}
+
+export function updateDbSettings(newDb: {
+  dbType?: "sqlite" | "mysql" | "postgres";
+  dbHost?: string;
+  dbPort?: number;
+  dbName?: string;
+  dbUser?: string;
+  dbPassword?: string;
+}) {
+  if (newDb.dbType !== undefined) config.dbType = newDb.dbType;
+  if (newDb.dbHost !== undefined) config.dbHost = newDb.dbHost;
+  if (newDb.dbPort !== undefined) config.dbPort = Number(newDb.dbPort);
+  if (newDb.dbName !== undefined) config.dbName = newDb.dbName;
+  if (newDb.dbUser !== undefined) config.dbUser = newDb.dbUser;
+  if (newDb.dbPassword !== undefined) config.dbPassword = newDb.dbPassword;
+
+  saveSettingsToFile();
 }

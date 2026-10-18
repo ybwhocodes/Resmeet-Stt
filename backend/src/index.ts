@@ -3,8 +3,19 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { Server } from "socket.io";
-import { config, PATHS, updateAiSettings } from "./config";
-import { initDb, checkDbConnection, saveTranscript, getRecentTranscripts, getTranscriptById, deleteTranscript, updateTranscriptParaphrase } from "./db";
+import { config, PATHS, updateAiSettings, updateDbSettings } from "./config";
+import {
+  initDb,
+  checkDbConnection,
+  testDbConnection,
+  migrateDatabase,
+  saveTranscript,
+  getRecentTranscripts,
+  getTranscriptById,
+  deleteTranscript,
+  updateTranscriptParaphrase,
+  closeDbConnections,
+} from "./db";
 import { ensureKnowledgeFiles, updateKnowledge } from "./knowledge";
 import { calculateFileHash, getCacheKey, readCache, writeCache } from "./cache";
 import { convertWithFfmpeg, transcribeWithProgress, getWhisperModelPath, findWhisperCliBinary } from "./whisper";
@@ -132,35 +143,67 @@ const server = http.createServer(async (req, res) => {
       return sendJson({ status: allOk ? "ok" : "failed", checks }, allOk ? 200 : 500);
     }
 
-    // 3. Settings - GET current AI configuration
+    // 3. Settings - GET current configuration
     if (pathname === "/api/settings" && req.method === "GET") {
       return sendJson({
+        port: config.port,
         baseUrl: config.aiBaseUrl,
         apiKey: config.aiApiKey,
         modelId: config.aiModelId,
         paraphraseStyle: config.aiParaphraseStyle,
         isConfigured: isAiConfigured(),
         whisperModel: config.whisperModel,
+        dbType: config.dbType || "sqlite",
+        dbHost: config.dbHost,
+        dbPort: config.dbPort,
+        dbName: config.dbName,
+        dbUser: config.dbUser,
+        dbPassword: config.dbPassword,
       });
     }
 
-    // 4. Settings - POST update AI configuration
+    // 4. Settings - POST update configuration
     if (pathname === "/api/settings" && (req.method === "POST" || req.method === "PUT")) {
       const body = await readJsonBody();
-      updateAiSettings({
-        baseUrl: body.baseUrl || body.url,
-        apiKey: body.apiKey || body.api_key,
-        modelId: body.modelId || body.model || body.model_id,
-        paraphraseStyle: body.paraphraseStyle || body.aiParaphraseStyle,
-      });
+      
+      // Update AI settings
+      if (body.baseUrl !== undefined || body.apiKey !== undefined || body.modelId !== undefined || body.paraphraseStyle !== undefined) {
+        updateAiSettings({
+          baseUrl: body.baseUrl || body.url,
+          apiKey: body.apiKey || body.api_key,
+          modelId: body.modelId || body.model || body.model_id,
+          paraphraseStyle: body.paraphraseStyle || body.aiParaphraseStyle,
+        });
+      }
+
+      // Update Database settings
+      if (body.dbType !== undefined || body.dbHost !== undefined || body.dbPort !== undefined || body.dbName !== undefined || body.dbUser !== undefined || body.dbPassword !== undefined) {
+        updateDbSettings({
+          dbType: body.dbType,
+          dbHost: body.dbHost,
+          dbPort: body.dbPort ? Number(body.dbPort) : undefined,
+          dbName: body.dbName,
+          dbUser: body.dbUser,
+          dbPassword: body.dbPassword,
+        });
+        await closeDbConnections();
+        await initDb();
+      }
+
       return sendJson({
         success: true,
-        message: "Pengaturan model AI dan gaya parafrase berhasil diperbarui.",
+        message: "Pengaturan berhasil diperbarui dan disimpan.",
         settings: {
+          port: config.port,
           baseUrl: config.aiBaseUrl,
           apiKey: config.aiApiKey ? `${config.aiApiKey.slice(0, 4)}...${config.aiApiKey.slice(-4)}` : "",
           modelId: config.aiModelId,
           paraphraseStyle: config.aiParaphraseStyle,
+          dbType: config.dbType,
+          dbHost: config.dbHost,
+          dbPort: config.dbPort,
+          dbName: config.dbName,
+          dbUser: config.dbUser,
         },
       });
     }
@@ -173,6 +216,55 @@ const server = http.createServer(async (req, res) => {
       const testModel = body.modelId || body.model || config.aiModelId;
 
       const result = await testAiConnection(testUrl, testKey, testModel);
+      return sendJson(result, result.success ? 200 : 400);
+    }
+
+    // 5.1 Settings - POST test Database connection
+    if (pathname === "/api/settings/db-test" && req.method === "POST") {
+      const body = await readJsonBody();
+      const result = await testDbConnection({
+        type: body.type || body.dbType || config.dbType,
+        host: body.host || body.dbHost || config.dbHost,
+        port: body.port || body.dbPort || config.dbPort,
+        user: body.user || body.dbUser || config.dbUser,
+        password: body.password !== undefined ? body.password : config.dbPassword,
+        name: body.name || body.dbName || config.dbName,
+      });
+      return sendJson(result, result.success ? 200 : 400);
+    }
+
+    // 5.2 Settings - POST migrate Database schema
+    if (pathname === "/api/settings/db-migrate" && req.method === "POST") {
+      const body = await readJsonBody();
+      const targetType = body.type || body.dbType || config.dbType || "sqlite";
+      const targetHost = body.host || body.dbHost || config.dbHost;
+      const targetPort = body.port || body.dbPort || config.dbPort;
+      const targetUser = body.user || body.dbUser || config.dbUser;
+      const targetPassword = body.password !== undefined ? body.password : config.dbPassword;
+      const targetName = body.name || body.dbName || config.dbName;
+
+      const result = await migrateDatabase({
+        type: targetType,
+        host: targetHost,
+        port: targetPort,
+        user: targetUser,
+        password: targetPassword,
+        name: targetName,
+      });
+
+      if (result.success) {
+        updateDbSettings({
+          dbType: targetType,
+          dbHost: targetHost,
+          dbPort: Number(targetPort),
+          dbUser: targetUser,
+          dbPassword: targetPassword,
+          dbName: targetName,
+        });
+        await closeDbConnections();
+        await initDb();
+      }
+
       return sendJson(result, result.success ? 200 : 400);
     }
 
@@ -590,6 +682,8 @@ async function bootstrap() {
   console.log("STT Engine: whisper.cpp");
   console.log("Model: " + config.whisperModel);
   console.log("AI Model: " + config.aiModelId + " (" + config.aiBaseUrl + ")");
+  console.log("Storage DB: " + (config.dbType || "sqlite").toUpperCase() + (config.dbType === "sqlite" ? ` (${PATHS.sqliteFile})` : ` (${config.dbHost}:${config.dbPort}/${config.dbName})`));
+  console.log("Port: " + config.port);
   console.log("-----------------------------------------");
 
   await initDb();

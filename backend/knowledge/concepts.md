@@ -119,3 +119,13 @@
 
 - Deskripsi: Prinsip pemisahan data AI dan penempatan validasi manusia sebagai filter akhir guna mencegah kesalahan fatal dan beban data berlebih.
 - Sumber: job_id=afc75af3988647c28c7e5a05aff2399d
+
+## Moratorium Pembukaan Area Baru
+
+- Deskripsi: Penghentian sementara perizinan investasi jaringan baru untuk memaksa tim fokus pada utilisasi port ODP dan retensi pelanggan isolir.
+- Sumber: job_id=ab440a539fd54e1a9adc024eda75f66e
+
+## Direct Switch Remunerasi
+
+- Deskripsi: Pemberlakuan instan skema insentif dan gaji baru di tengah periode berjalan tanpa menunggu siklus pergantian kuartal resmi.
+- Sumber: job_id=ab440a539fd54e1a9adc024eda75f66e

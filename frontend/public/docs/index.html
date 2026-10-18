@@ -238,6 +238,14 @@
 
       <nav>
         <div class="nav-group">
+          <div class="nav-label">Download &amp; Desktop App</div>
+          <a href="#desktop-download" class="nav-item">🍎 Download macOS (.DMG)</a>
+          <a href="#desktop-download" class="nav-item">🪟 Download Windows (.EXE)</a>
+          <a href="#desktop-download" class="nav-item">Mode Standalone vs Web</a>
+          <a href="#desktop-build" class="nav-item">Cara Build DMG &amp; EXE</a>
+        </div>
+
+        <div class="nav-group">
           <div class="nav-label">Ikhtisar</div>
           <a href="#pengenalan" class="nav-item">Pengenalan Sistem</a>
           <a href="#fitur" class="nav-item">Fitur Utama</a>
@@ -253,6 +261,12 @@
         </div>
 
         <div class="nav-group">
+          <div class="nav-label">Database &amp; Migrasi</div>
+          <a href="#multi-database" class="nav-item">SQLite, MySQL, &amp; Postgres</a>
+          <a href="#migration-button" class="nav-item">Tombol Migrasi Database</a>
+        </div>
+
+        <div class="nav-group">
           <div class="nav-label">Pipeline &amp; Output</div>
           <a href="#combos" class="nav-item">3 Combo Pipeline STT</a>
           <a href="#outputs" class="nav-item">3 Format Output Rapat</a>
@@ -262,7 +276,7 @@
         <div class="nav-group">
           <div class="nav-label">Konfigurasi &amp; API</div>
           <a href="#konfigurasi" class="nav-item">Konfigurasi .env &amp; AI</a>
-          <a href="#api" class="nav-item">Endpoint REST API</a>
+          <a href="#api" class="nav-item">Endpoint REST API (Port 8200)</a>
           <a href="#troubleshooting" class="nav-item">Troubleshooting &amp; FAQ</a>
         </div>
       </nav>
@@ -271,22 +285,79 @@
     <!-- Main Content -->
     <main class="main">
       <div class="hero-banner">
-        <span class="badge badge-primary">Dokumentasi Teknis v2.0</span>
+        <span class="badge badge-primary">Dokumentasi Teknis v2.0 • Port Default 8200</span>
         <h1 style="margin-top: 14px;">Resmeet-STT: Enterprise Meeting Notetaker</h1>
         <p style="font-size: 16px; margin-bottom: 20px;">
           Solusi transkripsi audio rapat lokal dan generator Minutes of Meeting (MoM) otomatis berbasis 
-          <strong>Bun.js runtime</strong>, model <strong>whisper.cpp</strong> dengan akselerasi Apple Silicon Metal / CPU NEON, 
-          ekstraksi topik terarah <strong>Jev-ultrafast</strong>, dan visualisasi interaktif <strong>Markmap Mindmap</strong>.
+          <strong>Bun.js runtime</strong> (Port default <strong>8200</strong>), model <strong>whisper.cpp</strong> dengan akselerasi Apple Silicon Metal / CPU NEON, 
+          dukungan multi-database <strong>SQLite (Default Mandiri), MySQL, &amp; PostgreSQL</strong> dengan tombol migrasi in-app, 
+          ekstraksi topik terarah <strong>Jev-ultrafast</strong>, serta paket aplikasi <strong>Desktop .DMG &amp; .EXE</strong> siap pakai.
         </p>
         <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-          <a href="http://localhost:5173" target="_blank" class="badge badge-success" style="font-size: 13px; padding: 8px 16px;">
+          <a href="#desktop-download" class="badge badge-success" style="font-size: 13px; padding: 8px 16px;">
+            📥 Download Desktop (.DMG / .EXE) ↓
+          </a>
+          <a href="http://localhost:5173" target="_blank" class="badge badge-primary" style="font-size: 13px; padding: 8px 16px;">
             Buka Web App (Port 5173) ↗
           </a>
-          <a href="#step-by-step" class="badge badge-primary" style="font-size: 13px; padding: 8px 16px;">
-            Mulai Tutorial Setup Dari Awal ↓
+          <a href="#step-by-step" class="badge badge-warning" style="font-size: 13px; padding: 8px 16px;">
+            Tutorial Setup Web Server ↓
           </a>
         </div>
       </div>
+
+      <!-- Download Desktop Section (Langsung Pakai Tanpa Git) -->
+      <section id="desktop-download" style="margin-bottom: 40px;">
+        <div style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(16, 185, 129, 0.1)); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 20px; padding: 28px; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 20px;">
+            <div>
+              <span class="badge badge-success" style="margin-bottom: 8px;">✨ Langsung Pakai Tanpa Perlu Git Clone</span>
+              <h2 style="margin: 0; padding: 0; border: none; font-size: 24px; color: #fff;">Unduh Aplikasi Desktop Resmeet-STT</h2>
+              <p style="font-size: 14px; color: #94a3b8; margin: 4px 0 0 0;">
+                Tersedia untuk macOS dan Windows. Cukup unduh installer, pasang, dan langsung jalankan secara mandiri dengan database SQLite bawaan tanpa setup terminal!
+              </p>
+            </div>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+              <a href="https://github.com/ybwhocodes/Resmeet-Stt/releases/latest/download/Resmeet-STT-macOS.dmg" class="badge badge-primary" style="font-size: 14px; padding: 12px 20px; background: #4f46e5; color: #fff; text-decoration: none; border-radius: 12px; font-weight: 700; box-shadow: 0 4px 14px rgba(79, 70, 229, 0.4);">
+                🍏 Unduh .DMG (macOS)
+              </a>
+              <a href="https://github.com/ybwhocodes/Resmeet-Stt/releases/latest/download/Resmeet-STT-Windows-Setup.exe" class="badge badge-success" style="font-size: 14px; padding: 12px 20px; background: #059669; color: #fff; text-decoration: none; border-radius: 12px; font-weight: 700; box-shadow: 0 4px 14px rgba(5, 150, 105, 0.4);">
+                🪟 Unduh .EXE (Windows)
+              </a>
+            </div>
+          </div>
+
+          <div class="grid-2" style="margin-bottom: 0;">
+            <div class="card" style="background: rgba(12, 14, 20, 0.75);">
+              <h3 style="color: #818cf8; margin-top: 0; display: flex; align-items: center; gap: 8px;">
+                <span>💻 Mode Program Lokal (Desktop Standalone)</span>
+              </h3>
+              <p style="font-size: 13px; color: #cbd5e1; margin-bottom: 8px;">
+                <strong>Tanpa konfigurasi server.</strong> Menggunakan penyimpanan database SQLite bawaan (<code>resmeet.sqlite</code>) yang otomatis dibuat saat aplikasi dibuka. Cocok untuk laptop notulis, eksekutif, atau meeting offline.
+              </p>
+              <ul style="font-size: 12px; color: #94a3b8; padding-left: 18px; line-height: 1.6;">
+                <li>Tidak memerlukan server MySQL atau Docker sama sekali.</li>
+                <li>Database lokal instan tanpa perlu tombol migrasi manual.</li>
+                <li>Semua berkas notulen, mindmap, dan rekaman tersimpan lokal.</li>
+              </ul>
+            </div>
+
+            <div class="card" style="background: rgba(12, 14, 20, 0.75);">
+              <h3 style="color: #34d399; margin-top: 0; display: flex; align-items: center; gap: 8px;">
+                <span>🌐 Mode Web Server (Enterprise / Tim)</span>
+              </h3>
+              <p style="font-size: 13px; color: #cbd5e1; margin-bottom: 8px;">
+                <strong>Untuk penggunaan bersama dalam jaringan kantor / VPS.</strong> Backend aktif pada <strong>Port default 8200</strong>, mendukung database SQLite, MySQL, atau PostgreSQL terpusat dengan tombol migrasi in-app.
+              </p>
+              <ul style="font-size: 12px; color: #94a3b8; padding-left: 18px; line-height: 1.6;">
+                <li>Backend default port: <code>http://localhost:8200</code></li>
+                <li>Frontend Vite dev server: <code>http://localhost:5173</code></li>
+                <li>Dapat diakses oleh seluruh rekan tim melalui web browser.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <!-- 1. Pengenalan -->
       <section id="pengenalan">
@@ -476,23 +547,92 @@ docker compose down</code></pre>
 bun install
 pip install numpy scipy soundfile noisereduce onnxruntime torch
 bun run src/index.ts
-# Aktif di http://localhost:8081</code></pre>
+# Backend aktif pada port default http://localhost:8200</code></pre>
         </div>
         <div class="card">
           <strong style="color: #34d399;">Terminal 2 — Frontend React + Vite:</strong>
           <pre style="margin-top: 8px; margin-bottom: 0;"><code>cd frontend
 npm install
 npm run dev
-# Aktif di http://localhost:5173</code></pre>
+# Frontend aktif di http://localhost:5173</code></pre>
         </div>
 
         <h3><span class="step-number">6</span> Akses Antarmuka Web</h3>
         <p>Buka browser Anda di **<a href="http://localhost:5173" target="_blank">http://localhost:5173</a>**:</p>
         <ol style="padding-left: 20px; font-size: 14px; color: #cbd5e1; line-height: 1.8;">
           <li>Klik menu <strong>Pengaturan</strong>: Periksa checklist <strong>Preflight Status</strong> untuk memastikan modul <em>uploads, knowledge, ffmpeg, format_mom, whisper_model, database</em> semua centang hijau.</li>
+          <li>Periksa bagian <strong>Penyimpanan Database</strong>: default menggunakan SQLite lokal mandiri tanpa setup. Jika menggunakan MySQL atau Postgres, masukkan data koneksi dan klik tombol <strong>Migrate Database</strong>.</li>
           <li>Klik tombol <strong>Uji Koneksi AI</strong> untuk memastikan integrasi LLM terhubung.</li>
           <li>Kembali ke menu <strong>Transkripsi</strong>: Drag &amp; drop file audio/video rapat Anda (<code>.mp4</code>, <code>.mpeg</code>, <code>.m4a</code>, <code>.mp3</code>, <code>.wav</code>, dll.), pilih <strong>Combo 1</strong>, lalu klik <strong>Mulai Transkripsi &amp; Analisis</strong>!</li>
         </ol>
+      </section>
+
+      <!-- Multi-Database & Tombol Migrasi -->
+      <section id="multi-database">
+        <h2>Penyimpanan Multi-Database &amp; Tombol Migrasi</h2>
+        <p>
+          Resmeet-STT mendukung 3 mesin database yang dapat diganti secara dinamis langsung melalui menu <strong>Pengaturan</strong> di dalam aplikasi web maupun desktop:
+        </p>
+
+        <div class="grid-3">
+          <div class="card">
+            <h3 style="color: #34d399; margin-top: 0;">1. SQLite (Default Mandiri)</h3>
+            <p style="font-size: 13px;">
+              <strong>Zero-Configuration:</strong> Default pertama kali aplikasi dijalankan jika MySQL/Postgres belum ada. File <code>backend/resmeet.sqlite</code> dibuat secara otomatis. Tabel <code>transcripts</code> langsung siap dipakai tanpa memerlukan server terpisah ataupun tombol migrasi manual.
+            </p>
+          </div>
+          <div class="card">
+            <h3 style="color: #60a5fa; margin-top: 0;">2. MySQL Server</h3>
+            <p style="font-size: 13px;">
+              Cocok untuk server kantor. Masukkan Host (127.0.0.1), Port (3307/3306), Database (stt_db), User, dan Password. Dilengkapi tombol <strong>Uji Koneksi</strong> dan tombol <strong>Migrate Database</strong>.
+            </p>
+          </div>
+          <div class="card">
+            <h3 style="color: #a78bfa; margin-top: 0;">3. PostgreSQL Server</h3>
+            <p style="font-size: 13px;">
+              Dukungan native database enterprise PostgreSQL (Port default 5432). Mendukung skema tabel relasional dan field JSON native untuk metadata topik dan audio rapat.
+            </p>
+          </div>
+        </div>
+
+        <div id="migration-button" class="card" style="border-left: 4px solid #10b981; margin-top: 20px;">
+          <h3 style="color: #34d399; margin-top: 0;">Logika Tombol Migrasi Database</h3>
+          <p style="font-size: 13.5px; margin-bottom: 10px;">
+            Untuk menjaga kenyamanan pengguna, tombol migrasi dirancang dengan logika kondisional pintar:
+          </p>
+          <ul style="font-size: 13px; color: #cbd5e1; padding-left: 20px; line-height: 1.7;">
+            <li><strong>Jika memilih SQLite:</strong> Tombol migrasi tidak ditampilkan karena SQLite sudah otomatis terbuat dan termigrasi secara otomatis (zero-setup out-of-the-box).</li>
+            <li><strong>Jika memilih MySQL atau PostgreSQL:</strong> Tombol <strong>"Migrate Database"</strong> akan otomatis muncul. Saat diklik, backend membuat database (jika belum ada) dan mengeksekusi migrasi skema tabel <code>transcripts</code> beserta seluruh kolom JSON secara instan.</li>
+            <li><strong>Tombol Uji Koneksi:</strong> Memverifikasi konektivitas jaringan, menghitung latensi server (ms), dan memastikan autentikasi berhasil sebelum migrasi dijalankan.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Cara Build DMG & EXE Sendiri -->
+      <section id="desktop-build">
+        <h2>Cara Membuat (Build) File .DMG &amp; .EXE Sendiri</h2>
+        <p>Jika Anda seorang developer yang ingin mengompilasi file installer <code>.dmg</code> (macOS) atau <code>.exe</code> (Windows) sendiri dari source code:</p>
+
+        <div class="card" style="margin-bottom: 16px;">
+          <h3 style="color: #818cf8; margin-top: 0;">Opsi 1: Menggunakan Script Otomatis (build-desktop.sh)</h3>
+          <pre><code># Berikan izin eksekusi
+chmod +x scripts/build-desktop.sh
+
+# Jalankan script packaging lengkap
+./scripts/build-desktop.sh
+
+# Hasil build .dmg, .exe, dan binary akan tersimpan di folder release/
+ls -lh release/</code></pre>
+        </div>
+
+        <div class="card">
+          <h3 style="color: #34d399; margin-top: 0;">Opsi 2: Mengompilasi Binary Standalone dengan Bun Compile</h3>
+          <pre><code># Kompilasi executable standalone macOS (Apple Silicon & Intel)
+bun build --compile --minify backend/src/index.ts --outfile release/resmeet-mac
+
+# Kompilasi executable standalone Windows (.exe)
+bun build --compile --minify --target=bun-windows-x64 backend/src/index.ts --outfile release/resmeet-win.exe</code></pre>
+        </div>
       </section>
 
       <!-- 5. 3 Combo Pipeline -->
@@ -580,19 +720,19 @@ npm run dev
           <div class="card">
             <span class="badge badge-primary">Poin-poin Penting</span>
             <p style="font-size: 13px; margin-top: 8px; margin-bottom: 0;">
-              Format bernomor yang to-the-point, ringkas, dan fokus pada intisari kesepakatan tanpa narasi berbelit.
+              Deskripsi singkat, to the point, padat, dan cepat dipindai pembaca (<strong>minimal 2 paragraf per poin</strong>) dengan penjelasan konteks yang terarah.
             </p>
           </div>
           <div class="card">
             <span class="badge badge-success">Detail &amp; Deskriptif</span>
             <p style="font-size: 13px; margin-top: 8px; margin-bottom: 0;">
-              Uraian mendalam per topik dengan konteks masalah, argumen peserta, latar belakang keputusan, dan rincian teknis.
+              Penjelasan komprehensif latar belakang, argumen peserta rapat, dan rincian teknis aksi (<strong>minimal 4 paragraf panjang</strong>) dilengkapi insight &amp; analisis deskriptif mendalam agar pembaca yang tidak ikut meeting paham seutuhnya.
             </p>
           </div>
           <div class="card">
             <span class="badge badge-warning">Ringkasan Eksekutif</span>
             <p style="font-size: 13px; margin-top: 8px; margin-bottom: 0;">
-              Laporan ringkas tingkat manajemen puncak yang merangkum tujuan strategis, dampak bisnis, dan alokasi PIC.
+              Format strategis tingkat manajemen pengambil keputusan (<strong>minimal 2 paragraf per poin</strong>) dilengkapi konteks dan <strong>analisis pro-kontra</strong> setiap keputusan.
             </p>
           </div>
         </div>
@@ -648,7 +788,17 @@ npm run dev
             <tr>
               <td><code>GET / POST</code></td>
               <td><code>/api/settings</code></td>
-              <td>Melihat atau memperbarui konfigurasi AI dan gaya parafrase.</td>
+              <td>Melihat atau memperbarui konfigurasi AI dan database aktif.</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td><code>/api/settings/db-test</code></td>
+              <td>Menguji parameter koneksi database target (MySQL / PostgreSQL / SQLite).</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td><code>/api/settings/db-migrate</code></td>
+              <td>Menjalankan migrasi pembuatan database dan skema tabel transcripts secara otomatis.</td>
             </tr>
             <tr>
               <td><code>GET</code></td>

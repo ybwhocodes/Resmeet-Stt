@@ -209,3 +209,9 @@
 - Alias: Kembaran Digital
 - Arti: Representasi model virtual digital dari objek, fasilitas fisik, atau proses rantai pasok untuk simulasi performa operasional.
 - Sumber: job_id=afc75af3988647c28c7e5a05aff2399d
+
+## Skenario G
+
+- Alias: Skema G
+- Arti: Formulasi skema gaji dan target kinerja revisi yang disesuaikan dengan kondisi pasar cabang lokal.
+- Sumber: job_id=ab440a539fd54e1a9adc024eda75f66e

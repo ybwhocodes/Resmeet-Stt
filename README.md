@@ -1,14 +1,37 @@
 # 🎙️ Resmeet-STT: Enterprise Meeting Notetaker & Speech-to-Text
 
-Resmeet-STT adalah platform transkripsi audio rapat otomatis dan pembuat dokumen **Minutes of Meeting (MoM)** cerdas berbasis **Bun.js + TypeScript**, engine native C++ **whisper.cpp**, ekstraksi topik terarah **Jev-ultrafast Guided Topics**, dan visualisasi pohon pemikiran **Markmap Mindmap**.
+Resmeet-STT adalah platform transkripsi audio rapat otomatis dan pembuat dokumen **Minutes of Meeting (MoM)** cerdas berbasis **Bun.js + TypeScript** (Port default **8200**), engine native C++ **whisper.cpp**, ekstraksi topik terarah **Jev-ultrafast Guided Topics**, dukungan multi-database **SQLite (Default Mandiri), MySQL, & PostgreSQL** dengan tombol migrasi in-app, serta visualisasi pohon pemikiran **Markmap Mindmap**.
 
-Dilengkapi dengan antarmuka web modern, streaming progress realtime via WebSocket Socket.IO, penyimpanan database MySQL, dan ekspor 3 format dokumen rapat lengkap (Markdown, HTML/UI, Mindmap).
+---
+
+## ⚡ Unduh Aplikasi Desktop (Langsung Pakai Tanpa Git Clone)
+
+Bagi pengguna yang ingin langsung menggunakan aplikasi tanpa perlu `git clone` atau konfigurasi terminal, silakan unduh versi desktop siap pakai:
+
+| Platform | Format File | Tipe Arsitektur | Tautan Unduhan Langsung |
+|---|---|---|---|
+| **macOS** | `.dmg` | Apple Silicon (M1/M2/M3/M4) & Intel Universal | 🍏 [**Unduh Resmeet-STT-macOS.dmg**](https://github.com/ybwhocodes/Resmeet-Stt/releases/latest/download/Resmeet-STT-macOS.dmg) |
+| **Windows** | `.exe` | Windows 10 / 11 64-bit (Installer & Portable) | 🪟 [**Unduh Resmeet-STT-Windows-Setup.exe**](https://github.com/ybwhocodes/Resmeet-Stt/releases/latest/download/Resmeet-STT-Windows-Setup.exe) |
+
+> 💡 **Informasi Dokumentasi:** Panduan lengkap mulai dari instalasi, fitur, hingga penggunaan dapat diakses di file portal [docs/index.html](file:///Volumes/SSD%20-%20%20Mac/Server/Resmeet-Stt/docs/index.html) atau via browser di `http://localhost:5173/docs/index.html`.
+
+### 🔄 2 Mode Penggunaan Aplikasi:
+1. **Mode Program Lokal (Desktop Standalone):**
+   - Cukup unduh `.dmg` atau `.exe` dan jalankan.
+   - Menggunakan database **SQLite** bawaan (`resmeet.sqlite`) yang **otomatis dibuat** saat aplikasi pertama kali dibuka (Zero Configuration).
+   - Tidak memerlukan server MySQL, tidak memerlukan Docker, dan tidak memerlukan terminal command.
+2. **Mode Web Server (Enterprise / Tim Kantor):**
+   - Menjalankan backend server Bun pada **Port default 8200** dan frontend Vite pada port **5173** (atau via Docker Compose).
+   - Mendukung multi-database terpusat (**SQLite, MySQL, atau PostgreSQL**) yang dapat dikonfigurasi melalui menu Pengaturan.
 
 ---
 
 ## 🌟 Fitur Utama
 
-- **⚡ Runtime Bun.js Super Cepat:** Concurrency tinggi, startup instan, konsumsi RAM sangat rendah (<100MB), dan streaming progress WebSocket Socket.IO realtime.
+- **⚡ Runtime Bun.js Super Cepat (Port 8200):** Concurrency tinggi, startup instan, konsumsi RAM sangat rendah (<100MB), dan streaming progress WebSocket Socket.IO realtime.
+- **🗄️ Multi-Database Storage & Tombol Migrasi In-App:**
+  - **SQLite (Default Mandiri):** Aktif otomatis out-of-the-box tanpa konfigurasi eksternal. Tabel `transcripts` langsung siap dipakai tanpa tombol migrasi.
+  - **MySQL & PostgreSQL:** Dapat dihubungkan ke server kantor. Dilengkapi tombol **Uji Koneksi** dan tombol **Migrate Database** (khusus muncul saat driver non-SQLite dipilih) untuk membuat database dan tabel secara instan.
 - **🧠 Engine Whisper.cpp (GGML Q5):** Kuantisasi `large-v3-turbo-q5_0` (546MB) dengan akselerasi Apple Silicon Metal / CPU NEON untuk inferensi cepat tanpa lag.
 - **🎛️ 3 Pilihan Combo Pipeline Sebelum Running:**
   1. **Combo 1:** Akurasi Tertinggi *(DeepFilter-Net+, NoiseReduce, VAD + Fast-Whisper Turbo)*.
@@ -83,19 +106,20 @@ curl -L -o backend/models/ggml-base.bin \
 
 ---
 
-### Langkah 3: Siapkan Database MySQL
-Aplikasi membutuhkan database MySQL bernama `stt_db` pada port `3307`. Cara termudah adalah menjalankannya menggunakan Docker:
-
-```bash
-docker run -d \
-  --name mysql_db \
-  -p 3307:3306 \
-  -e MYSQL_ROOT_PASSWORD=password \
-  -e MYSQL_DATABASE=stt_db \
-  mysql:8.0
-```
-
-> **Catatan:** Backend Bun.js memiliki fitur auto-migration, sehingga tabel `transcripts` beserta seluruh kolom (`directed_topics`, `ai_data`, dll.) akan dibuat secara otomatis saat backend pertama kali dijalankan.
+### Langkah 3: Menyiapkan Database (SQLite Default / MySQL / PostgreSQL)
+- **SQLite (Paling Mudah - Default Tanpa Setup):**
+  Anda **dapat melewati langkah ini sepenuhnya** jika tidak memiliki MySQL. Resmeet-STT secara otomatis menggunakan database **SQLite lokal** (`backend/resmeet.sqlite`) dan langsung membuat tabel `transcripts` saat backend pertama kali dijalankan.
+- **MySQL / PostgreSQL (Penyimpanan Server Terpusat):**
+  Jika ingin menggunakan MySQL, jalankan 1 baris container Docker berikut:
+  ```bash
+  docker run -d \
+    --name mysql_db \
+    -p 3307:3306 \
+    -e MYSQL_ROOT_PASSWORD=password \
+    -e MYSQL_DATABASE=stt_db \
+    mysql:8.0
+  ```
+  *Catatan:* Di menu **Pengaturan**, tersedia tombol **Uji Koneksi** dan tombol **Migrate Database** yang otomatis membuat database serta tabel jika driver MySQL/PostgreSQL dipilih.
 
 ---
 
@@ -106,10 +130,16 @@ Salin file `.env.example` menjadi `.env`:
 cp backend/.env.example backend/.env
 ```
 
-Buka file `backend/.env` dan sesuaikan parameter AI Anda (URL & API-Key):
+Buka file `backend/.env` dan sesuaikan parameter Anda (Port default adalah **8200**):
 ```env
-# MySQL Connection
-DB_HOST=localhost
+# Server Port (Default 8200)
+PORT=8200
+
+# Tipe Database: sqlite | mysql | postgres (Default: sqlite)
+DB_TYPE=sqlite
+
+# Konfigurasi jika menggunakan MySQL / PostgreSQL
+DB_HOST=127.0.0.1
 DB_PORT=3307
 DB_NAME=stt_db
 DB_USER=root
@@ -133,7 +163,7 @@ AI_ENABLE_CORRECTION=true
 Anda dapat memilih salah satu dari 3 cara berikut:
 
 #### Pilihan A: Menggunakan 1-Click Startup Script (Paling Mudah)
-Skrip ini akan otomatis memeriksa dependensi, menghidupkan MySQL, menjalankan backend Bun, dan frontend Vite secara bersamaan:
+Skrip ini otomatis memeriksa dependensi, menyiapkan SQLite/MySQL, menjalankan backend Bun (Port 8200), dan frontend Vite secara bersamaan:
 
 ```bash
 # Berikan izin eksekusi
@@ -144,7 +174,7 @@ chmod +x start.sh
 ```
 
 #### Pilihan B: Menggunakan Docker Compose (Full Container)
-Jika Anda ingin seluruh stack (MySQL, Bun Backend, dan Frontend Nginx) berjalan terisolasi di dalam container:
+Jika Anda ingin seluruh stack (MySQL, Bun Backend Port 8200, dan Frontend) berjalan terisolasi di dalam container:
 
 ```bash
 # Build dan jalankan seluruh container di background
@@ -172,7 +202,7 @@ pip install numpy scipy soundfile noisereduce onnxruntime torch
 
 # Jalankan server Bun
 bun run src/index.ts
-# Server akan aktif di http://localhost:8081
+# Server akan aktif di http://localhost:8200
 ```
 
 **Terminal 2 — Frontend (React + Vite):**
@@ -192,10 +222,11 @@ npm run dev
 ### Langkah 6: Buka Aplikasi & Verifikasi
 1. Buka browser Anda dan akses: **[http://localhost:5173](http://localhost:5173)**.
 2. Buka menu **Pengaturan** di bilah navigasi atas:
-   - Pastikan indikator **Preflight Status Checklist** semua berwarna hijau (*uploads_writable, knowledge_readable, transcripts_md_writable, ffmpeg, format_mom, whisper_model, database, ai_config*).
+   - Pastikan indikator **Preflight Status Checklist** semua berwarna hijau.
+   - Periksa bagian **Penyimpanan Database**: secara default **SQLite** aktif mandiri. Jika memilih MySQL atau Postgres, masukkan data koneksi lalu klik tombol **Migrate Database**.
    - Masukkan AI URL & API-Key Anda, lalu klik tombol **Uji Koneksi AI**.
 3. Kembali ke menu **Transkripsi**:
-   - Tarik & lepas file audio/suara rapat Anda (`.mp4`, `.mpeg`, `.m4a`, `.mp3`, `.wav`, `.aac`, dll.).
+   - Tarik & lepas file audio/video rapat Anda (`.mp4`, `.mpeg`, `.m4a`, `.mp3`, `.wav`, `.aac`, dll.).
    - Pilih **Combo Pipeline** (Combo 1 untuk akurasi tertinggi).
    - Klik **Mulai Transkripsi & Analisis**.
 4. Setelah selesai, jelajahi **3 Format Output**:
@@ -239,20 +270,28 @@ Resmeet-STT/
 ├── README.md                     # Dokumentasi panduan komprehensif ini
 ├── docs/
 │   └── index.html                # Portal dokumentasi web interaktif mandiri (GitHub Pages)
+├── scripts/
+│   └── build-desktop.sh          # Script kompilasi desktop (.dmg, .exe, standalone)
+├── desktop/                      # Wrapper native desktop (Electron + electron-builder)
+│   ├── package.json              # Konfigurasi target installer DMG & EXE
+│   ├── main.cjs                  # Main process Electron window
+│   └── preload.cjs               # Script preload konteks aman
+├── release/                      # Direktori output installer .dmg, .exe, dan binary
 ├── backend/
 │   ├── Dockerfile                # Dockerfile Backend (Bun + Whisper.cpp + Python)
 │   ├── package.json              # Konfigurasi dependensi Bun backend
 │   ├── tsconfig.json             # Konfigurasi TypeScript
 │   ├── schema.sql                # Skema database MySQL
+│   ├── resmeet.sqlite            # Database SQLite mandiri (dibuat otomatis)
 │   ├── .env.example              # Template variabel lingkungan bebas rahasia
 │   ├── settings.json             # Konfigurasi AI & Parafrase persisten
 │   ├── models/                   # Bobot model GGML (large-v3-turbo, base)
 │   ├── knowledge/                # Acuan RAG (format-mom.md, glossary.md, dll)
 │   ├── transcripts_md/           # Arsip dokumen notulen Markdown tersimpan
 │   └── src/
-│       ├── index.ts              # HTTP & Socket.IO server Bun
+│       ├── index.ts              # HTTP & Socket.IO server Bun (Port 8200)
 │       ├── config.ts             # AppSettings & environment loader
-│       ├── db.ts                 # MySQL pool & queries (auto-migration & delete)
+│       ├── db.ts                 # Multi-database driver (SQLite, MySQL, Postgres)
 │       ├── whisper.ts            # whisper-cli launcher & combo runner
 │       ├── ai.ts                 # Jev-guided topic extractor & AI paraphrase
 │       ├── markdown.ts           # Generator format MoM Markdown resmi
@@ -269,6 +308,51 @@ Resmeet-STT/
         └── components/
             ├── MarkmapView.jsx   # Komponen visual Mindmap interaktif
             └── UiSummary.jsx     # Komponen dashboard rangkuman HTML/UI & parser MoM
+```
+
+---
+
+## 📦 Panduan Build / Packaging Aplikasi Desktop (.DMG & .EXE)
+
+Jika Anda ingin membangun file installer desktop sendiri dari kode sumber:
+
+### Opsi 1: Menggunakan Script Build Otomatis (Rekomendasi)
+Tersedia skrip yang mengompilasi frontend Vite, backend standalone, dan installer desktop:
+
+```bash
+# Berikan izin eksekusi jika pertama kali
+chmod +x scripts/build-desktop.sh
+
+# Jalankan proses build
+./scripts/build-desktop.sh
+```
+File hasil kompilasi akan otomatis tersimpan di dalam folder `release/`:
+- **macOS:** `release/resmeet-mac` dan installer `.dmg`
+- **Windows:** `release/resmeet-win.exe` dan installer setup `.exe`
+
+### Opsi 2: Kompilasi Standalone Binary via Bun (Super Cepat & Hemat Ukuran)
+Tanpa Electron, Anda dapat membuat executable binary mandiri yang langsung mengintegrasikan SQLite lokal:
+
+```bash
+# Kompilasi native macOS (Apple Silicon arm64 & Intel x64)
+bun build --compile --minify backend/src/index.ts --outfile release/resmeet-mac
+
+# Kompilasi executable native Windows (.exe)
+bun build --compile --minify --target=bun-windows-x64 backend/src/index.ts --outfile release/resmeet-win.exe
+```
+
+### Opsi 3: Packaging via Electron Builder
+```bash
+cd desktop
+
+# Install dependensi electron & electron-builder
+npm install
+
+# Build installer macOS (.DMG)
+npm run dist:mac
+
+# Build installer Windows (.EXE Installer & Portable)
+npm run dist:win
 ```
 
 ---

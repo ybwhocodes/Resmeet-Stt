@@ -47,3 +47,7 @@
 - Bagian awal audio mengandung artefak loop halusinasi Whisper yang diabaikan. _(job_id=afc75af3988647c28c7e5a05aff2399d)_
 
 - Bagian akhir audio mengalami pengulangan segmentasi frase 'Sudah ambak' secara masif akibat background noise audio kosong, substansi pembahasan selesai pasca jawaban Q&A. _(job_id=afc75af3988647c28c7e5a05aff2399d)_
+
+- Transkrip audio asli mengalami audio-glitch loop repetition pada kata 'Ya' dan 'Nggak' akibat keterbatasan decoding Whisper pada rekaman berdurasi 1282 detik. _(job_id=ab440a539fd54e1a9adc024eda75f66e)_
+
+- Perlu verifikasi formal antara Divisi HR dan Finance terkait dampak perhitungan payroll berjalan akibat kebijakan direct switch ke Skenario G. _(job_id=ab440a539fd54e1a9adc024eda75f66e)_

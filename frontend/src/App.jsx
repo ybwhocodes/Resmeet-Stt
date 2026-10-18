@@ -6,12 +6,12 @@ import {
   Trash2, Mic, Zap, Brain, ShieldCheck,
   Settings, Eye, EyeOff, Save, Target, Check,
   ArrowLeft, ChevronRight, Sliders, Search, Layers, X,
-  Layout, GitBranch, Copy, Sparkles
+  Layout, GitBranch, Copy, Sparkles, Server, HardDrive
 } from "lucide-react";
 import MarkmapView from "./components/MarkmapView";
 import UiSummary from "./components/UiSummary";
 
-const API = import.meta.env.VITE_API_BASE_URL || "http://localhost:8081/api";
+const API = import.meta.env.VITE_API_BASE_URL || "http://localhost:8200/api";
 const SOCKET_URL = API.replace(/\/api\/?$/, "");
 
 const fmt = (iso) => iso ? new Date(iso).toLocaleString("id-ID", {
@@ -120,6 +120,18 @@ export default function App() {
   const [preflight, setPreflight] = useState(null);
   const [preflightLoading, setPreflightLoading] = useState(false);
 
+  // Database Storage State
+  const [dbType, setDbType] = useState("sqlite");
+  const [dbHost, setDbHost] = useState("127.0.0.1");
+  const [dbPort, setDbPort] = useState(3307);
+  const [dbName, setDbName] = useState("stt_db");
+  const [dbUser, setDbUser] = useState("root");
+  const [dbPassword, setDbPassword] = useState("password");
+  const [dbTesting, setDbTesting] = useState(false);
+  const [dbTestResult, setDbTestResult] = useState(null);
+  const [dbMigrating, setDbMigrating] = useState(false);
+  const [dbMigrateResult, setDbMigrateResult] = useState(null);
+
   // Paraphrase State
   const [paraphrasing, setParaphrasing] = useState(false);
   const [paraphraseStyle, setParaphraseStyle] = useState("poin_singkat");
@@ -165,6 +177,12 @@ export default function App() {
         if (data.apiKey) setAiApiKey(data.apiKey);
         if (data.modelId) setAiModelId(data.modelId);
         if (data.paraphraseStyle) setParaphraseStyle(data.paraphraseStyle);
+        if (data.dbType) setDbType(data.dbType);
+        if (data.dbHost) setDbHost(data.dbHost);
+        if (data.dbPort) setDbPort(data.dbPort);
+        if (data.dbName) setDbName(data.dbName);
+        if (data.dbUser) setDbUser(data.dbUser);
+        if (data.dbPassword !== undefined) setDbPassword(data.dbPassword);
       }
     } catch (err) {
       console.warn("Gagal memuat pengaturan:", err);
@@ -272,12 +290,19 @@ export default function App() {
           apiKey: aiApiKey,
           modelId: aiModelId,
           paraphraseStyle: paraphraseStyle,
+          dbType,
+          dbHost,
+          dbPort: Number(dbPort) || undefined,
+          dbName,
+          dbUser,
+          dbPassword,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Gagal menyimpan pengaturan");
       setSavedSuccess(true);
       fetchPreflight();
+      fetchHistory();
       setTimeout(() => setSavedSuccess(false), 3000);
     } catch (err) {
       setError(err.message);
@@ -305,6 +330,60 @@ export default function App() {
       setTestResult({ success: false, message: err.message || "Gagal menghubungi server" });
     } finally {
       setTestingAi(false);
+    }
+  };
+
+  const handleTestDbConnection = async () => {
+    setDbTesting(true);
+    setDbTestResult(null);
+    try {
+      const res = await fetch(`${API}/settings/db-test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dbType,
+          dbHost,
+          dbPort: Number(dbPort) || undefined,
+          dbName,
+          dbUser,
+          dbPassword,
+        }),
+      });
+      const data = await res.json();
+      setDbTestResult(data);
+    } catch (err) {
+      setDbTestResult({ success: false, message: err.message || "Gagal menguji koneksi database" });
+    } finally {
+      setDbTesting(false);
+    }
+  };
+
+  const handleMigrateDb = async () => {
+    setDbMigrating(true);
+    setDbMigrateResult(null);
+    try {
+      const res = await fetch(`${API}/settings/db-migrate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dbType,
+          dbHost,
+          dbPort: Number(dbPort) || undefined,
+          dbName,
+          dbUser,
+          dbPassword,
+        }),
+      });
+      const data = await res.json();
+      setDbMigrateResult(data);
+      if (data.success) {
+        fetchHistory();
+        fetchPreflight();
+      }
+    } catch (err) {
+      setDbMigrateResult({ success: false, message: err.message || "Gagal migrasi database" });
+    } finally {
+      setDbMigrating(false);
     }
   };
 
@@ -1301,7 +1380,224 @@ export default function App() {
               </div>
             </div>
 
-            {/* Section 2: Output Audio & Format Settings */}
+            {/* Section 2: Database Storage (SQLite, MySQL, PostgreSQL) */}
+            <div className="bg-[#151821] border border-[#1e2330] rounded-2xl p-6 space-y-5">
+              <div className="flex items-center justify-between border-b border-[#1e2330] pb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center">
+                    <Database className="w-4 h-4 text-indigo-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-semibold text-white">Penyimpanan Database</h2>
+                    <p className="text-xs text-slate-400">Pilih mesin database (SQLite otomatis mandiri, MySQL, atau PostgreSQL)</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono bg-indigo-950/60 text-indigo-300 border border-indigo-700/40">
+                  <Server className="w-3 h-3" />
+                  <span>Port Server: 8200</span>
+                </div>
+              </div>
+
+              {/* DB Type Selection */}
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-slate-300">
+                  Tipe Driver Database:
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDbType("sqlite");
+                      setDbTestResult(null);
+                      setDbMigrateResult(null);
+                    }}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      dbType === "sqlite"
+                        ? "bg-indigo-600/15 border-indigo-500 text-indigo-200 ring-1 ring-indigo-500"
+                        : "bg-[#0c0e14] border-[#1e2330] text-slate-400 hover:border-slate-700"
+                    }`}
+                  >
+                    <div className="font-semibold text-xs text-white flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <HardDrive className="w-3.5 h-3.5 text-emerald-400" />
+                        SQLite (Default)
+                      </span>
+                      {dbType === "sqlite" && <Check className="w-3.5 h-3.5 text-indigo-400" />}
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Mandiri tanpa server. File lokal otomatis dibuat tanpa setup tambahan.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDbType("mysql");
+                      if (dbPort === 5432) setDbPort(3307);
+                      setDbTestResult(null);
+                      setDbMigrateResult(null);
+                    }}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      dbType === "mysql"
+                        ? "bg-indigo-600/15 border-indigo-500 text-indigo-200 ring-1 ring-indigo-500"
+                        : "bg-[#0c0e14] border-[#1e2330] text-slate-400 hover:border-slate-700"
+                    }`}
+                  >
+                    <div className="font-semibold text-xs text-white flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Database className="w-3.5 h-3.5 text-blue-400" />
+                        MySQL Server
+                      </span>
+                      {dbType === "mysql" && <Check className="w-3.5 h-3.5 text-indigo-400" />}
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Koneksi ke MySQL / MariaDB lokal atau cloud dengan migrasi tabel otomatis.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDbType("postgres");
+                      if (dbPort === 3307 || dbPort === 3306) setDbPort(5432);
+                      if (dbUser === "root") setDbUser("postgres");
+                      setDbTestResult(null);
+                      setDbMigrateResult(null);
+                    }}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      dbType === "postgres"
+                        ? "bg-indigo-600/15 border-indigo-500 text-indigo-200 ring-1 ring-indigo-500"
+                        : "bg-[#0c0e14] border-[#1e2330] text-slate-400 hover:border-slate-700"
+                    }`}
+                  >
+                    <div className="font-semibold text-xs text-white flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Server className="w-3.5 h-3.5 text-sky-400" />
+                        PostgreSQL Server
+                      </span>
+                      {dbType === "postgres" && <Check className="w-3.5 h-3.5 text-indigo-400" />}
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Koneksi ke PostgreSQL server dengan dukungan schema dan JSON field native.
+                    </p>
+                  </button>
+                </div>
+              </div>
+
+              {/* Conditional view: SQLite Info vs MySQL/Postgres Form */}
+              {dbType === "sqlite" ? (
+                <div className="bg-emerald-950/25 border border-emerald-700/40 rounded-xl p-4 flex items-start gap-3 text-xs text-emerald-200">
+                  <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-semibold text-emerald-300">SQLite Aktif Otomatis (Zero Configuration)</p>
+                    <p className="text-emerald-400/90 leading-relaxed text-[11px]">
+                      Aplikasi menggunakan database SQLite lokal (<code className="bg-emerald-950/60 px-1 py-0.5 rounded text-emerald-200">backend/resmeet.sqlite</code>). 
+                      Tabel <code className="bg-emerald-950/60 px-1 py-0.5 rounded text-emerald-200">transcripts</code> langsung dibuat secara otomatis saat backend berjalan sehingga tidak memerlukan server database terpisah ataupun tombol migrasi manual.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-[#0c0e14] border border-[#1e2330] rounded-xl p-4 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <label className="block text-slate-400 mb-1">Host Database</label>
+                      <input
+                        type="text"
+                        value={dbHost}
+                        onChange={(e) => setDbHost(e.target.value)}
+                        placeholder="127.0.0.1"
+                        className="w-full bg-[#151821] border border-[#1e2330] rounded-lg px-3 py-2 text-slate-200 outline-none focus:border-indigo-500/50"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1">Port Database</label>
+                      <input
+                        type="number"
+                        value={dbPort}
+                        onChange={(e) => setDbPort(Number(e.target.value))}
+                        placeholder={dbType === "postgres" ? "5432" : "3307"}
+                        className="w-full bg-[#151821] border border-[#1e2330] rounded-lg px-3 py-2 text-slate-200 outline-none focus:border-indigo-500/50"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1">Nama Database</label>
+                      <input
+                        type="text"
+                        value={dbName}
+                        onChange={(e) => setDbName(e.target.value)}
+                        placeholder="stt_db"
+                        className="w-full bg-[#151821] border border-[#1e2330] rounded-lg px-3 py-2 text-slate-200 outline-none focus:border-indigo-500/50"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1">Username</label>
+                      <input
+                        type="text"
+                        value={dbUser}
+                        onChange={(e) => setDbUser(e.target.value)}
+                        placeholder={dbType === "postgres" ? "postgres" : "root"}
+                        className="w-full bg-[#151821] border border-[#1e2330] rounded-lg px-3 py-2 text-slate-200 outline-none focus:border-indigo-500/50"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-slate-400 mb-1">Password</label>
+                      <input
+                        type="password"
+                        value={dbPassword}
+                        onChange={(e) => setDbPassword(e.target.value)}
+                        placeholder="Password database"
+                        className="w-full bg-[#151821] border border-[#1e2330] rounded-lg px-3 py-2 text-slate-200 outline-none focus:border-indigo-500/50"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Test & Migration Feedback */}
+                  {dbTestResult && (
+                    <div className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${dbTestResult.success ? "bg-emerald-950/40 border-emerald-700/40 text-emerald-300" : "bg-red-950/40 border-red-700/40 text-red-300"}`}>
+                      {dbTestResult.success ? <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />}
+                      <div>
+                        <p className="font-medium">{dbTestResult.message}</p>
+                        {dbTestResult.latencyMs && <p className="text-[10px] text-slate-400 mt-0.5">Latency: {dbTestResult.latencyMs}ms</p>}
+                      </div>
+                    </div>
+                  )}
+
+                  {dbMigrateResult && (
+                    <div className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${dbMigrateResult.success ? "bg-emerald-950/40 border-emerald-700/40 text-emerald-300" : "bg-red-950/40 border-red-700/40 text-red-300"}`}>
+                      {dbMigrateResult.success ? <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />}
+                      <div>
+                        <p className="font-medium">{dbMigrateResult.message}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Buttons for Test Connection & Migrate */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#1e2330]">
+                    <button
+                      type="button"
+                      onClick={handleTestDbConnection}
+                      disabled={dbTesting}
+                      className="flex items-center gap-1.5 text-xs text-indigo-300 hover:text-white bg-[#151821] border border-indigo-500/30 hover:border-indigo-400 px-4 py-2 rounded-xl transition-all disabled:opacity-50"
+                    >
+                      {dbTesting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                      <span>{dbTesting ? "Menguji Koneksi..." : `Uji Koneksi ${dbType.toUpperCase()}`}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleMigrateDb}
+                      disabled={dbMigrating}
+                      className="flex items-center gap-1.5 text-xs text-white bg-emerald-700 hover:bg-emerald-600 px-4 py-2 rounded-xl font-medium transition-all shadow-md shadow-emerald-900/30 disabled:opacity-50"
+                    >
+                      {dbMigrating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Database className="w-3.5 h-3.5" />}
+                      <span>{dbMigrating ? "Memigrasi..." : "Migrate Database"}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Section 3: Output Audio & Format Settings */}
             <div className="bg-[#151821] border border-[#1e2330] rounded-2xl p-6 space-y-4">
               <div className="flex items-center gap-2.5 border-b border-[#1e2330] pb-4">
                 <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center">

@@ -42,27 +42,21 @@ command -v node >/dev/null 2>&1 || {
 
 echo -e "${GREEN}✓ Bun.js, Node.js, dan FFmpeg terverifikasi.${NC}"
 
-# 2. Cek & Jalankan Database MySQL (Port 3307)
-echo -e "\n${YELLOW}[2/4] Memeriksa koneksi database MySQL (Port 3307)...${NC}"
+# 2. Cek Driver Database (Default SQLite, Opsional MySQL / PostgreSQL)
+echo -e "\n${YELLOW}[2/4] Memeriksa driver database...${NC}"
 if nc -z 127.0.0.1 3307 2>/dev/null; then
-  echo -e "${GREEN}✓ Database MySQL aktif pada port 3307.${NC}"
+  echo -e "${GREEN}✓ MySQL terdeteksi aktif pada port 3307.${NC}"
+elif [ -f "$BACKEND_DIR/resmeet.sqlite" ] || [ ! -f "$BACKEND_DIR/settings.json" ]; then
+  echo -e "${GREEN}✓ Menggunakan SQLite lokal mandiri (Zero-Setup: backend/resmeet.sqlite).${NC}"
 elif command -v docker >/dev/null 2>&1; then
-  echo -e "${YELLOW}Port 3307 belum aktif. Menjalankan container MySQL via Docker...${NC}"
+  echo -e "${YELLOW}Port 3307 belum aktif. Menjalankan container MySQL via Docker jika diperlukan...${NC}"
   if docker ps -a --format '{{.Names}}' | grep -Eq "^(mysql_db|resmeet_mysql)$"; then
     CONTAINER_NAME=$(docker ps -a --format '{{.Names}}' | grep -E "^(mysql_db|resmeet_mysql)$" | head -n 1)
-    docker start "$CONTAINER_NAME" >/dev/null
-    echo -e "${GREEN}✓ Container $CONTAINER_NAME berhasil dijalankan.${NC}"
-  else
-    docker run -d --name mysql_db -p 3307:3306 \
-      -e MYSQL_ROOT_PASSWORD=password \
-      -e MYSQL_DATABASE=stt_db \
-      mysql:8.0 >/dev/null
-    echo -e "${GREEN}✓ Container mysql_db baru berhasil dibuat dan dijalankan.${NC}"
+    docker start "$CONTAINER_NAME" >/dev/null 2>&1 || true
+    echo -e "${GREEN}✓ Container $CONTAINER_NAME dijalankan.${NC}"
   fi
-  sleep 2
 else
-  echo -e "${YELLOW}Perhatian: Docker tidak aktif dan port 3307 tidak terdeteksi.${NC}"
-  echo -e "${YELLOW}Pastikan MySQL aktif pada port 3307 dengan user 'root' password 'password' & database 'stt_db'.${NC}"
+  echo -e "${GREEN}✓ Default SQLite aktif secara otomatis. Pengaturan MySQL/Postgres dapat diatur di UI Pengaturan.${NC}"
 fi
 
 # 3. Pastikan Dependensi Frontend & Backend Terinstall
@@ -106,7 +100,7 @@ echo -e "\n${GREEN}=============================================================
 echo -e "${GREEN}                      RESMEET-STT BERHASIL DIJALANKAN!                        ${NC}"
 echo -e "${GREEN}==============================================================================${NC}"
 echo -e "  🌐 Aplikasi Web Frontend : ${CYAN}http://localhost:5173${NC}"
-echo -e "  🚀 Backend API & Socket  : ${CYAN}http://localhost:8081${NC}"
+echo -e "  🚀 Backend API & Socket  : ${CYAN}http://localhost:8200${NC}"
 echo -e "  📖 Dokumentasi Interaktif: ${CYAN}http://localhost:5173/docs/index.html${NC}"
 echo -e "                             ${CYAN}(atau buka file docs/index.html)${NC}"
 echo -e "------------------------------------------------------------------------------"

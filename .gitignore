@@ -49,6 +49,12 @@ backend/transcription_cache.json.tmp
 backend/transcripts_md/*.md
 backend/uploads/*
 !backend/uploads/.gitkeep
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+release/
+desktop/dist/
+desktop/node_modules/
 
 # Logs
 *.log

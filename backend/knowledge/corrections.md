@@ -447,3 +447,38 @@
 - Koreksi: Composable ERP
 - Alasan: Salah tangkap istilah arsitektur Composable ERP pada sesi Q&A.
 - Sumber: job_id=afc75af3988647c28c7e5a05aff2399d
+
+## Are-are beret Degone target dengan potensi pasar yang belum ketemu Gemas itu sebuah? Gemas santung -> Area berat dengan target dan potensi pasar yang belum ketemu
+
+- Salah dengar: Are-are beret Degone target dengan potensi pasar yang belum ketemu Gemas itu sebuah? Gemas santung
+- Koreksi: Area berat dengan target dan potensi pasar yang belum ketemu
+- Alasan: Halusinasi pengulangan fonetik Whisper akibat artikulasi logat daerah saat mendiskusikan beban target area cabang.
+- Sumber: job_id=ab440a539fd54e1a9adc024eda75f66e
+
+## Bulu Lawang -> Bululawang
+
+- Salah dengar: Bulu Lawang
+- Koreksi: Bululawang
+- Alasan: Penulisan baku toponim wilayah kecamatan di Kabupaten Malang, Jawa Timur.
+- Sumber: job_id=ab440a539fd54e1a9adc024eda75f66e
+
+## Tepok kami Tepok area HR lah -> Tupoksi area HR lah
+
+- Salah dengar: Tepok kami Tepok area HR lah
+- Koreksi: Tupoksi area HR lah
+- Alasan: Salah dengar frasa tugas pokok dan fungsi (tupoksi) yang menjadi kewenangan divisi HR.
+- Sumber: job_id=ab440a539fd54e1a9adc024eda75f66e
+
+## Ya Ya Ya (berulang panjang) -> [Pemberian konfirmasi/penegasan persetujuan]
+
+- Salah dengar: Ya Ya Ya (berulang panjang)
+- Koreksi: [Pemberian konfirmasi/penegasan persetujuan]
+- Alasan: Loop halusinasi model STT Whisper akibat repetisi ucapan pengisi jeda audio.
+- Sumber: job_id=ab440a539fd54e1a9adc024eda75f66e
+
+## Nggak Nggak Nggak (berulang panjang) -> [Penolakan penundaan skema]
+
+- Salah dengar: Nggak Nggak Nggak (berulang panjang)
+- Koreksi: [Penolakan penundaan skema]
+- Alasan: Loop repetisi transkripsi audio Whisper saat peserta menekankan penolakan opsi skema tertentu.
+- Sumber: job_id=ab440a539fd54e1a9adc024eda75f66e
