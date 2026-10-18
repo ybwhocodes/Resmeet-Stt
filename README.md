@@ -33,6 +33,7 @@ Bagi pengguna yang ingin langsung menggunakan aplikasi tanpa perlu `git clone` a
   - **Dropdown Pemilih Sumber:** Pengguna dapat beralih antara *📁 Unggah File Audio* dan *🎙️ Rekam Langsung dari Browser*.
   - **Mode Unggah:** Mendukung drag-and-drop file audio (`.mp3`, `.wav`, `.m4a`, `.ogg`, `.flac`, `.webm`, `.aac`) dan file video (`.mp4`, `.mpeg`, `.mpg`, `.m4v`).
   - **Mode Rekam Langsung Browser:** Merekam percakapan langsung melalui mikrofon dengan live waveform visualizer, penghitung durasi (timer), kontrol Jeda (Pause) / Lanjutkan (Resume), Batal, Selesai, serta pratinjau player dan opsi rekam ulang.
+  - **Pengecekan Akses & Permintaan Ulang Izin Mikrofon:** Secara otomatis memeriksa status izin mikrofon browser saat opsi rekam dipilih di dropdown. Jika sebelumnya diblokir/dinonaktifkan di browser, aplikasi menyajikan panduan visual membuka izin di address bar dan tombol *"Minta Akses Ulang ke Browser"*.
 - **🗄️ Multi-Database Storage, Set Default Driver & Tombol Migrasi In-App:**
   - **Tombol "Set Default Database":** Tersedia tombol 'Set Default' untuk SQLite, MySQL, maupun PostgreSQL dengan indikator badge 'Default Aktif' realtime di header panel dan kartu pilihan.
   - **SQLite (Default Mandiri):** Aktif otomatis out-of-the-box tanpa konfigurasi eksternal. Tabel `transcripts` langsung siap dipakai tanpa tombol migrasi.

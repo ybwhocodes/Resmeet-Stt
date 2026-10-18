@@ -7,7 +7,7 @@ import {
   Settings, Eye, EyeOff, Save, Target, Check,
   ArrowLeft, ChevronRight, Sliders, Search, Layers, X,
   Layout, GitBranch, Copy, Sparkles, Server, HardDrive, Star,
-  Square, Pause, Play, Radio
+  Square, Pause, Play, Radio, MicOff, Lock, ShieldAlert
 } from "lucide-react";
 import MarkmapView from "./components/MarkmapView";
 import UiSummary from "./components/UiSummary";
@@ -151,6 +151,9 @@ export default function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
+  const [micPermission, setMicPermission] = useState("unknown"); // "unknown" | "prompt" | "granted" | "denied" | "unsupported"
+  const [checkingMic, setCheckingMic] = useState(false);
+  const [micError, setMicError] = useState("");
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const timerRef = useRef(null);
@@ -308,60 +311,122 @@ export default function App() {
     if (fileRef.current) fileRef.current.value = "";
   };
 
-  const startRecording = async () => {
-    setError("");
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      return setError("Browser Anda tidak mendukung perekaman audio langsung (getUserMedia tidak tersedia).");
+  const checkMicPermission = useCallback(async () => {
+    if (typeof navigator !== "undefined" && navigator.permissions && navigator.permissions.query) {
+      try {
+        const status = await navigator.permissions.query({ name: "microphone" });
+        setMicPermission(status.state);
+        status.onchange = () => {
+          setMicPermission(status.state);
+          if (status.state === "granted") {
+            setMicError("");
+          }
+        };
+        return status.state;
+      } catch {
+        return "unknown";
+      }
     }
+    return "unknown";
+  }, []);
+
+  useEffect(() => {
+    checkMicPermission();
+  }, [checkMicPermission]);
+
+  const proceedWithRecording = (stream) => {
+    streamRef.current = stream;
+
+    let mimeType = "";
+    if (typeof MediaRecorder !== "undefined") {
+      if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) mimeType = "audio/webm;codecs=opus";
+      else if (MediaRecorder.isTypeSupported("audio/webm")) mimeType = "audio/webm";
+      else if (MediaRecorder.isTypeSupported("audio/mp4")) mimeType = "audio/mp4";
+      else if (MediaRecorder.isTypeSupported("audio/ogg")) mimeType = "audio/ogg";
+    }
+
+    const options = mimeType ? { mimeType } : undefined;
+    const mediaRecorder = new MediaRecorder(stream, options);
+    mediaRecorderRef.current = mediaRecorder;
+    audioChunksRef.current = [];
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) {
+        audioChunksRef.current.push(e.data);
+      }
+    };
+
+    mediaRecorder.onstop = () => {
+      const actualMime = mediaRecorder.mimeType || mimeType || "audio/webm";
+      const ext = actualMime.includes("mp4") ? "mp4" : actualMime.includes("ogg") ? "ogg" : actualMime.includes("wav") ? "wav" : "webm";
+      const blob = new Blob(audioChunksRef.current, { type: actualMime });
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, "0");
+      const filename = `rekaman_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.${ext}`;
+      const recFile = new File([blob], filename, { type: actualMime });
+      acceptFile(recFile);
+      stopRecordingTracks();
+    };
+
+    mediaRecorder.start(250);
+    setRecordSeconds(0);
+    setIsRecording(true);
+    setIsPaused(false);
+
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setRecordSeconds((prev) => prev + 1);
+    }, 1000);
+  };
+
+  const requestMicAccess = async (autoStart = false) => {
+    setCheckingMic(true);
+    setMicError("");
+    setError("");
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setMicPermission("unsupported");
+      setMicError("Browser Anda tidak mendukung perekaman audio langsung (getUserMedia tidak tersedia).");
+      setCheckingMic(false);
+      return false;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
+      setMicPermission("granted");
+      setMicError("");
+      setCheckingMic(false);
 
-      let mimeType = "";
-      if (typeof MediaRecorder !== "undefined") {
-        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) mimeType = "audio/webm;codecs=opus";
-        else if (MediaRecorder.isTypeSupported("audio/webm")) mimeType = "audio/webm";
-        else if (MediaRecorder.isTypeSupported("audio/mp4")) mimeType = "audio/mp4";
-        else if (MediaRecorder.isTypeSupported("audio/ogg")) mimeType = "audio/ogg";
+      if (autoStart) {
+        proceedWithRecording(stream);
+        return true;
+      } else {
+        stream.getTracks().forEach((track) => track.stop());
+        return true;
       }
-
-      const options = mimeType ? { mimeType } : undefined;
-      const mediaRecorder = new MediaRecorder(stream, options);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          audioChunksRef.current.push(e.data);
-        }
-      };
-
-      mediaRecorder.onstop = () => {
-        const actualMime = mediaRecorder.mimeType || mimeType || "audio/webm";
-        const ext = actualMime.includes("mp4") ? "mp4" : actualMime.includes("ogg") ? "ogg" : actualMime.includes("wav") ? "wav" : "webm";
-        const blob = new Blob(audioChunksRef.current, { type: actualMime });
-        const now = new Date();
-        const pad = (n) => String(n).padStart(2, "0");
-        const filename = `rekaman_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.${ext}`;
-        const recFile = new File([blob], filename, { type: actualMime });
-        acceptFile(recFile);
-        stopRecordingTracks();
-      };
-
-      mediaRecorder.start(250);
-      setRecordSeconds(0);
-      setIsRecording(true);
-      setIsPaused(false);
-
-      if (timerRef.current) clearInterval(timerRef.current);
-      timerRef.current = setInterval(() => {
-        setRecordSeconds((prev) => prev + 1);
-      }, 1000);
     } catch (err) {
-      console.error("Recording error:", err);
-      stopRecordingTracks();
-      setError(`Gagal mengakses mikrofon: ${err.message || "Izin mikrofon ditolak."}`);
+      console.warn("Microphone access failed:", err);
+      setCheckingMic(false);
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        setMicPermission("denied");
+        setMicError(
+          "Izin mikrofon dinonaktifkan atau diblokir di browser. Silakan izinkan akses mikrofon melalui ikon gembok / pengaturan situs pada bilah URL browser Anda."
+        );
+      } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+        setMicPermission("not_found");
+        setMicError("Perangkat mikrofon fisik tidak ditemukan. Pastikan mikrofon telah terpasang ke komputer Anda.");
+      } else {
+        setMicPermission("error");
+        setMicError(`Gagal mengakses mikrofon: ${err.message || "Izin mikrofon ditolak."}`);
+      }
+      return false;
     }
+  };
+
+  const startRecording = async () => {
+    setError("");
+    setMicError("");
+    await requestMicAccess(true);
   };
 
   const pauseRecording = () => {
@@ -395,12 +460,20 @@ export default function App() {
     setIsPaused(false);
   };
 
-  const handleSourceChange = (newSource) => {
+  const handleSourceChange = async (newSource) => {
     if (isRecording) {
       cancelRecording();
     }
     setAudioSource(newSource);
     clearFile();
+    setMicError("");
+
+    if (newSource === "record") {
+      const perm = await checkMicPermission();
+      if (perm === "prompt" || perm === "unknown" || perm === "denied") {
+        await requestMicAccess(false);
+      }
+    }
   };
 
   const copyToClipboard = (text) => {
@@ -889,24 +962,84 @@ export default function App() {
               {audioSource === "record" && (
                 <div className="space-y-4">
                   {!file && !isRecording && (
-                    <div className="border border-[#1e2330] bg-[#0c0e14] rounded-xl p-8 flex flex-col items-center justify-center gap-4 text-center">
-                      <button
-                        onClick={startRecording}
-                        disabled={processing}
-                        className="w-20 h-20 rounded-full bg-gradient-to-tr from-rose-600 to-red-500 hover:from-rose-500 hover:to-red-400 text-white flex items-center justify-center shadow-lg shadow-rose-600/30 hover:scale-105 transition-all group cursor-pointer"
-                      >
-                        <Mic className="w-8 h-8 group-hover:scale-110 transition-transform" />
-                      </button>
-                      <div>
-                        <h3 className="text-sm font-semibold text-slate-200">Mulai Perekaman Audio Rapat</h3>
-                        <p className="text-xs text-slate-500 mt-1 max-w-sm">
-                          Pastikan mikrofon browser diizinkan. Klik tombol di atas untuk mulai merekam percakapan rapat secara langsung.
-                        </p>
+                    micPermission === "denied" || micError ? (
+                      <div className="border border-rose-500/40 bg-gradient-to-b from-rose-950/30 to-[#0c0e14] rounded-2xl p-6 md:p-8 space-y-5 text-center shadow-lg shadow-rose-950/20">
+                        <div className="w-16 h-16 rounded-2xl bg-rose-600/20 border border-rose-500/30 flex items-center justify-center mx-auto text-rose-400">
+                          <MicOff className="w-8 h-8" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-500/20 border border-rose-500/30 text-rose-300">
+                            <ShieldAlert className="w-3.5 h-3.5" /> Izin Akses Mikrofon Dinonaktifkan
+                          </div>
+                          <h3 className="text-base font-bold text-white">Browser Memblokir Akses Mikrofon</h3>
+                          <p className="text-xs text-rose-200/80 max-w-md mx-auto leading-relaxed">
+                            {micError || "Izin mikrofon sebelumnya dinonaktifkan di browser ini. Untuk merekam audio rapat secara langsung, silakan izinkan kembali akses mikrofon."}
+                          </p>
+                        </div>
+
+                        {/* Panduan Langkah demi Langkah */}
+                        <div className="bg-[#0c0e14]/90 border border-rose-900/40 rounded-xl p-4 text-left max-w-lg mx-auto space-y-2.5 text-xs text-slate-300">
+                          <p className="font-semibold text-rose-300 flex items-center gap-2">
+                            <Lock className="w-3.5 h-3.5 text-rose-400" /> Cara Mengaktifkan Izin di Browser:
+                          </p>
+                          <ol className="list-decimal list-inside space-y-1.5 text-slate-400 pl-1">
+                            <li>Klik ikon <strong>Gembok / Setelan Situs</strong> di sebelah kiri URL pada bilah alamat browser (address bar).</li>
+                            <li>Ubah status izin <strong>Mikrofon (Microphone)</strong> dari <em>Blokir</em> ke <strong>Izinkan (Allow)</strong>.</li>
+                            <li>Setelah diizinkan, klik tombol <strong>"Minta Akses Ulang ke Browser"</strong> di bawah ini.</li>
+                          </ol>
+                        </div>
+
+                        {/* Tombol Tindakan */}
+                        <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+                          <button
+                            onClick={() => requestMicAccess(false)}
+                            disabled={checkingMic}
+                            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold text-xs shadow-lg shadow-rose-600/30 transition-all cursor-pointer"
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 ${checkingMic ? "animate-spin" : ""}`} />
+                            {checkingMic ? "Memeriksa Akses..." : "Minta Akses Ulang ke Browser"}
+                          </button>
+                          <button
+                            onClick={() => handleSourceChange("upload")}
+                            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#1e2330] hover:bg-[#282f40] text-slate-300 font-medium text-xs border border-slate-700 transition-all"
+                          >
+                            <Upload className="w-3.5 h-3.5 text-slate-400" /> Beralih ke Unggah File
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono bg-[#151821] px-3 py-1 rounded-full border border-[#1e2330]">
-                        <Radio className="w-3.5 h-3.5 text-rose-400" /> Siap Merekam Mikrofon Browser
+                    ) : (
+                      <div className="border border-[#1e2330] bg-[#0c0e14] rounded-xl p-8 flex flex-col items-center justify-center gap-4 text-center">
+                        <button
+                          onClick={startRecording}
+                          disabled={processing || checkingMic}
+                          className="w-20 h-20 rounded-full bg-gradient-to-tr from-rose-600 to-red-500 hover:from-rose-500 hover:to-red-400 text-white flex items-center justify-center shadow-lg shadow-rose-600/30 hover:scale-105 transition-all group cursor-pointer disabled:opacity-50"
+                        >
+                          <Mic className={`w-8 h-8 group-hover:scale-110 transition-transform ${checkingMic ? "animate-pulse" : ""}`} />
+                        </button>
+                        <div>
+                          <h3 className="text-sm font-semibold text-slate-200">Mulai Perekaman Audio Rapat</h3>
+                          <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                            Klik tombol di atas untuk mulai merekam percakapan rapat secara langsung dari mikrofon browser.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                          {micPermission === "granted" ? (
+                            <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-mono bg-emerald-950/40 px-3 py-1 rounded-full border border-emerald-700/40">
+                              <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> Akses Mikrofon Diizinkan
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => requestMicAccess(false)}
+                              disabled={checkingMic}
+                              className="flex items-center gap-1.5 text-[11px] text-indigo-300 hover:text-white font-mono bg-indigo-950/40 hover:bg-indigo-900/50 px-3 py-1 rounded-full border border-indigo-700/40 transition-all cursor-pointer"
+                            >
+                              <Radio className="w-3.5 h-3.5 text-rose-400" />
+                              {checkingMic ? "Memeriksa Izin..." : "Cek / Minta Izin Mikrofon"}
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    )
                   )}
 
                   {isRecording && (
