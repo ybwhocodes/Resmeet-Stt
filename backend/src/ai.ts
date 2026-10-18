@@ -273,10 +273,27 @@ export const PARAPHRASE_STYLE_PROMPTS: Record<string, string> = {
     "berstandar ringkasan eksekutif (Executive Summary) profesional tingkat manajemen yang menonjolkan poin strategis, dampak organisasi, keputusan final, dan aksi kunci.",
 };
 
+export interface ParaphraseResult {
+  text: string;
+  markdown: string;
+  summary: string;
+  directed_topics: Array<{
+    topic: string;
+    goal: string;
+    discussion: string;
+    decisions: string;
+    action_items: string[];
+  }>;
+  entities?: string[];
+  terms?: any[];
+  action_items?: any[];
+}
+
 /**
- * Paraphrases text into a requested style.
+ * Paraphrases text into a requested style, returning the full structured MoM output
+ * so that all 3 outputs (Markdown MoM, HTML/UI Summary, Markmap) update identically to transcription results.
  */
-export async function callAiParaphrase(text: string, style = "poin_singkat"): Promise<string> {
+export async function callAiParaphrase(text: string, style = "poin_singkat"): Promise<ParaphraseResult> {
   if (!isAiConfigured()) {
     throw new Error("Konfigurasi AI belum lengkap (URL, API-Key, atau Model belum diisi).");
   }
@@ -294,10 +311,31 @@ export async function callAiParaphrase(text: string, style = "poin_singkat"): Pr
     (style === "poin" ? PARAPHRASE_STYLE_PROMPTS.poin_singkat : null) ||
     style;
 
-  const systemPrompt = `Anda adalah Sekretaris Notulis Senior berpengalaman 20 tahun.
-Tugas Anda adalah memparafrase dan memformat ulang dokumen hasil transkrip rapat agar: ${resolvedInstruction}
-Pertahankan seluruh fakta nyata, keputusan, kesepakatan, PIC, deadline, istilah teknis, dan struktur dokumen Markdown resmi.
-Output WAJIB berupa JSON murni: {"text": "hasil notulen final terparafrase dalam format Markdown lengkap"}`;
+  const systemPrompt = `Anda adalah Sekretaris Notulis Eksekutif Senior berpengalaman 20 tahun.
+Tugas Anda adalah memparafrase dan menyusun ulang hasil transkrip rapat ke dalam gaya penulisan: ${resolvedInstruction}
+
+ATURAN PENTING:
+1. Pertahankan seluruh fakta nyata, nama orang/pimpinan/peserta, tanggal, keputusan, kesepakatan, PIC, deadline, istilah teknis, dan struktur dokumen Minutes of Meeting resmi.
+2. Hasil output harus menghasilkan data terstruktur lengkap yang sama persis seperti hasil transkripsi AI awal:
+   - Dokumen Markdown Minutes of Meeting (MoM) final lengkap (# Minutes of Meeting, ## Informasi Umum Rapat, ## Agenda Rapat, ## Pembahasan per Topik, ## Keputusan / Kesepakatan tabel, ## Tindak Lanjut tabel, ## Catatan Tambahan)
+   - Ringkasan eksekutif 1-2 paragraf ('summary')
+   - Ekstraksi topik terarah ('directed_topics') lengkap dengan goal/sasaran, pembahasan yang sudah diparafrase, keputusan, dan action items.
+
+Output WAJIB berupa JSON murni tanpa pembuka Markdown fence (\`\`\`json) dengan schema:
+{
+  "summary": "Ringkasan eksekutif jalannya rapat 1-2 paragraf sesuai gaya yang diminta",
+  "directed_topics": [
+    {
+      "topic": "Nama topik terarah",
+      "goal": "Sasaran pembahasan topik ini",
+      "discussion": "Poin pembahasan terarah yang sudah diparafrase sesuai gaya yang diminta",
+      "decisions": "Keputusan / kesepakatan final",
+      "action_items": ["Tindak lanjut spesifik topik ini"]
+    }
+  ],
+  "markdown": "Dokumen Minutes of Meeting (MoM) final lengkap format Markdown sesuai gaya yang diminta",
+  "text": "Sama dengan isi markdown di atas"
+}`;
 
   const userPrompt = `
 Instruksi Acuan / RAG:
@@ -307,7 +345,29 @@ Dokumen Rapat Asli yang Diparafrase:
 ${text}
 `;
 
-  const rawAiResponse = await callOpenAiCompatible(userPrompt, systemPrompt);
-  const parsed = extractJsonFromAiResponse(rawAiResponse);
-  return parsed.text || rawAiResponse;
+  try {
+    const rawAiResponse = await callOpenAiCompatible(userPrompt, systemPrompt);
+    const parsed = extractJsonFromAiResponse(rawAiResponse);
+    const markdown = parsed.markdown || parsed.text || rawAiResponse;
+    const summary = parsed.summary || "";
+    const directed_topics = Array.isArray(parsed.directed_topics) ? parsed.directed_topics : [];
+
+    return {
+      text: markdown,
+      markdown,
+      summary,
+      directed_topics,
+      entities: parsed.entities || [],
+      terms: parsed.terms || [],
+      action_items: parsed.action_items || [],
+    };
+  } catch (err: any) {
+    console.warn("[AI] AI paraphrase fallback:", err);
+    return {
+      text,
+      markdown: text,
+      summary: "",
+      directed_topics: [],
+    };
+  }
 }

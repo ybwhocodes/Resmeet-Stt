@@ -4,7 +4,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { Server } from "socket.io";
 import { config, PATHS, updateAiSettings } from "./config";
-import { initDb, checkDbConnection, saveTranscript, getRecentTranscripts, getTranscriptById, deleteTranscript } from "./db";
+import { initDb, checkDbConnection, saveTranscript, getRecentTranscripts, getTranscriptById, deleteTranscript, updateTranscriptParaphrase } from "./db";
 import { ensureKnowledgeFiles, updateKnowledge } from "./knowledge";
 import { calculateFileHash, getCacheKey, readCache, writeCache } from "./cache";
 import { convertWithFfmpeg, transcribeWithProgress, getWhisperModelPath, findWhisperCliBinary } from "./whisper";
@@ -249,11 +249,41 @@ const server = http.createServer(async (req, res) => {
       const body = await readJsonBody();
       const text = (body.text || "").trim();
       const style = (body.style || "").trim();
+      const id = body.id ? parseInt(String(body.id), 10) : null;
       if (!text) return sendJson({ error: "Teks kosong" }, 400);
 
       try {
-        const paraphrased = await callAiParaphrase(text, style);
-        return sendJson({ text: paraphrased });
+        const result = await callAiParaphrase(text, style);
+
+        // If id provided, update DB and markdown file if exists
+        if (id) {
+          await updateTranscriptParaphrase(id, {
+            finalText: result.markdown || result.text,
+            aiSummary: result.summary,
+            directedTopics: result.directed_topics,
+            aiData: result,
+          });
+          const row = await getTranscriptById(id);
+          if (row && row.md_path && fs.existsSync(row.md_path)) {
+            try {
+              fs.writeFileSync(row.md_path, result.markdown || result.text, "utf-8");
+            } catch (err) {
+              console.warn(`[Paraphrase] Gagal update file markdown ${row.md_path}:`, err);
+            }
+          }
+        }
+
+        return sendJson({
+          text: result.text,
+          markdown: result.markdown || result.text,
+          markdown_text: result.markdown || result.text,
+          final_text: result.markdown || result.text,
+          summary: result.summary,
+          ai_summary: result.summary,
+          directed_topics: result.directed_topics,
+          ai_data: result,
+          ai_correction_status: "paraphrased",
+        });
       } catch (err: any) {
         return sendJson({ error: err.message }, 500);
       }

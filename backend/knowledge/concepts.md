@@ -74,3 +74,48 @@
 
 - Deskripsi: Evaluasi pencapaian kerja berdasar indikator kesepakatan tertulis.
 - Sumber: job_id=5e12734f13cd4afaa73cfe3e5bab28cf
+
+## Durasi Kerja Minimum Lapangan
+
+- Deskripsi: Ambang batas waktu efektif (minimal 4 jam) yang wajib dihabiskan AE dalam aktivitas canvassing/branch agar presensi harian diakui sah.
+- Sumber: job_id=6a1d800a0f484b4eb3591eecafdf3d51
+
+## Pemisahan Kehadiran vs Insentif Sales
+
+- Deskripsi: Model kompensasi yang membedakan pemenuhan jam kerja (penentu tunjangan operasional) dengan hasil penjualan/closing (penentu insentif komisi).
+- Sumber: job_id=6a1d800a0f484b4eb3591eecafdf3d51
+
+## Implementasi Bertahap (Phased Rollout)
+
+- Deskripsi: Strategi adopsi sistem baru dengan mendahulukan pembiasaan disiplin waktu dasar (Fase 1) sebelum menerapkan kontrol administratif dan bukti fisik ketat (Fase 2).
+- Sumber: job_id=6a1d800a0f484b4eb3591eecafdf3d51
+
+## Ambang Kehadiran 4 Jam
+
+- Deskripsi: Durasi minimal selisih check-in dan check-out agar kehadiran harian diakui valid oleh sistem.
+- Sumber: job_id=22aa8d55c1d3472d985617bd6c2b91b4
+
+## Pengurangan Insentif Berbasis Absensi
+
+- Deskripsi: Pemberian penalti presensi diarahkan pada komponen komisi/insentif kinerja variabel, bukan pemotongan gaji tetap.
+- Sumber: job_id=22aa8d55c1d3472d985617bd6c2b91b4
+
+## Pemerataan Kanvasing Wilayah
+
+- Deskripsi: Strategi pemerataan kunjungan AE untuk menutup kesenjangan 184 area target yang belum tersentuh penjualan.
+- Sumber: job_id=22aa8d55c1d3472d985617bd6c2b91b4
+
+## Cross-Functional Integration
+
+- Deskripsi: Penyelarasan alur kerja lintas batas fungsi operasional (sales, gudang, keuangan) untuk mengeliminasi mentalitas silo.
+- Sumber: job_id=afc75af3988647c28c7e5a05aff2399d
+
+## Single Source of Truth
+
+- Deskripsi: Basis data sentral tunggal terverifikasi yang dijadikan acuan konsisten oleh semua unit bisnis perusahaan.
+- Sumber: job_id=afc75af3988647c28c7e5a05aff2399d
+
+## Human-in-the-Loop Validation
+
+- Deskripsi: Prinsip pemisahan data AI dan penempatan validasi manusia sebagai filter akhir guna mencegah kesalahan fatal dan beban data berlebih.
+- Sumber: job_id=afc75af3988647c28c7e5a05aff2399d

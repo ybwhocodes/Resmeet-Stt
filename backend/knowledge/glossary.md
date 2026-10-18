@@ -125,3 +125,87 @@
 - Alias: Business & Expansion
 - Arti: Divisi analitik ekspansi area dan performa jaringan bisnis.
 - Sumber: job_id=5e12734f13cd4afaa73cfe3e5bab28cf
+
+## Account Executive
+
+- Alias: AE, AA, AI
+- Arti: Tenaga pemasar lapangan yang bertugas melakukan canvassing, akuisisi pelanggan baru, dan edukasi produk ke target area.
+- Sumber: job_id=6a1d800a0f484b4eb3591eecafdf3d51
+
+## Branch Leader
+
+- Alias: BL
+- Arti: Pimpinan cabang operasional yang mengoordinasikan dan mengawasi aktivitas kerja AE dan teknisi di wilayahnya.
+- Sumber: job_id=6a1d800a0f484b4eb3591eecafdf3d51
+
+## Canvassing
+
+- Alias: Kampasing, Kanvasing
+- Arti: Aktivitas penjualan langsung ke lapangan/pemukiman oleh AE untuk menawarkan layanan internet kepada calon pelanggan.
+- Sumber: job_id=6a1d800a0f484b4eb3591eecafdf3d51
+
+## Pasang Sambungan Baru
+
+- Alias: PSB, PISL
+- Arti: Proses instalasi dan aktivasi layanan baru internet bagi pelanggan yang telah menyetujui kontrak berlangganan.
+- Sumber: job_id=6a1d800a0f484b4eb3591eecafdf3d51
+
+## Tunjangan Profesional
+
+- Alias: Professional Fee, Tunjangan Kehadiran
+- Arti: Komponen imbal jasa tetap harian/bulanan yang dikaitkan dengan kehadiran kerja sah, terpisah dari insentif closing.
+- Sumber: job_id=6a1d800a0f484b4eb3591eecafdf3d51
+
+## AE
+
+- Alias: Account Executive, Sales Agent
+- Arti: Personel garda depan pemasaran ISP yang melakukan visit dan kanvasing ke lapangan.
+- Sumber: job_id=22aa8d55c1d3472d985617bd6c2b91b4
+
+## Kanvasing
+
+- Alias: Canvassing, Visit Lapangan
+- Arti: Aktivitas mendatangi area prospek pelanggan secara langsung untuk akuisisi sambungan baru.
+- Sumber: job_id=22aa8d55c1d3472d985617bd6c2b91b4
+
+## Composible ERP
+
+- Alias: Composable Architecture
+- Arti: Pendekatan modular modern yang memadukan modul software terbaik dari berbagai vendor berbeda ke dalam satu ekosistem terintegrasi.
+- Sumber: job_id=afc75af3988647c28c7e5a05aff2399d
+
+## Bullwhip Effect
+
+- Alias: Efek Cambuk
+- Arti: Fenomena distorsi informasi permintaan di tingkat hilir yang memicu fluktuasi persediaan berlebih di tingkat hulu rantai pasok.
+- Sumber: job_id=afc75af3988647c28c7e5a05aff2399d
+
+## Vendor-Managed Inventory
+
+- Alias: VMI
+- Arti: Praktik pengelolaan rantai pasok di mana pemasok bertanggung jawab penuh memantau dan mengisi stok di lokasi pelanggan berdasarkan data penjualan riil.
+- Sumber: job_id=afc75af3988647c28c7e5a05aff2399d
+
+## Enterprise Content Management System
+
+- Alias: ECMS
+- Arti: Sistem aplikasi perusahaan untuk mengelola, menyimpan, dan menata arsip, dokumen, dan aset digital secara terstruktur.
+- Sumber: job_id=afc75af3988647c28c7e5a05aff2399d
+
+## Enterprise Social Platform
+
+- Alias: ESP
+- Arti: Platform media sosial internal terproteksi yang digunakan untuk komunikasi, pertukaran informasi, dan kolaborasi antar-tim di organisasi.
+- Sumber: job_id=afc75af3988647c28c7e5a05aff2399d
+
+## Customer Lifetime Value
+
+- Alias: CLTV
+- Arti: Perkiraan total nilai finansial atau pendapatan yang diberikan pelanggan kepada perusahaan selama masa hubungan bisnis.
+- Sumber: job_id=afc75af3988647c28c7e5a05aff2399d
+
+## Digital Twin
+
+- Alias: Kembaran Digital
+- Arti: Representasi model virtual digital dari objek, fasilitas fisik, atau proses rantai pasok untuk simulasi performa operasional.
+- Sumber: job_id=afc75af3988647c28c7e5a05aff2399d

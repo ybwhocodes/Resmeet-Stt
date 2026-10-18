@@ -286,3 +286,164 @@
 - Koreksi: PSA
 - Alasan: Kekeliruan akronim Performance Service Agreement.
 - Sumber: job_id=5e12734f13cd4afaa73cfe3e5bab28cf
+
+## SSAA / A A / A.I. / A-I -> AE (Account Executive)
+
+- Salah dengar: SSAA / A A / A.I. / A-I
+- Koreksi: AE (Account Executive)
+- Alasan: Konteks peran tenaga penjual lapangan yang melakukan canvassing dan ditarget closing.
+- Sumber: job_id=6a1d800a0f484b4eb3591eecafdf3d51
+
+## cekot / kokot / check-word / cekohon -> Check-out
+
+- Salah dengar: cekot / kokot / check-word / cekohon
+- Koreksi: Check-out
+- Alasan: Istilah pencatatan jam selesai kerja pada sistem presensi.
+- Sumber: job_id=6a1d800a0f484b4eb3591eecafdf3d51
+
+## cekin -> Check-in
+
+- Salah dengar: cekin
+- Koreksi: Check-in
+- Alasan: Istilah pencatatan jam mulai kerja pada sistem presensi.
+- Sumber: job_id=6a1d800a0f484b4eb3591eecafdf3d51
+
+## kampasih / fasing / kan pasinya -> Canvassing
+
+- Salah dengar: kampasih / fasing / kan pasinya
+- Koreksi: Canvassing
+- Alasan: Aktivitas penjualan door-to-door yang dilakukan AE ke area perumahan.
+- Sumber: job_id=6a1d800a0f484b4eb3591eecafdf3d51
+
+## paspipis / pisl -> PSB (Pasang Sambungan Baru)
+
+- Salah dengar: paspipis / pisl
+- Koreksi: PSB (Pasang Sambungan Baru)
+- Alasan: Istilah operasional penyambungan pelanggan baru ISP.
+- Sumber: job_id=6a1d800a0f484b4eb3591eecafdf3d51
+
+## gespek -> Cashback
+
+- Salah dengar: gespek
+- Koreksi: Cashback
+- Alasan: Istilah promosi pengembalian uang/potongan biaya untuk menarik pelanggan baru.
+- Sumber: job_id=6a1d800a0f484b4eb3591eecafdf3d51
+
+## lubak lock intro hop -> Lupa clock-in/clock-out
+
+- Salah dengar: lubak lock intro hop
+- Koreksi: Lupa clock-in/clock-out
+- Alasan: Istilah lupa melakukan presensi pada mesin/aplikasi kehadiran.
+- Sumber: job_id=6a1d800a0f484b4eb3591eecafdf3d51
+
+## Pempang -> -
+
+- Salah dengar: Pempang
+- Koreksi: -
+- Alasan: Halusinasi pengulangan kata (artifact loop) dari model STT Whisper.
+- Sumber: job_id=22aa8d55c1d3472d985617bd6c2b91b4
+
+## Pasang Sud / pasang serta -> Pak Samsul
+
+- Salah dengar: Pasang Sud / pasang serta
+- Koreksi: Pak Samsul
+- Alasan: Salah fonetik nama stakeholder pimpinan rapat.
+- Sumber: job_id=22aa8d55c1d3472d985617bd6c2b91b4
+
+## SSAA / A A / A-I -> AE
+
+- Salah dengar: SSAA / A A / A-I
+- Koreksi: AE
+- Alasan: Singkatan Account Executive terdengar sebagai 'A-I' atau 'A A'.
+- Sumber: job_id=22aa8d55c1d3472d985617bd6c2b91b4
+
+## preserming -> brainstorming
+
+- Salah dengar: preserming
+- Koreksi: brainstorming
+- Alasan: Istilah diskusi/curah pendapat salah ditranskripsikan.
+- Sumber: job_id=22aa8d55c1d3472d985617bd6c2b91b4
+
+## prens / prensu -> branch
+
+- Salah dengar: prens / prensu
+- Koreksi: branch
+- Alasan: Kata serapan branch (kantor cabang) terdengar seperti 'prens'.
+- Sumber: job_id=22aa8d55c1d3472d985617bd6c2b91b4
+
+## batila / masbili -> Mbak Dila / Mas Billy
+
+- Salah dengar: batila / masbili
+- Koreksi: Mbak Dila / Mas Billy
+- Alasan: Salah pengenalan nama personel.
+- Sumber: job_id=22aa8d55c1d3472d985617bd6c2b91b4
+
+## penyakitkanan -> testing mikrofon / audio stutter
+
+- Salah dengar: penyakitkanan
+- Koreksi: testing mikrofon / audio stutter
+- Alasan: Glitch pengulangan STT Whisper pada noise awal rekaman.
+- Sumber: job_id=afc75af3988647c28c7e5a05aff2399d
+
+## Lowdon -> Laudon
+
+- Salah dengar: Lowdon
+- Koreksi: Laudon
+- Alasan: Kenneth C. Laudon, penulis buku teks Management Information Systems.
+- Sumber: job_id=afc75af3988647c28c7e5a05aff2399d
+
+## SJM / SIM -> SCM
+
+- Salah dengar: SJM / SIM
+- Koreksi: SCM
+- Alasan: Konteks pembahasan Supply Chain Management.
+- Sumber: job_id=afc75af3988647c28c7e5a05aff2399d
+
+## trublu -> TrueBlue
+
+- Salah dengar: trublu
+- Koreksi: TrueBlue
+- Alasan: Nama perusahaan staffing/tenaga kerja pada studi kasus Oracle Cloud.
+- Sumber: job_id=afc75af3988647c28c7e5a05aff2399d
+
+## pus bash / pus base -> Push-based
+
+- Salah dengar: pus bash / pus base
+- Koreksi: Push-based
+- Alasan: Model produksi build-to-stock rantai pasok.
+- Sumber: job_id=afc75af3988647c28c7e5a05aff2399d
+
+## pull base -> Pull-based
+
+- Salah dengar: pull base
+- Koreksi: Pull-based
+- Alasan: Model rantai pasok responsif berbasis tarikan order (build-to-order).
+- Sumber: job_id=afc75af3988647c28c7e5a05aff2399d
+
+## order Beijing -> Order batching
+
+- Salah dengar: order Beijing
+- Koreksi: Order batching
+- Alasan: Penumpukan akumulasi pesanan dalam jumlah besar pada SCM.
+- Sumber: job_id=afc75af3988647c28c7e5a05aff2399d
+
+## resiening dan gaming -> Rationing and gaming
+
+- Salah dengar: resiening dan gaming
+- Koreksi: Rationing and gaming
+- Alasan: Pemicu bullwhip effect akibat pemesanan fiktif saat alokasi produk dibatasi.
+- Sumber: job_id=afc75af3988647c28c7e5a05aff2399d
+
+## Cen Red -> Churn Rate
+
+- Salah dengar: Cen Red
+- Koreksi: Churn Rate
+- Alasan: Tingkat persentase pelanggan yang berhenti berlangganan/membeli layanan.
+- Sumber: job_id=afc75af3988647c28c7e5a05aff2399d
+
+## composib berik-rb -> Composable ERP
+
+- Salah dengar: composib berik-rb
+- Koreksi: Composable ERP
+- Alasan: Salah tangkap istilah arsitektur Composable ERP pada sesi Q&A.
+- Sumber: job_id=afc75af3988647c28c7e5a05aff2399d

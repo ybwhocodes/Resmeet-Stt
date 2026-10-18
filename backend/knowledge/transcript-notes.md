@@ -33,3 +33,17 @@
 - Audio alami looping kata berulang pada engine STT Whisper. _(job_id=5e12734f13cd4afaa73cfe3e5bab28cf)_
 
 - Substansi utama rapat terfokus pada PSA, performa klaster, dan seleksi staf. _(job_id=5e12734f13cd4afaa73cfe3e5bab28cf)_
+
+- Komunikasi ke tim lapangan harus menekankan bahwa presensi ditujukan memfasilitasi koordinasi dan dukungan kerja, bukan semata kontrol hukuman. _(job_id=6a1d800a0f484b4eb3591eecafdf3d51)_
+
+- Beban verifikasi harian tidak boleh dipusatkan pada Super Admin untuk menghindari bottleneck operasional. _(job_id=6a1d800a0f484b4eb3591eecafdf3d51)_
+
+- Uji coba Fase 1 akan dimonitoring selama satu bulan sebelum melangkah ke integrasi form visit di Fase 2. _(job_id=6a1d800a0f484b4eb3591eecafdf3d51)_
+
+- Pembersihan artefak audio berulang pada transkrip berhasil diisolasi dari substansi pembahasan. _(job_id=22aa8d55c1d3472d985617bd6c2b91b4)_
+
+- Fokus utama operasional saat ini adalah sinkronisasi disiplin absensi dengan rasio konversi sales di lapangan. _(job_id=22aa8d55c1d3472d985617bd6c2b91b4)_
+
+- Bagian awal audio mengandung artefak loop halusinasi Whisper yang diabaikan. _(job_id=afc75af3988647c28c7e5a05aff2399d)_
+
+- Bagian akhir audio mengalami pengulangan segmentasi frase 'Sudah ambak' secara masif akibat background noise audio kosong, substansi pembahasan selesai pasca jawaban Q&A. _(job_id=afc75af3988647c28c7e5a05aff2399d)_

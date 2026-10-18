@@ -218,3 +218,42 @@ export async function deleteTranscript(id: number): Promise<boolean> {
   }
 }
 
+export async function updateTranscriptParaphrase(
+  id: number,
+  params: {
+    finalText: string;
+    aiSummary?: string | null;
+    directedTopics?: any;
+    aiData?: any;
+  }
+): Promise<boolean> {
+  const p = getDbPool();
+  try {
+    const directedTopicsJson = params.directedTopics ? JSON.stringify(params.directedTopics) : null;
+    const aiDataJson = params.aiData ? JSON.stringify(params.aiData) : null;
+    const [result] = await p.execute<mysql.ResultSetHeader>(
+      `UPDATE transcripts 
+       SET final_text = ?, 
+           ai_corrected_text = ?, 
+           ai_summary = ?, 
+           directed_topics = ?, 
+           ai_data = ?, 
+           ai_correction_status = 'paraphrased' 
+       WHERE id = ?`,
+      [
+        params.finalText,
+        params.finalText,
+        params.aiSummary || null,
+        directedTopicsJson,
+        aiDataJson,
+        id,
+      ]
+    );
+    return result.affectedRows > 0;
+  } catch (err) {
+    console.error(`[DB] Gagal update paraphrase transkrip ID ${id}:`, err);
+    return false;
+  }
+}
+
+

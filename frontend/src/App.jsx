@@ -347,12 +347,29 @@ export default function App() {
       const res = await fetch(`${API}/paraphrase`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, style: paraphraseStyle }),
+        body: JSON.stringify({
+          text,
+          style: paraphraseStyle,
+          id: targetItem?.id,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Parafrase gagal");
-      const next = { ...targetItem, final_text: data.text, markdown_text: data.text, ai_correction_status: "paraphrased" };
+      const next = {
+        ...targetItem,
+        final_text: data.markdown || data.text,
+        markdown_text: data.markdown || data.text,
+        ai_summary: data.summary || data.ai_summary || targetItem.ai_summary,
+        summary: data.summary || data.ai_summary || targetItem.summary,
+        directed_topics: data.directed_topics?.length > 0 ? data.directed_topics : targetItem.directed_topics,
+        ai_data: data.ai_data || data,
+        ai_correction_status: "paraphrased",
+      };
       updateTargetFn(next);
+      if (updateTargetFn === setResult && data.directed_topics?.length > 0) {
+        setDirectedTopics(data.directed_topics);
+      }
+      fetchHistory();
     } catch (e) {
       setError(e.message);
     } finally {
@@ -689,7 +706,7 @@ export default function App() {
                       filename={result.filename || file?.name || "Rapat"}
                       durationS={result.duration_s || progress?.elapsed_s || 0}
                       createdAt={new Date().toISOString()}
-                      directedTopics={directedTopics}
+                      directedTopics={result.directed_topics || directedTopics}
                     />
                   </div>
                 )}
