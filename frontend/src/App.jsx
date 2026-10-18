@@ -6,7 +6,7 @@ import {
   Trash2, Mic, Zap, Brain, ShieldCheck,
   Settings, Eye, EyeOff, Save, Target, Check,
   ArrowLeft, ChevronRight, Sliders, Search, Layers, X,
-  Layout, GitBranch, Copy, Sparkles, Server, HardDrive
+  Layout, GitBranch, Copy, Sparkles, Server, HardDrive, Star
 } from "lucide-react";
 import MarkmapView from "./components/MarkmapView";
 import UiSummary from "./components/UiSummary";
@@ -122,6 +122,7 @@ export default function App() {
 
   // Database Storage State
   const [dbType, setDbType] = useState("sqlite");
+  const [activeDefaultDb, setActiveDefaultDb] = useState("sqlite");
   const [dbHost, setDbHost] = useState("127.0.0.1");
   const [dbPort, setDbPort] = useState(3307);
   const [dbName, setDbName] = useState("stt_db");
@@ -131,6 +132,8 @@ export default function App() {
   const [dbTestResult, setDbTestResult] = useState(null);
   const [dbMigrating, setDbMigrating] = useState(false);
   const [dbMigrateResult, setDbMigrateResult] = useState(null);
+  const [settingDefaultDb, setSettingDefaultDb] = useState(false);
+  const [setDefaultResult, setSetDefaultResult] = useState(null);
 
   // Paraphrase State
   const [paraphrasing, setParaphrasing] = useState(false);
@@ -177,7 +180,10 @@ export default function App() {
         if (data.apiKey) setAiApiKey(data.apiKey);
         if (data.modelId) setAiModelId(data.modelId);
         if (data.paraphraseStyle) setParaphraseStyle(data.paraphraseStyle);
-        if (data.dbType) setDbType(data.dbType);
+        if (data.dbType) {
+          setDbType(data.dbType);
+          setActiveDefaultDb(data.dbType);
+        }
         if (data.dbHost) setDbHost(data.dbHost);
         if (data.dbPort) setDbPort(data.dbPort);
         if (data.dbName) setDbName(data.dbName);
@@ -301,6 +307,7 @@ export default function App() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Gagal menyimpan pengaturan");
       setSavedSuccess(true);
+      setActiveDefaultDb(dbType);
       fetchPreflight();
       fetchHistory();
       setTimeout(() => setSavedSuccess(false), 3000);
@@ -308,6 +315,38 @@ export default function App() {
       setError(err.message);
     } finally {
       setSavingSettings(false);
+    }
+  };
+
+  const handleSetDefaultDb = async (typeToSet = dbType) => {
+    setSettingDefaultDb(true);
+    setSetDefaultResult(null);
+    try {
+      const res = await fetch(`${API}/settings/set-default-db`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dbType: typeToSet,
+          dbHost,
+          dbPort: Number(dbPort) || undefined,
+          dbName,
+          dbUser,
+          dbPassword,
+        }),
+      });
+      const data = await res.json();
+      setSetDefaultResult(data);
+      if (data.success) {
+        setActiveDefaultDb(typeToSet);
+        setDbType(typeToSet);
+        fetchPreflight();
+        fetchHistory();
+        setTimeout(() => setSetDefaultResult(null), 4000);
+      }
+    } catch (err) {
+      setSetDefaultResult({ success: false, message: err.message || "Gagal mengatur database default" });
+    } finally {
+      setSettingDefaultDb(false);
     }
   };
 
@@ -1382,7 +1421,7 @@ export default function App() {
 
             {/* Section 2: Database Storage (SQLite, MySQL, PostgreSQL) */}
             <div className="bg-[#151821] border border-[#1e2330] rounded-2xl p-6 space-y-5">
-              <div className="flex items-center justify-between border-b border-[#1e2330] pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1e2330] pb-4">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center">
                     <Database className="w-4 h-4 text-indigo-400" />
@@ -1392,18 +1431,31 @@ export default function App() {
                     <p className="text-xs text-slate-400">Pilih mesin database (SQLite otomatis mandiri, MySQL, atau PostgreSQL)</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono bg-indigo-950/60 text-indigo-300 border border-indigo-700/40">
-                  <Server className="w-3 h-3" />
-                  <span>Port Server: 8200</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-950/70 text-emerald-400 border border-emerald-700/50 shadow-sm">
+                    <HardDrive className="w-3.5 h-3.5" />
+                    <span>Default Aktif: <strong className="uppercase tracking-wider">{activeDefaultDb}</strong></span>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono bg-indigo-950/60 text-indigo-300 border border-indigo-700/40">
+                    <Server className="w-3 h-3" />
+                    <span>Port: 8200</span>
+                  </div>
                 </div>
               </div>
 
-              {/* DB Type Selection */}
+              {/* DB Type Selection Cards */}
               <div className="space-y-2">
-                <label className="block text-xs font-medium text-slate-300">
-                  Tipe Driver Database:
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-slate-300">
+                    Pilih Tipe Driver Database:
+                  </label>
+                  <span className="text-[11px] text-slate-400">
+                    Penyimpanan default saat ini: <strong className="text-indigo-300 uppercase">{activeDefaultDb}</strong>
+                  </span>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* SQLite Option */}
                   <button
                     type="button"
                     onClick={() => {
@@ -1411,24 +1463,35 @@ export default function App() {
                       setDbTestResult(null);
                       setDbMigrateResult(null);
                     }}
-                    className={`p-3 rounded-xl border text-left transition-all ${
+                    className={`p-3.5 rounded-xl border text-left transition-all ${
                       dbType === "sqlite"
-                        ? "bg-indigo-600/15 border-indigo-500 text-indigo-200 ring-1 ring-indigo-500"
+                        ? "bg-indigo-600/15 border-indigo-500 text-indigo-200 ring-1 ring-indigo-500 shadow-md"
                         : "bg-[#0c0e14] border-[#1e2330] text-slate-400 hover:border-slate-700"
                     }`}
                   >
-                    <div className="font-semibold text-xs text-white flex items-center justify-between">
+                    <div className="font-semibold text-xs text-white flex items-center justify-between mb-1.5">
                       <span className="flex items-center gap-1.5">
                         <HardDrive className="w-3.5 h-3.5 text-emerald-400" />
-                        SQLite (Default)
+                        SQLite (Mandiri)
                       </span>
-                      {dbType === "sqlite" && <Check className="w-3.5 h-3.5 text-indigo-400" />}
+                      <div className="flex items-center gap-1">
+                        {activeDefaultDb === "sqlite" ? (
+                          <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-medium flex items-center gap-0.5">
+                            <Check className="w-3 h-3 text-emerald-400" /> Default Aktif
+                          </span>
+                        ) : (
+                          <span className="text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-1.5 py-0.5 rounded-full">
+                            Tersedia
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      Mandiri tanpa server. File lokal otomatis dibuat tanpa setup tambahan.
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Mandiri tanpa server. File <code className="text-emerald-300 text-[10px]">resmeet.sqlite</code> otomatis dibuat tanpa instalasi tambahan.
                     </p>
                   </button>
 
+                  {/* MySQL Option */}
                   <button
                     type="button"
                     onClick={() => {
@@ -1437,24 +1500,35 @@ export default function App() {
                       setDbTestResult(null);
                       setDbMigrateResult(null);
                     }}
-                    className={`p-3 rounded-xl border text-left transition-all ${
+                    className={`p-3.5 rounded-xl border text-left transition-all ${
                       dbType === "mysql"
-                        ? "bg-indigo-600/15 border-indigo-500 text-indigo-200 ring-1 ring-indigo-500"
+                        ? "bg-indigo-600/15 border-indigo-500 text-indigo-200 ring-1 ring-indigo-500 shadow-md"
                         : "bg-[#0c0e14] border-[#1e2330] text-slate-400 hover:border-slate-700"
                     }`}
                   >
-                    <div className="font-semibold text-xs text-white flex items-center justify-between">
+                    <div className="font-semibold text-xs text-white flex items-center justify-between mb-1.5">
                       <span className="flex items-center gap-1.5">
                         <Database className="w-3.5 h-3.5 text-blue-400" />
                         MySQL Server
                       </span>
-                      {dbType === "mysql" && <Check className="w-3.5 h-3.5 text-indigo-400" />}
+                      <div className="flex items-center gap-1">
+                        {activeDefaultDb === "mysql" ? (
+                          <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-medium flex items-center gap-0.5">
+                            <Check className="w-3 h-3 text-emerald-400" /> Default Aktif
+                          </span>
+                        ) : (
+                          <span className="text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-1.5 py-0.5 rounded-full">
+                            Tersedia
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      Koneksi ke MySQL / MariaDB lokal atau cloud dengan migrasi tabel otomatis.
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Koneksi ke MySQL / MariaDB server lokal atau cloud dengan fitur migrasi tabel in-app.
                     </p>
                   </button>
 
+                  {/* PostgreSQL Option */}
                   <button
                     type="button"
                     onClick={() => {
@@ -1464,40 +1538,104 @@ export default function App() {
                       setDbTestResult(null);
                       setDbMigrateResult(null);
                     }}
-                    className={`p-3 rounded-xl border text-left transition-all ${
+                    className={`p-3.5 rounded-xl border text-left transition-all ${
                       dbType === "postgres"
-                        ? "bg-indigo-600/15 border-indigo-500 text-indigo-200 ring-1 ring-indigo-500"
+                        ? "bg-indigo-600/15 border-indigo-500 text-indigo-200 ring-1 ring-indigo-500 shadow-md"
                         : "bg-[#0c0e14] border-[#1e2330] text-slate-400 hover:border-slate-700"
                     }`}
                   >
-                    <div className="font-semibold text-xs text-white flex items-center justify-between">
+                    <div className="font-semibold text-xs text-white flex items-center justify-between mb-1.5">
                       <span className="flex items-center gap-1.5">
                         <Server className="w-3.5 h-3.5 text-sky-400" />
                         PostgreSQL Server
                       </span>
-                      {dbType === "postgres" && <Check className="w-3.5 h-3.5 text-indigo-400" />}
+                      <div className="flex items-center gap-1">
+                        {activeDefaultDb === "postgres" ? (
+                          <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-medium flex items-center gap-0.5">
+                            <Check className="w-3 h-3 text-emerald-400" /> Default Aktif
+                          </span>
+                        ) : (
+                          <span className="text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-1.5 py-0.5 rounded-full">
+                            Tersedia
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      Koneksi ke PostgreSQL server dengan dukungan schema dan JSON field native.
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Database relasional enterprise PostgreSQL dengan skema tabel dan kolom JSON native.
                     </p>
                   </button>
                 </div>
               </div>
 
+              {/* Set Default Feedback Alert */}
+              {setDefaultResult && (
+                <div className={`p-3.5 rounded-xl border text-xs flex items-start gap-2.5 shadow-lg ${setDefaultResult.success ? "bg-emerald-950/70 border-emerald-600/70 text-emerald-200" : "bg-red-950/70 border-red-600/70 text-red-200"}`}>
+                  {setDefaultResult.success ? <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0 text-emerald-400" /> : <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0 text-red-400" />}
+                  <div className="flex-1">
+                    <p className="font-semibold">{setDefaultResult.success ? "Driver Default Berhasil Diperbarui!" : "Gagal Mengatur Driver Default"}</p>
+                    <p className="text-[11px] mt-0.5 opacity-90">{setDefaultResult.message}</p>
+                  </div>
+                </div>
+              )}
+
               {/* Conditional view: SQLite Info vs MySQL/Postgres Form */}
               {dbType === "sqlite" ? (
-                <div className="bg-emerald-950/25 border border-emerald-700/40 rounded-xl p-4 flex items-start gap-3 text-xs text-emerald-200">
-                  <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <p className="font-semibold text-emerald-300">SQLite Aktif Otomatis (Zero Configuration)</p>
-                    <p className="text-emerald-400/90 leading-relaxed text-[11px]">
-                      Aplikasi menggunakan database SQLite lokal (<code className="bg-emerald-950/60 px-1 py-0.5 rounded text-emerald-200">backend/resmeet.sqlite</code>). 
-                      Tabel <code className="bg-emerald-950/60 px-1 py-0.5 rounded text-emerald-200">transcripts</code> langsung dibuat secara otomatis saat backend berjalan sehingga tidak memerlukan server database terpisah ataupun tombol migrasi manual.
-                    </p>
+                <div className="bg-emerald-950/20 border border-emerald-700/40 rounded-xl p-4 space-y-4">
+                  <div className="flex items-start gap-3 text-xs text-emerald-200">
+                    <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <p className="font-semibold text-emerald-300">SQLite (Zero Configuration - Mandiri)</p>
+                      <p className="text-emerald-400/90 leading-relaxed text-[11px]">
+                        Aplikasi menggunakan file database lokal (<code className="bg-emerald-950/60 px-1.5 py-0.5 rounded text-emerald-200">backend/resmeet.sqlite</code>). 
+                        Tabel <code className="bg-emerald-950/60 px-1.5 py-0.5 rounded text-emerald-200">transcripts</code> langsung dibuat secara otomatis saat backend berjalan. Tidak memerlukan server database eksternal ataupun tombol migrasi manual.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-emerald-800/40 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className={`inline-block w-2.5 h-2.5 rounded-full ${activeDefaultDb === "sqlite" ? "bg-emerald-400 shadow-sm shadow-emerald-400" : "bg-slate-600"}`}></span>
+                      <span className="text-slate-300 text-[11px]">
+                        {activeDefaultDb === "sqlite" ? (
+                          <strong className="text-emerald-300">SQLite saat ini adalah driver default sistem yang aktif.</strong>
+                        ) : (
+                          <span className="text-slate-400">Driver default saat ini adalah: <strong className="text-indigo-300 uppercase">{activeDefaultDb}</strong>.</span>
+                        )}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSetDefaultDb("sqlite")}
+                      disabled={settingDefaultDb || activeDefaultDb === "sqlite"}
+                      className={`flex items-center gap-1.5 text-xs px-4 py-2 rounded-xl font-medium transition-all ${
+                        activeDefaultDb === "sqlite"
+                          ? "bg-emerald-900/40 border border-emerald-700/60 text-emerald-300 cursor-default"
+                          : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30 cursor-pointer"
+                      }`}
+                    >
+                      {settingDefaultDb ? (
+                        <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Mengatur Default...</>
+                      ) : activeDefaultDb === "sqlite" ? (
+                        <><Check className="w-3.5 h-3.5 text-emerald-400" /> Default Aktif</>
+                      ) : (
+                        <><Star className="w-3.5 h-3.5" /> Set Default SQLite</>
+                      )}
+                    </button>
                   </div>
                 </div>
               ) : (
                 <div className="bg-[#0c0e14] border border-[#1e2330] rounded-xl p-4 space-y-4">
+                  <div className="flex items-center justify-between border-b border-[#1e2330] pb-2.5">
+                    <span className="text-xs font-semibold text-slate-200">
+                      Parameter Koneksi {dbType.toUpperCase()}:
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      Default Port: {dbType === "postgres" ? "5432" : "3307 / 3306"}
+                    </span>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                     <div>
                       <label className="block text-slate-400 mb-1">Host Database</label>
@@ -1571,26 +1709,47 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* Buttons for Test Connection & Migrate */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#1e2330]">
-                    <button
-                      type="button"
-                      onClick={handleTestDbConnection}
-                      disabled={dbTesting}
-                      className="flex items-center gap-1.5 text-xs text-indigo-300 hover:text-white bg-[#151821] border border-indigo-500/30 hover:border-indigo-400 px-4 py-2 rounded-xl transition-all disabled:opacity-50"
-                    >
-                      {dbTesting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-                      <span>{dbTesting ? "Menguji Koneksi..." : `Uji Koneksi ${dbType.toUpperCase()}`}</span>
-                    </button>
+                  {/* Buttons for Test Connection, Migrate, and Set Default */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[#1e2330]">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleTestDbConnection}
+                        disabled={dbTesting}
+                        className="flex items-center gap-1.5 text-xs text-indigo-300 hover:text-white bg-[#151821] border border-indigo-500/30 hover:border-indigo-400 px-4 py-2 rounded-xl transition-all disabled:opacity-50"
+                      >
+                        {dbTesting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                        <span>{dbTesting ? "Menguji Koneksi..." : `Uji Koneksi ${dbType.toUpperCase()}`}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleMigrateDb}
+                        disabled={dbMigrating}
+                        className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white bg-[#151821] border border-slate-700 hover:border-slate-500 px-4 py-2 rounded-xl font-medium transition-all disabled:opacity-50"
+                      >
+                        {dbMigrating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Database className="w-3.5 h-3.5 text-indigo-400" />}
+                        <span>{dbMigrating ? "Memigrasi..." : "Migrate Database"}</span>
+                      </button>
+                    </div>
 
                     <button
                       type="button"
-                      onClick={handleMigrateDb}
-                      disabled={dbMigrating}
-                      className="flex items-center gap-1.5 text-xs text-white bg-emerald-700 hover:bg-emerald-600 px-4 py-2 rounded-xl font-medium transition-all shadow-md shadow-emerald-900/30 disabled:opacity-50"
+                      onClick={() => handleSetDefaultDb(dbType)}
+                      disabled={settingDefaultDb}
+                      className={`flex items-center gap-1.5 text-xs px-5 py-2 rounded-xl font-medium transition-all shadow-lg ${
+                        activeDefaultDb === dbType
+                          ? "bg-emerald-950/60 border border-emerald-600/50 text-emerald-300 shadow-emerald-900/20"
+                          : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/30 cursor-pointer"
+                      }`}
                     >
-                      {dbMigrating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Database className="w-3.5 h-3.5" />}
-                      <span>{dbMigrating ? "Memigrasi..." : "Migrate Database"}</span>
+                      {settingDefaultDb ? (
+                        <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Menyimpan Default...</>
+                      ) : activeDefaultDb === dbType ? (
+                        <><Check className="w-3.5 h-3.5 text-emerald-400" /> {dbType.toUpperCase()} Adalah Default Aktif</>
+                      ) : (
+                        <><Star className="w-3.5 h-3.5" /> Set {dbType.toUpperCase()} Sebagai Default</>
+                      )}
                     </button>
                   </div>
                 </div>

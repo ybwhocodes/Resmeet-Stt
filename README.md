@@ -29,9 +29,10 @@ Bagi pengguna yang ingin langsung menggunakan aplikasi tanpa perlu `git clone` a
 ## 🌟 Fitur Utama
 
 - **⚡ Runtime Bun.js Super Cepat (Port 8200):** Concurrency tinggi, startup instan, konsumsi RAM sangat rendah (<100MB), dan streaming progress WebSocket Socket.IO realtime.
-- **🗄️ Multi-Database Storage & Tombol Migrasi In-App:**
+- **🗄️ Multi-Database Storage, Set Default Driver & Tombol Migrasi In-App:**
+  - **Tombol "Set Default Database":** Tersedia tombol 'Set Default' untuk SQLite, MySQL, maupun PostgreSQL dengan indikator badge 'Default Aktif' realtime di header panel dan kartu pilihan.
   - **SQLite (Default Mandiri):** Aktif otomatis out-of-the-box tanpa konfigurasi eksternal. Tabel `transcripts` langsung siap dipakai tanpa tombol migrasi.
-  - **MySQL & PostgreSQL:** Dapat dihubungkan ke server kantor. Dilengkapi tombol **Uji Koneksi** dan tombol **Migrate Database** (khusus muncul saat driver non-SQLite dipilih) untuk membuat database dan tabel secara instan.
+  - **MySQL & PostgreSQL:** Dapat dihubungkan ke server kantor. Dilengkapi tombol **Uji Koneksi**, tombol **Migrate Database**, dan tombol **Set Default** untuk menyimpan konfigurasi permanen ke `settings.json`.
 - **🧠 Engine Whisper.cpp (GGML Q5):** Kuantisasi `large-v3-turbo-q5_0` (546MB) dengan akselerasi Apple Silicon Metal / CPU NEON untuk inferensi cepat tanpa lag.
 - **🎛️ 3 Pilihan Combo Pipeline Sebelum Running:**
   1. **Combo 1:** Akurasi Tertinggi *(DeepFilter-Net+, NoiseReduce, VAD + Fast-Whisper Turbo)*.

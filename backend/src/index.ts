@@ -268,6 +268,37 @@ const server = http.createServer(async (req, res) => {
       return sendJson(result, result.success ? 200 : 400);
     }
 
+    // 5.3 Settings - POST set default database
+    if (pathname === "/api/settings/set-default-db" && req.method === "POST") {
+      const body = await readJsonBody();
+      const targetType = (body.type || body.dbType || "sqlite").toLowerCase() as "sqlite" | "mysql" | "postgres";
+      const targetHost = body.host || body.dbHost || config.dbHost;
+      const targetPort = body.port || body.dbPort || config.dbPort;
+      const targetUser = body.user || body.dbUser || config.dbUser;
+      const targetPassword = body.password !== undefined ? body.password : config.dbPassword;
+      const targetName = body.name || body.dbName || config.dbName;
+
+      updateDbSettings({
+        dbType: targetType,
+        dbHost: targetHost,
+        dbPort: Number(targetPort),
+        dbUser: targetUser,
+        dbPassword: targetPassword,
+        dbName: targetName,
+      });
+
+      await closeDbConnections();
+      const initResult = await initDb();
+
+      return sendJson({
+        success: initResult.success,
+        message: initResult.success
+          ? `${targetType.toUpperCase()} berhasil diatur dan disimpan sebagai default penyimpanan sistem.`
+          : `Gagal mengaktifkan ${targetType}: ${initResult.message}`,
+        activeDefaultDb: config.dbType,
+      }, initResult.success ? 200 : 400);
+    }
+
     // 6. Transcripts list
     if (pathname === "/api/transcripts" && req.method === "GET") {
       const list = await getRecentTranscripts(50);

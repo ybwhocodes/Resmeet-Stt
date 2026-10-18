@@ -596,12 +596,14 @@ npm run dev
         </div>
 
         <div id="migration-button" class="card" style="border-left: 4px solid #10b981; margin-top: 20px;">
-          <h3 style="color: #34d399; margin-top: 0;">Logika Tombol Migrasi Database</h3>
+          <h3 style="color: #34d399; margin-top: 0;">Tombol "Set Default" &amp; Logika Migrasi Database</h3>
           <p style="font-size: 13.5px; margin-bottom: 10px;">
-            Untuk menjaga kenyamanan pengguna, tombol migrasi dirancang dengan logika kondisional pintar:
+            Setiap driver database dilengkapi fitur pengaturan default dan migrasi yang intuitif:
           </p>
           <ul style="font-size: 13px; color: #cbd5e1; padding-left: 20px; line-height: 1.7;">
-            <li><strong>Jika memilih SQLite:</strong> Tombol migrasi tidak ditampilkan karena SQLite sudah otomatis terbuat dan termigrasi secara otomatis (zero-setup out-of-the-box).</li>
+            <li><strong>Tombol "Set Default Database" / Jadikan Default:</strong> Tersedia untuk SQLite, MySQL, maupun PostgreSQL. Mengklik tombol ini akan menyimpan driver yang dipilih ke file <code>settings.json</code> dan menjadikannya default permanen saat aplikasi dimulai kembali.</li>
+            <li><strong>Indikator Badge "Default Aktif":</strong> Secara otomatis menampilkan status driver mana yang sedang aktif sebagai default sistem di bagian atas panel dan kartu driver.</li>
+            <li><strong>Jika memilih SQLite:</strong> Tombol migrasi tidak diperlukan karena SQLite sudah otomatis terbuat dan termigrasi secara otomatis (zero-setup out-of-the-box). Anda cukup menekan tombol <em>"Set SQLite Sebagai Default"</em>.</li>
             <li><strong>Jika memilih MySQL atau PostgreSQL:</strong> Tombol <strong>"Migrate Database"</strong> akan otomatis muncul. Saat diklik, backend membuat database (jika belum ada) dan mengeksekusi migrasi skema tabel <code>transcripts</code> beserta seluruh kolom JSON secara instan.</li>
             <li><strong>Tombol Uji Koneksi:</strong> Memverifikasi konektivitas jaringan, menghitung latensi server (ms), dan memastikan autentikasi berhasil sebelum migrasi dijalankan.</li>
           </ul>
@@ -799,6 +801,11 @@ bun build --compile --minify --target=bun-windows-x64 backend/src/index.ts --out
               <td><code>POST</code></td>
               <td><code>/api/settings/db-migrate</code></td>
               <td>Menjalankan migrasi pembuatan database dan skema tabel transcripts secara otomatis.</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td><code>/api/settings/set-default-db</code></td>
+              <td>Mengatur dan menyimpan driver database terpilih sebagai default sistem permanen.</td>
             </tr>
             <tr>
               <td><code>GET</code></td>
