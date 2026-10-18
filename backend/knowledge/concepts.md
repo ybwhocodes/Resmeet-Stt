@@ -129,3 +129,23 @@
 
 - Deskripsi: Pemberlakuan instan skema insentif dan gaji baru di tengah periode berjalan tanpa menunggu siklus pergantian kuartal resmi.
 - Sumber: job_id=ab440a539fd54e1a9adc024eda75f66e
+
+## Pipeline Otomasi Audio-ke-Markdown
+
+- Deskripsi: Alur kerja terintegrasi yang memproses rekaman audio secara langsung menjadi format dokumentasi terstruktur tanpa penyuntingan manual.
+- Sumber: job_id=6cef3b8c051b416b901445e26a0fc663
+
+## Penyimpulan Dokumen Mandiri
+
+- Deskripsi: Kemampuan model AI dalam menganalisis konten percakapan dan mengekstrak keputusan serta butir aksi secara otonom.
+- Sumber: job_id=6cef3b8c051b416b901445e26a0fc663
+
+## Multi-Speaker Speech Processing
+
+- Deskripsi: Pengolahan audio percakapan yang melibatkan lebih dari satu penutur dengan tantangan overlapping audio dan pergantian giliran bicara.
+- Sumber: job_id=a0adbd87848b4cc99604551ebf0b5143
+
+## ASR Hallucination Mitigation
+
+- Deskripsi: Penerapan ambang batas kompresi, VAD, dan penalti repetisi untuk mencegah dekoder model menghasilkan output palsu berulang.
+- Sumber: job_id=a0adbd87848b4cc99604551ebf0b5143

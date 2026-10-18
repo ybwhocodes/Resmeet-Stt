@@ -51,3 +51,11 @@
 - Transkrip audio asli mengalami audio-glitch loop repetition pada kata 'Ya' dan 'Nggak' akibat keterbatasan decoding Whisper pada rekaman berdurasi 1282 detik. _(job_id=ab440a539fd54e1a9adc024eda75f66e)_
 
 - Perlu verifikasi formal antara Divisi HR dan Finance terkait dampak perhitungan payroll berjalan akibat kebijakan direct switch ke Skenario G. _(job_id=ab440a539fd54e1a9adc024eda75f66e)_
+
+- Pengujian menunjukkan latensi inferensi sangat rendah untuk durasi sampel pendek. _(job_id=6cef3b8c051b416b901445e26a0fc663)_
+
+- Perlu verifikasi batas kapasitas pemrosesan kartu grafis saat menangani sesi rapat berskala besar. _(job_id=6cef3b8c051b416b901445e26a0fc663)_
+
+- Durasi rekaman sangat singkat (34 detik), difokuskan semata-mata pada validasi teknis input audio multi-speaker. _(job_id=a0adbd87848b4cc99604551ebf0b5143)_
+
+- Bagian tawa berulang dikonfirmasi murni artefak inferensi STT dan telah diisolasi dari substansi pembahasan operasional. _(job_id=a0adbd87848b4cc99604551ebf0b5143)_

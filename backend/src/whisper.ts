@@ -103,18 +103,45 @@ export async function convertWithFfmpeg(
           "--output", outputPath,
           "--combo", combo,
         ]);
+
+        let pyStdout = "";
+        let pyStderr = "";
+        py.stdout.on("data", (d: Buffer) => { pyStdout += d.toString(); });
+        py.stderr.on("data", (d: Buffer) => { pyStderr += d.toString(); });
+
         py.on("close", (code) => {
+          // Parse and log diagnostics JSON from Python script
+          try {
+            const diagLine = pyStdout.trim().split("\n").find((l) => l.startsWith("{"));
+            if (diagLine) {
+              const diag = JSON.parse(diagLine);
+              if (diag.warnings && diag.warnings.length > 0) {
+                console.warn(`[preprocess_combo] Combo ${combo} warnings:`, diag.warnings);
+              }
+              if (diag.vad_segments !== undefined) {
+                console.log(`[preprocess_combo] Combo ${combo}: ${diag.vad_segments} VAD segments, duration=${diag.duration_s?.toFixed(2)}s`);
+              }
+            }
+          } catch {
+            // Ignore JSON parse errors from diagnostics
+          }
+
           if (code === 0 && fs.existsSync(outputPath)) {
             try { fs.unlinkSync(intermediatePath); } catch {}
             resolve();
           } else {
+            // Log error details for debugging
+            if (pyStderr) {
+              console.error(`[preprocess_combo] Combo ${combo} stderr (last 500 chars):`, pyStderr.slice(-500));
+            }
             // Fallback to intermediate if python filter had an issue
             fs.copyFileSync(intermediatePath, outputPath);
             try { fs.unlinkSync(intermediatePath); } catch {}
             resolve();
           }
         });
-        py.on("error", () => {
+        py.on("error", (err: Error) => {
+          console.error(`[preprocess_combo] Failed to spawn python3: ${err.message}`);
           fs.copyFileSync(intermediatePath, outputPath);
           try { fs.unlinkSync(intermediatePath); } catch {}
           resolve();
@@ -220,93 +247,192 @@ export async function transcribeWithProgress(
     ? `Transkripsi rapat resmi, notulen, agenda terarah, istilah: ${glossaryTerms}.`
     : "Transkripsi rapat resmi bahasa Indonesia, notulen, agenda, keputusan, dan tindak lanjut.";
 
-  // Highly optimized parameters for Apple Silicon M1 (Greedy decoding, Flash Attention, 4 threads)
-  const args = [
-    "-m", modelPath,
-    "-f", audioPath,
-    "-l", "id",
-    "-t", String(Math.max(config.cpuThreads, 4)),
-    "-bs", "1",
-    "-bo", "1",
-    "--no-fallback",
-    "-fa",
-    "--prompt", initialPrompt,
-    "-oj",
-    "-of", outputPrefix,
-    "-pp",
-  ];
+  // Anti-hallucination parameters verified against whisper-cli v1.9.5 --help
+  // Removed: -bs 1 -bo 1 (greedy-only blocks temperature fallback)
+  // Removed: --no-fallback (disables built-in temperature fallback anti-hallucination mechanism)
+  // Added: entropy threshold, logprob threshold, temperature increment, max-context
+  const buildArgs = (extraTemp?: number): string[] => {
+    const a = [
+      "-m", modelPath,
+      "-f", audioPath,
+      "-l", "id",
+      "-t", String(Math.max(config.cpuThreads, 4)),
+      "-fa",                  // Flash Attention — keep for Apple Silicon
+      "-nth", "0.6",          // no-speech threshold (default 0.60)
+      "-et", "2.4",           // entropy threshold — detects repetitive/suspicious output (replaces --compression-ratio-thold which does not exist in v1.9.5)
+      "-lpt", "-1.0",         // logprob threshold for fallback trigger (default -1.00)
+      "-tpi", "0.2",          // temperature increment for fallback (default 0.20)
+      "-mc", "64",            // max context tokens — limits looping context
+      "--prompt", initialPrompt,
+      "-oj",
+      "-of", outputPrefix,
+      "-pp",
+    ];
+    if (extraTemp !== undefined) {
+      a.push("-tp", String(extraTemp)); // override temperature for retry
+    }
+    if (wordTimestamps) {
+      a.push("-wt", "0.01");
+    }
+    return a;
+  };
 
-  if (wordTimestamps) {
-    args.push("-wt", "0.01");
-  }
+  const runWhisper = async (args: string[]): Promise<string> => {
+    return new Promise<string>((resolve, reject) => {
+      const proc = spawn(cliBinary, args);
 
-  await new Promise<void>((resolve, reject) => {
-    const proc = spawn(cliBinary, args);
+      let stderr = "";
+      let lastPercent = 0;
 
-    let stderr = "";
-    let lastPercent = 0;
+      const parseOutput = (data: Buffer) => {
+        const text = data.toString();
+        stderr += text;
 
-    const parseOutput = (data: Buffer) => {
-      const text = data.toString();
-      stderr += text;
+        // Match timestamp lines like: [00:01:23.000 --> 00:01:30.000] text
+        const timeMatches = text.match(/\[(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})\]\s*(.*)/g);
+        if (timeMatches && timeMatches.length > 0) {
+          const lastLine = timeMatches[timeMatches.length - 1];
+          const m = lastLine.match(/\[(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})\]\s*(.*)/);
+          if (m) {
+            const hours = parseInt(m[5], 10);
+            const mins = parseInt(m[6], 10);
+            const secs = parseInt(m[7], 10);
+            const currentAudioSec = hours * 3600 + mins * 60 + secs;
+            const segText = m[9]?.trim() || "";
 
-      // Match timestamp lines like: [00:01:23.000 --> 00:01:30.000] text
-      const timeMatches = text.match(/\[(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})\]\s*(.*)/g);
-      if (timeMatches && timeMatches.length > 0) {
-        const lastLine = timeMatches[timeMatches.length - 1];
-        const m = lastLine.match(/\[(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})\]\s*(.*)/);
-        if (m) {
-          const hours = parseInt(m[5], 10);
-          const mins = parseInt(m[6], 10);
-          const secs = parseInt(m[7], 10);
-          const currentAudioSec = hours * 3600 + mins * 60 + secs;
-          const segText = m[9]?.trim() || "";
+            let pct = totalDuration > 0 ? (currentAudioSec / totalDuration) * 95 : lastPercent + 5;
+            pct = Math.min(Math.max(pct, lastPercent), 95);
+            lastPercent = pct;
 
-          let pct = totalDuration > 0 ? (currentAudioSec / totalDuration) * 95 : lastPercent + 5;
-          pct = Math.min(Math.max(pct, lastPercent), 95);
-          lastPercent = pct;
-
-          onProgress?.(Math.round(pct * 10) / 10, `Memproses audio (${Math.round(pct)}%)`, segText);
+            onProgress?.(Math.round(pct * 10) / 10, `Memproses audio (${Math.round(pct)}%)`, segText);
+          }
         }
-      }
 
-      // Check progress percentage if printed directly (e.g. "whisper_print_progress: progress = 30%")
-      const progMatch = text.match(/progress\s*=\s*(\d+)%/i);
-      if (progMatch) {
-        const pct = Math.min(parseInt(progMatch[1], 10), 95);
-        if (pct > lastPercent) {
-          lastPercent = pct;
-          onProgress?.(pct, `Transcribing ${pct}%`);
+        // Check progress percentage if printed directly (e.g. "whisper_print_progress: progress = 30%")
+        const progMatch = text.match(/progress\s*=\s*(\d+)%/i);
+        if (progMatch) {
+          const pct = Math.min(parseInt(progMatch[1], 10), 95);
+          if (pct > lastPercent) {
+            lastPercent = pct;
+            onProgress?.(pct, `Transcribing ${pct}%`);
+          }
         }
-      }
-    };
+      };
 
-    proc.stdout.on("data", parseOutput);
-    proc.stderr.on("data", parseOutput);
+      proc.stdout.on("data", parseOutput);
+      proc.stderr.on("data", parseOutput);
 
-    proc.on("error", (err) => {
-      reject(new Error(`Gagal menjalankan whisper-cli: ${err.message}`));
+      proc.on("error", (err) => {
+        reject(new Error(`Gagal menjalankan whisper-cli: ${err.message}`));
+      });
+
+      proc.on("close", (code) => {
+        if (code === 0) {
+          resolve(stderr);
+        } else {
+          reject(new Error(`whisper-cli exit code ${code}: ${stderr.slice(-1000)}`));
+        }
+      });
     });
+  };
 
-    proc.on("close", (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`whisper-cli exit code ${code}: ${stderr.slice(-1000)}`));
-      }
-    });
-  });
+  // Run first pass
+  await runWhisper(buildArgs());
 
   if (!fs.existsSync(outputJsonPath)) {
     throw new Error("whisper-cli tidak menghasilkan file JSON transkripsi.");
   }
 
-  const jsonContent = JSON.parse(fs.readFileSync(outputJsonPath, "utf-8"));
-  try {
-    fs.unlinkSync(outputJsonPath);
-  } catch {
-    // Ignore cleanup error
+  // Post-ASR validation via validate_transcript.py
+  const validateScriptPath = path.join(__dirname, "scripts", "validate_transcript.py");
+  let validatedJsonPath = outputJsonPath;
+  let validationStatus = "skipped";
+
+  if (fs.existsSync(validateScriptPath)) {
+    const validatedOutputPath = outputPrefix + "_validated.json";
+    try {
+      const validationResult = await new Promise<{ status: string; returncode: number }>((resolve) => {
+        const vp = spawn("python3", [
+          validateScriptPath,
+          "--input", outputJsonPath,
+          "--output", validatedOutputPath,
+        ]);
+        let vStdout = "";
+        let vStderr = "";
+        vp.stdout.on("data", (d: Buffer) => { vStdout += d.toString(); });
+        vp.stderr.on("data", (d: Buffer) => { vStderr += d.toString(); });
+        vp.on("close", (code) => {
+          try {
+            const result = JSON.parse(vStdout.trim().split("\n").find((l) => l.startsWith("{")) || "{}");
+            resolve({ status: result.overall_status || "unknown", returncode: code || 0 });
+          } catch {
+            if (vStderr) console.warn("[validate_transcript] stderr:", vStderr.slice(-300));
+            resolve({ status: "error", returncode: code || 99 });
+          }
+        });
+        vp.on("error", (err: Error) => {
+          console.warn(`[validate_transcript] Failed to spawn: ${err.message}`);
+          resolve({ status: "error", returncode: 99 });
+        });
+      });
+
+      validationStatus = validationResult.status;
+
+      if (validationResult.status === "high_confidence_anomaly") {
+        // Retry with higher temperature to break out of hallucination loops
+        console.warn(`[whisper] high_confidence_anomaly detected — retrying with temperature=0.4`);
+        onProgress?.(50, "Mendeteksi anomali — mencoba ulang dengan parameter berbeda...");
+
+        // Remove stale output before retry
+        try { fs.unlinkSync(outputJsonPath); } catch {}
+        try { if (fs.existsSync(validatedOutputPath)) fs.unlinkSync(validatedOutputPath); } catch {}
+
+        await runWhisper(buildArgs(0.4));
+
+        if (!fs.existsSync(outputJsonPath)) {
+          throw new Error("whisper-cli retry tidak menghasilkan file JSON transkripsi.");
+        }
+
+        // Re-validate after retry
+        const retryValidation = await new Promise<{ status: string }>((resolve) => {
+          const vp2 = spawn("python3", [
+            validateScriptPath,
+            "--input", outputJsonPath,
+            "--output", validatedOutputPath,
+          ]);
+          let vStdout2 = "";
+          vp2.stdout.on("data", (d: Buffer) => { vStdout2 += d.toString(); });
+          vp2.on("close", () => {
+            try {
+              const r = JSON.parse(vStdout2.trim().split("\n").find((l) => l.startsWith("{")) || "{}");
+              resolve({ status: r.overall_status || "unknown" });
+            } catch {
+              resolve({ status: "unknown" });
+            }
+          });
+          vp2.on("error", () => resolve({ status: "error" }));
+        });
+        validationStatus = retryValidation.status;
+        console.log(`[whisper] Retry validation status: ${validationStatus}`);
+
+      } else if (validationResult.status === "suspicious") {
+        console.warn(`[whisper] Suspicious transcript detected (status=suspicious) — proceeding without retry`);
+      }
+
+      // Use validated output if it exists
+      if (fs.existsSync(validatedOutputPath)) {
+        validatedJsonPath = validatedOutputPath;
+      }
+
+    } catch (validErr) {
+      console.warn(`[validate_transcript] Validation error (non-fatal): ${validErr}`);
+    }
   }
+
+  const jsonContent = JSON.parse(fs.readFileSync(validatedJsonPath, "utf-8"));
+  // Cleanup
+  try { if (validatedJsonPath !== outputJsonPath && fs.existsSync(outputJsonPath)) fs.unlinkSync(outputJsonPath); } catch {}
+  try { fs.unlinkSync(validatedJsonPath); } catch {}
 
   const segments: Segment[] = [];
   const wordTsList: WordTimestamp[] = [];
@@ -343,6 +469,9 @@ export async function transcribeWithProgress(
   const rawText = textParts.join(" ");
   const finalText = postprocess(rawText);
 
+  if (validationStatus !== "skipped") {
+    console.log(`[whisper] Transcription complete. Validation status: ${validationStatus}`);
+  }
   onProgress?.(100, "Transkripsi Whisper selesai");
 
   return {

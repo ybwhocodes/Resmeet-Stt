@@ -482,3 +482,24 @@
 - Koreksi: [Penolakan penundaan skema]
 - Alasan: Loop repetisi transkripsi audio Whisper saat peserta menekankan penolakan opsi skema tertentu.
 - Sumber: job_id=ab440a539fd54e1a9adc024eda75f66e
+
+## Cic-cic 123 -> Cek-cek 1 2 3
+
+- Salah dengar: Cic-cic 123
+- Koreksi: Cek-cek 1 2 3
+- Alasan: Frasa fonetik verifikasi pengujian input mikrofon (mic test) sebelum memulai pengujian audio.
+- Sumber: job_id=6cef3b8c051b416b901445e26a0fc663
+
+## simpul in -> menyimpulkan
+
+- Salah dengar: simpul in
+- Koreksi: menyimpulkan
+- Alasan: Bentuk kata kerja baku bahasa Indonesia untuk proses pembuatan intisari/kesimpulan dokumen.
+- Sumber: job_id=6cef3b8c051b416b901445e26a0fc663
+
+## Hehehehehe... (repetisi berkepanjangan) -> [Tawa audio non-linguistik]
+
+- Salah dengar: Hehehehehe... (repetisi berkepanjangan)
+- Koreksi: [Tawa audio non-linguistik]
+- Alasan: Halusinasi autoregressive decoding pada model Whisper akibat ketiadaan VAD saat memproses tawa pembicara di akhir audio.
+- Sumber: job_id=a0adbd87848b4cc99604551ebf0b5143

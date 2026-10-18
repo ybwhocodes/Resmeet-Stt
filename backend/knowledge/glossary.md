@@ -215,3 +215,33 @@
 - Alias: Skema G
 - Arti: Formulasi skema gaji dan target kinerja revisi yang disesuaikan dengan kondisi pasar cabang lokal.
 - Sumber: job_id=ab440a539fd54e1a9adc024eda75f66e
+
+## Markdown
+
+- Alias: MD, .md
+- Arti: Format penulisan teks terstruktur ringan yang mudah dibaca manusia dan dapat dikonversi ke HTML secara cepat.
+- Sumber: job_id=6cef3b8c051b416b901445e26a0fc663
+
+## Speech-to-Text
+
+- Alias: STT, ASR
+- Arti: Teknologi pengenalan suara otomatis yang mengubah sinyal ucapan audio menjadi teks digital.
+- Sumber: job_id=6cef3b8c051b416b901445e26a0fc663
+
+## Hallucination Loop
+
+- Alias: Repetition Hallucination, Infinite Decoding Loop
+- Arti: Kondisi di mana model language/ASR menghasilkan output token berulang tanpa henti akibat sinyal audio ambigu, tawa, atau hening yang gagal dihentikan oleh token EOS (End of Sequence).
+- Sumber: job_id=a0adbd87848b4cc99604551ebf0b5143
+
+## Speaker Diarization
+
+- Alias: Diarisasi Penutur
+- Arti: Proses segmentasi audio yang mempartisi rekaman menjadi segmen-segmen homogen berdasarkan identitas pembicara ('siapa berbicara kapan').
+- Sumber: job_id=a0adbd87848b4cc99604551ebf0b5143
+
+## Voice Activity Detection
+
+- Alias: VAD
+- Arti: Teknik pemrosesan sinyal untuk mendeteksi keberadaan suara manusia vs hening/kebisingan latar belakang sebelum diproses oleh model STT.
+- Sumber: job_id=a0adbd87848b4cc99604551ebf0b5143

@@ -442,13 +442,7 @@ export interface ParaphraseResult {
   text: string;
   markdown: string;
   summary: string;
-  directed_topics: Array<{
-    topic: string;
-    goal: string;
-    discussion: string;
-    decisions: string;
-    action_items: string[];
-  }>;
+  directed_topics: DirectedTopic[];
   entities?: string[];
   terms?: any[];
   action_items?: any[];
