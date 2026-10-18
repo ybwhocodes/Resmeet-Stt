@@ -1,211 +1,117 @@
-# Backend Setup dan Run
+# Resmeet-STT Backend (Bun.js + TypeScript)
 
-Backend: Flask + Flask-SocketIO + WhisperX + MySQL + optional AI correction/RAG.
+Backend transkripsi suara mandiri (STT) berbasis **Bun.js** + **TypeScript**, **whisper.cpp**, **MySQL**, serta **Goal-Directed Topics Analysis** terinspirasi dari arsitektur [Jev Ultrafast](https://github.com/browser-use/browser-use).
 
-## Prasyarat
+---
 
-- Python 3.10+ direkomendasikan.
-- MySQL aktif.
-- FFmpeg aktif.
-- Internet untuk download model pertama kali.
+## ⚡ Fitur Utama
 
-## Aktifkan WhisperX
+- **Runtime Cepat & Ringan**: Dibangun dengan Bun.js + TypeScript murni, menggantikan dependensi Python yang berat.
+- **Engine STT Whisper.cpp**: Menggunakan port C/C++ performa tinggi dengan akselerasi Metal (Apple Silicon) dan CPU multi-threading.
+- **Topik Terarah (Jev-Guided Topics)**: Menghasilkan notulen rapat (Minutes of Meeting) terarah dengan pembagian sasaran (goal), inti diskusi, keputusan konkret, dan action items per topik.
+- **Pengaturan AI Dinamis**: Konfigurasi URL Base, API-Key, dan Nama Model dapat diatur langsung melalui antarmuka (Settings Modal) dan otomatis tersimpan.
+- **Continuous Knowledge Learning (RAG)**: Secara otomatis mengekstrak istilah baru (`glossary.md`), konsep (`concepts.md`), dan koreksi salah dengar (`corrections.md`).
+- **Realtime WebSocket**: Mengirim progres transkripsi secara langsung ke antarmuka frontend via Socket.IO.
 
-Buat virtualenv:
+---
 
-```bash
-python3 -m venv whisperx-env
-source whisperx-env/bin/activate
-pip install -r Requirements.txt
+## 📋 Prasyarat
 
+1. **Bun.js** (v1.1+):
+   ```bash
+   curl -fsSL https://bun.sh/install | bash
+   ```
+2. **whisper.cpp**:
+   ```bash
+   brew install whisper-cpp
+   ```
+3. **FFmpeg**:
+   ```bash
+   brew install ffmpeg
+   ```
+4. **MySQL** (Docker atau lokal, default port 3307):
+   ```bash
+   docker start mysql_db
+   ```
 
+---
 
-Cek FFmpeg:
+## 🚀 Cara Menjalankan
 
-```bash
-ffmpeg -version
-ffprobe -version
-```
-
-## Setup
-
-Masuk folder backend:
-
+### 1. Masuk ke Folder Backend
 ```bash
 cd backend
 ```
 
-Buat virtualenv:
-
+### 2. Install Dependensi
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+bun install
 ```
 
-Install dependency:
+### 3. Model GGML Whisper
+Letakkan model GGML whisper.cpp (`ggml-large-v3-turbo.bin` atau `ggml-base.bin`) di folder `backend/models/`.
 
+Download model rekomendasi:
 ```bash
-pip install -r Requirements.txt
+curl -L -o backend/models/ggml-large-v3-turbo.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin
 ```
 
-Cek WhisperX:
-
+### 4. Menjalankan Server
+Mode pengembangan (watch mode):
 ```bash
-python -c "import whisperx; print('whisperx ok')"
+bun run dev
 ```
 
-## Konfigurasi `.env`
+Mode produksi:
+```bash
+bun start
+```
 
-Contoh minimal:
+Server akan aktif pada: `http://localhost:8081`
+
+---
+
+## ⚙️ Konfigurasi Environment & Pengaturan AI
+
+Konfigurasi disimpan di `backend/.env` dan dapat diperbarui secara dinamis melalui UI settings (`settings.json`):
 
 ```env
-DB_HOST=localhost
+# ─── MySQL ───
+DB_HOST=127.0.0.1
 DB_PORT=3307
 DB_NAME=stt_db
 DB_USER=root
 DB_PASSWORD=password
 
+# ─── Whisper STT (whisper.cpp) ───
 WHISPER_MODEL=large-v3-turbo
-MODEL_DIR=/Users/billy/Documents/Server/Resmeet-Stt/backend/models
+MODEL_DIR=
+CPU_THREADS=4
 
-DEVICE=cpu
-COMPUTE_TYPE=int8
-CPU_THREADS=2
-BATCH_SIZE=1
-ENABLE_AUDIO_DENOISE=false
-
-AI_BASE_URL=
-AI_API_KEY=
-AI_MODEL_ID=
+# ─── AI Model / Jev Directed Topics ───
+AI_BASE_URL=http://localhost:20128/v1
+AI_API_KEY=sk-ff353870199354cb-rvq507-8ef93405
+AI_MODEL_ID=9R-Gemini
 AI_TIMEOUT_S=120
 AI_ENABLE_CORRECTION=true
 AI_ENABLE_KNOWLEDGE_EXTRACTION=true
 AI_ENABLE_RAG=true
 ```
 
-Catatan:
+---
 
-- `AI_API_KEY` boleh kosong. Backend tetap jalan tanpa koreksi AI.
-- Model akan otomatis didownload jika belum ada di `MODEL_DIR`.
-- `large-v3-turbo` tetap dipakai sesuai konfigurasi.
+## 📡 Daftar Endpoint API
 
-## Setup Database
-
-Buat database dan table:
-
-```bash
-mysql -u root -p < schema.sql
-```
-
-Atau cukup jalankan backend. `init_db()` akan membuat table jika belum ada.
-
-## Run
-
-Aktifkan virtualenv jika belum:
-
-```bash
-source .venv/bin/activate
-```
-
-Jalankan server:
-
-```bash
-python app.py
-```
-
-Server jalan di:
-
-```text
-http://localhost:8081
-```
-
-## Endpoint Penting
-
-Health:
-
-```http
-GET http://localhost:8081/api/health
-```
-
-Preflight:
-
-```http
-GET http://localhost:8081/api/preflight
-```
-
-Preflight dengan cek AI config:
-
-```http
-GET http://localhost:8081/api/preflight?ai=true
-```
-
-Upload transkripsi:
-
-```bash
-curl -X POST http://localhost:8081/api/upload-and-transcribe \
-  -F "audioFile=@meeting.mp3" \
-  -F "ai_correction=true" \
-  -F "output_format=md"
-```
-
-Status job:
-
-```http
-GET http://localhost:8081/api/jobs/<job_id>
-```
-
-Download Markdown:
-
-```http
-GET http://localhost:8081/api/jobs/<job_id>/download-md
-```
-
-Riwayat:
-
-```http
-GET http://localhost:8081/api/transcripts
-```
-
-## Folder Runtime
-
-```text
-backend/uploads/          file upload sementara
-backend/models/           model Whisper lokal
-backend/knowledge/        knowledge RAG markdown
-backend/transcripts_md/   hasil transkrip markdown
-```
-
-## Troubleshooting
-
-`ModuleNotFoundError: No module named 'whisperx'`
-
-```bash
-source .venv/bin/activate
-pip install -r Requirements.txt
-```
-
-`FFmpeg gagal`
-
-```bash
-ffmpeg -version
-ffprobe -version
-```
-
-Model tidak ketemu atau download ulang:
-
-- Cek `MODEL_DIR` di `.env`.
-- Pastikan path mengarah ke folder project saat ini.
-
-CPU terlalu penuh:
-
-```env
-CPU_THREADS=2
-BATCH_SIZE=1
-```
-
-AI correction tidak jalan:
-
-- Isi `AI_BASE_URL`.
-- Isi `AI_API_KEY`.
-- Isi `AI_MODEL_ID`.
-- Cek `GET /api/preflight?ai=true`.
+| Method | Endpoint | Deskripsi |
+|---|---|---|
+| `GET` | `/api/health` | Status server, engine STT, dan model AI |
+| `GET` | `/api/preflight` | Pengecekan kesiapan sistem (FFmpeg, DB, Whisper, AI) |
+| `POST` | `/api/upload-and-transcribe` | Upload audio dan mulai transkripsi |
+| `GET` | `/api/jobs/:id` | Status pengerjaan job |
+| `GET` | `/api/jobs/:id/download-md` | Download hasil notulen Markdown per job |
+| `GET` | `/api/transcripts` | Daftar riwayat transkrip |
+| `GET` | `/api/transcripts/:id/download-md` | Download hasil notulen Markdown per record DB |
+| `POST` | `/api/paraphrase` | Parafrase teks notulen menggunakan AI |
+| `GET` | `/api/settings` | Mendapatkan konfigurasi AI aktif |
+| `POST` | `/api/settings` | Mengubah dan menyimpan konfigurasi AI (URL, API-Key, Model) |
+| `POST` | `/api/settings/test` | Menguji konektivitas endpoint dan model AI |

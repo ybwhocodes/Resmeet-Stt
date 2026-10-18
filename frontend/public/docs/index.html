@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dokumentasi Resmi Resmeet-STT</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0c0e14;
+      --card-bg: #151821;
+      --card-border: #1e2330;
+      --accent: #6366f1;
+      --accent-light: #818cf8;
+      --accent-glow: rgba(99, 102, 241, 0.25);
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --sidebar-width: 280px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      line-height: 1.6;
+      scroll-behavior: smooth;
+    }
+    a { color: var(--accent-light); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Layout */
+    .layout {
+      display: flex;
+      min-height: 100vh;
+    }
+    .sidebar {
+      width: var(--sidebar-width);
+      background: #090b10;
+      border-right: 1px solid var(--card-border);
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      padding: 28px 20px;
+      overflow-y: auto;
+      z-index: 50;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 32px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .brand-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #4f46e5, #6366f1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+    .brand-title { font-size: 16px; font-weight: 700; color: #fff; }
+    .brand-sub { font-size: 10px; color: var(--text-muted); font-mono; }
+
+    .nav-group { margin-bottom: 24px; }
+    .nav-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #64748b;
+      margin-bottom: 8px;
+      padding-left: 8px;
+    }
+    .nav-item {
+      display: block;
+      padding: 8px 12px;
+      font-size: 13px;
+      color: var(--text-muted);
+      border-radius: 8px;
+      margin-bottom: 2px;
+      transition: all 0.2s;
+    }
+    .nav-item:hover, .nav-item.active {
+      background: var(--card-bg);
+      color: #fff;
+      text-decoration: none;
+    }
+
+    .main {
+      margin-left: var(--sidebar-width);
+      flex: 1;
+      padding: 48px 40px;
+      max-width: 1000px;
+    }
+
+    /* Typography & Sections */
+    h1 { font-size: 32px; font-weight: 800; color: #fff; margin-bottom: 12px; letter-spacing: -0.02em; }
+    h2 { font-size: 22px; font-weight: 700; color: #fff; margin-top: 48px; margin-bottom: 16px; border-bottom: 1px solid var(--card-border); padding-bottom: 10px; }
+    h3 { font-size: 16px; font-weight: 600; color: #e2e8f0; margin-top: 24px; margin-bottom: 10px; }
+    p { margin-bottom: 16px; color: #cbd5e1; font-size: 14.5px; }
+
+    /* Badges */
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 9999px;
+      background: rgba(99, 102, 241, 0.15);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      color: var(--accent-light);
+    }
+    .pill-green { background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.3); color: #34d399; }
+    .pill-purple { background: rgba(168, 85, 247, 0.15); border-color: rgba(168, 85, 247, 0.3); color: #c084fc; }
+
+    /* Cards */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 20px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 20px; }
+
+    /* Code Blocks */
+    pre {
+      background: #080a0f;
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12.5px;
+      color: #e2e8f0;
+      overflow-x: auto;
+      margin-bottom: 16px;
+      position: relative;
+    }
+    code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12.5px;
+      background: #11141c;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #a5b4fc;
+    }
+    pre code { background: transparent; padding: 0; color: inherit; }
+
+    /* Table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+      font-size: 13px;
+    }
+    th {
+      background: #090b10;
+      text-align: left;
+      padding: 12px 14px;
+      border: 1px solid var(--card-border);
+      color: #94a3b8;
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+    td {
+      padding: 12px 14px;
+      border: 1px solid var(--card-border);
+      color: #cbd5e1;
+    }
+    tr:nth-child(even) { background: rgba(255, 255, 255, 0.015); }
+
+    .hero-banner {
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(15, 23, 42, 0.6));
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      border-radius: 20px;
+      padding: 36px;
+      margin-bottom: 36px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon">🎙️</div>
+        <div>
+          <div class="brand-title">Resmeet-STT</div>
+          <div class="brand-sub">Bun.js • Whisper.cpp • AI</div>
+        </div>
+      </div>
+
+      <nav>
+        <div class="nav-group">
+          <div class="nav-label">Ikhtisar</div>
+          <a href="#pengenalan" class="nav-item">Pengenalan Sistem</a>
+          <a href="#fitur" class="nav-item">Fitur Utama</a>
+          <a href="#arsitektur" class="nav-item">Arsitektur Komputasi</a>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-label">Pipeline &amp; Output</div>
+          <a href="#combos" class="nav-item">3 Combo Pipeline STT</a>
+          <a href="#outputs" class="nav-item">3 Format Output Rapat</a>
+          <a href="#paraphrase" class="nav-item">Gaya Parafrase AI</a>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-label">Panduan Setup</div>
+          <a href="#setup-script" class="nav-item">1-Click Runner (start.sh)</a>
+          <a href="#setup-docker" class="nav-item">Setup Docker Compose</a>
+          <a href="#setup-manual" class="nav-item">Setup Manual Native</a>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-label">Referensi &amp; API</div>
+          <a href="#konfigurasi" class="nav-item">Konfigurasi .env &amp; AI</a>
+          <a href="#api" class="nav-item">Endpoint REST API</a>
+          <a href="#troubleshooting" class="nav-item">Troubleshooting &amp; FAQ</a>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main">
+      <div class="hero-banner">
+        <div class="pill">Dokumentasi Teknis v2.0</div>
+        <h1 style="margin-top: 14px;">Resmeet-STT: Enterprise Meeting Notetaker</h1>
+        <p style="font-size: 16px; margin-bottom: 20px;">
+          Solusi transkripsi audio rapat lokal dan generator Minutes of Meeting (MoM) otomatis berbasis 
+          <strong>Bun.js runtime</strong>, model <strong>whisper.cpp</strong> dengan akselerasi Apple Silicon M1, 
+          ekstraksi topik terarah <strong>Jev-Guided</strong>, dan visualisasi <strong>Markmap Mindmap</strong>.
+        </p>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <a href="http://localhost:5173" target="_blank" class="pill pill-green" style="font-size: 12px; padding: 6px 14px;">
+            Buka Web App (Port 5173) ↗
+          </a>
+          <a href="#setup-script" class="pill" style="font-size: 12px; padding: 6px 14px;">
+            Lihat Cara Setup Cepat ↓
+          </a>
+        </div>
+      </div>
+
+      <!-- 1. Pengenalan -->
+      <section id="pengenalan">
+        <h2>1. Pengenalan Sistem</h2>
+        <p>
+          Resmeet-STT dirancang khusus untuk memecahkan masalah transkripsi rapat bahasa Indonesia yang lambat, boros RAM, dan menghasilkan teks mentah yang berantakan. 
+          Sistem ini menggantikan stack Python tradisional yang berat dengan arsitektur modern berkinerja tinggi:
+        </p>
+        <div class="grid-3">
+          <div class="card">
+            <h3 style="color: #818cf8; margin-top: 0;">⚡ Bun.js + TypeScript</h3>
+            <p style="font-size: 13px; margin-bottom: 0;">
+              Backend concurrency tinggi dengan waktu startup instan, konsumsi memori rendah (&lt;100MB), dan streaming progress WebSocket Socket.IO realtime.
+            </p>
+          </div>
+          <div class="card">
+            <h3 style="color: #34d399; margin-top: 0;">🧠 Whisper.cpp Q5 Quantized</h3>
+            <p style="font-size: 13px; margin-bottom: 0;">
+              Engine C++ teroptimasi dengan bobot model kuantisasi <code>large-v3-turbo-q5_0</code> (546 MB) dan Flash Attention untuk inferensi super cepat di Apple Silicon/CPU.
+            </p>
+          </div>
+          <div class="card">
+            <h3 style="color: #c084fc; margin-top: 0;">🎯 Jev-Guided Topics + RAG</h3>
+            <p style="font-size: 13px; margin-bottom: 0;">
+              Menentukan agenda, goal rapat, substansi argumen, keputusan mutlak, dan tindak lanjut (action items) yang terarah secara otomatis.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. Fitur Utama -->
+      <section id="fitur">
+        <h2>2. Fitur Unggulan</h2>
+        <ul style="padding-left: 20px; margin-bottom: 24px; color: #cbd5e1; font-size: 14.5px;">
+          <li style="margin-bottom: 8px;"><strong>Pemilihan 3 Combo Pipeline:</strong> Opsi konfigurasi audio &amp; model sebelum menjalankan proses sesuai kebutuhan akurasi atau kecepatan.</li>
+          <li style="margin-bottom: 8px;"><strong>3 Format Output Rapat:</strong> MoM Markdown standar (.md), Rangkuman visual interaktif (HTML/UI), dan Mindmap diskusi pohon topik (Markmap).</li>
+          <li style="margin-bottom: 8px;"><strong>Pilihan Tipe Parafrase AI:</strong> Fleksibilitas memilih gaya "Poin-poin Penting" (ringkas &amp; padat), "Detail &amp; Deskriptif" (komprehensif), atau "Ringkasan Eksekutif".</li>
+          <li style="margin-bottom: 8px;"><strong>Halaman Riwayat Khusus &amp; Detail:</strong> Tabel riwayat multi-kolom yang dilengkapi pencarian, viewer detail lengkap, dan tombol hapus transkrip.</li>
+          <li style="margin-bottom: 8px;"><strong>Pengaturan AI Terpusat:</strong> Konfigurasi endpoint URL, API-Key, model ID, uji koneksi langsung, dan preflight checklist sistem.</li>
+        </ul>
+      </section>
+
+      <!-- 3. 3 Combo Pipeline -->
+      <section id="combos">
+        <h2>3. Penjelasan 3 Combo Pipeline STT</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Pilihan Combo</th>
+              <th>Pipeline Komponen</th>
+              <th>Karakteristik &amp; Kecepatan</th>
+              <th>Rekomendasi Penggunaan</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Combo 1 (Default)</strong></td>
+              <td>DeepFilter-Net+, NoiseReduce, VAD + Fast-Whisper Turbo</td>
+              <td><span class="pill">Akurasi Terbaik</span><br>Model Q5 546MB, Flash Attention. Waktu proses ~12-15s per 10 menit audio.</td>
+              <td>Rapat penting, evaluasi arsitektur, notulen resmi direksi, dan audio dengan banyak istilah teknis.</td>
+            </tr>
+            <tr>
+              <td><strong>Combo 2</strong></td>
+              <td>DeepFilter-Net+, NoiseReduce, ggml-base.bin + VAD</td>
+              <td><span class="pill pill-green">Super Cepat (&lt;3s)</span><br>Model Base 141MB, sangat hemat RAM (&lt;300MB).</td>
+              <td>Audio rekaman jelas, voice memo singkat, atau perangkat server dengan spek terbatas.</td>
+            </tr>
+            <tr>
+              <td><strong>Combo 3</strong></td>
+              <td>DeepFilter-Net, NoiseReduce, Silero-VAD (ONNX) + Comfort Pad</td>
+              <td><span class="pill pill-purple">Neural VAD ONNX</span><br>Segmentasi suara neural via ONNX + padding 250ms &amp; jeda hening alami.</td>
+              <td>Rekaman diskusi panjang dengan banyak jeda hening / hening berulang agar efisien.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- 4. 3 Format Output Rapat -->
+      <section id="outputs">
+        <h2>4. 3 Format Output Rapat</h2>
+        <div class="grid-3">
+          <div class="card">
+            <h3>1. Format .MD (MoM)</h3>
+            <p style="font-size: 13px;">
+              Dokumen Minutes of Meeting lengkap format Markdown resmi yang mencakup Informasi Rapat, Agenda, Pembahasan, Tabel Keputusan, Tabel Tindak Lanjut, dan Jadwal Rapat Berikutnya.
+            </p>
+            <div style="font-size: 12px; color: #94a3b8;">
+              ✓ Ekspor <code>.md</code><br>
+              ✓ Ekspor <code>.txt</code><br>
+              ✓ Salin teks 1-klik
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>2. Rangkuman HTML / UI</h3>
+            <p style="font-size: 13px;">
+              Dashboard visual modern berupa kartu agenda, badge status sasaran (Goal), highlight keputusan berwarna hijau, dan checklist interaktif aksi tindak lanjut.
+            </p>
+            <div style="font-size: 12px; color: #94a3b8;">
+              ✓ Desain responsif<br>
+              ✓ Unduh file <code>.html</code> mandiri<br>
+              ✓ Siap cetak / simpan PDF
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>3. Mindmap (Markmap)</h3>
+            <p style="font-size: 13px;">
+              Visualisasi pohon pemikiran interaktif berbasis <strong>markmap.js.org</strong>. Node dapat diklik untuk melipat (collapse) atau memperluas (expand) ranting diskusi.
+            </p>
+            <div style="font-size: 12px; color: #94a3b8;">
+              ✓ Zoom in/out &amp; Pan view<br>
+              ✓ Unduh Standalone HTML<br>
+              ✓ Unduh Vector <code>.svg</code>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. Setup & Instalasi -->
+      <section id="setup-script">
+        <h2>5. Panduan Menjalankan Sistem</h2>
+
+        <h3>Metode 1: 1-Click Runner Script (Paling Praktis &amp; Cepat)</h3>
+        <p>Gunakan script <code>start.sh</code> di direktori root project untuk menjalankan Database MySQL, Backend Bun.js, dan Frontend Vite secara otomatis:</p>
+        <pre><code># Berikan izin eksekusi jika diperlukan
+chmod +x start.sh
+
+# Jalankan seluruh stack
+./start.sh</code></pre>
+        <p>Script ini secara cerdas akan:</p>
+        <ol style="padding-left: 20px; font-size: 13.5px; color: #cbd5e1; margin-bottom: 20px;">
+          <li>Memeriksa instalasi Bun, Node.js, dan FFmpeg.</li>
+          <li>Memeriksa atau otomatis menghidupkan container MySQL pada port 3307.</li>
+          <li>Menjalankan backend Bun pada <code>http://localhost:8081</code>.</li>
+          <li>Menjalankan frontend Vite pada <code>http://localhost:5173</code>.</li>
+          <li>Menghentikan seluruh proses secara aman ketika Anda menekan <code>CTRL + C</code>.</li>
+        </ol>
+
+        <h3 id="setup-docker">Metode 2: Menggunakan Docker Compose</h3>
+        <p>Jika Anda ingin menjalankan seluruh sistem di dalam container Docker yang terisolasi:</p>
+        <pre><code># Build dan jalankan seluruh container (MySQL, Backend Bun, Frontend Nginx)
+docker compose up -d
+
+# Memeriksa log layanan
+docker compose logs -f
+
+# Menghentikan layanan
+docker compose down</code></pre>
+
+        <h3 id="setup-manual">Metode 3: Menjalankan Secara Manual (Langkah demi Langkah)</h3>
+        <pre><code># 1. Pastikan container MySQL berjalan pada port 3307
+docker start mysql_db || docker run -d --name mysql_db -p 3307:3306 -e MYSQL_ROOT_PASSWORD=password -e MYSQL_DATABASE=stt_db mysql:8.0
+
+# 2. Jalankan Backend (Terminal 1)
+cd backend
+bun install
+bun run src/index.ts
+
+# 3. Jalankan Frontend (Terminal 2)
+cd frontend
+npm install
+npm run dev</code></pre>
+      </section>
+
+      <!-- 6. Konfigurasi -->
+      <section id="konfigurasi">
+        <h2>6. Konfigurasi AI &amp; Gateway</h2>
+        <p>
+          Resmeet-STT mendukung semua provider AI yang kompatibel dengan protokol OpenAI Chat Completions (OpenAI, OpenRouter, DeepSeek, vLLM, Ollama, atau 9Router gateway lokal).
+        </p>
+        <div class="card">
+          <p style="font-size: 13px; margin-bottom: 12px;"><strong>Parameter Pengaturan di Menu Pengaturan UI:</strong></p>
+          <ul style="padding-left: 20px; font-size: 13px; color: #cbd5e1;">
+            <li><strong>AI Base URL:</strong> <code>http://localhost:20128/v1</code> (atau endpoint OpenAI/OpenRouter pilihan Anda).</li>
+            <li><strong>API-Key:</strong> Token API penyedia LLM Anda.</li>
+            <li><strong>Model ID:</strong> Contoh: <code>9R-Gemini</code>, <code>deepseek-chat</code>, <code>gpt-4o</code>, dll.</li>
+            <li><strong>Tipe Parafrase Default:</strong> Pilihan antara <em>Poin-poin Penting</em>, <em>Detail &amp; Deskriptif</em>, atau <em>Eksekutif</em>.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- 7. Endpoint REST API -->
+      <section id="api">
+        <h2>7. Referensi REST API</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint</th>
+              <th>Fungsi</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>POST</code></td>
+              <td><code>/api/upload-and-transcribe</code></td>
+              <td>Mengunggah file audio dan memulai job transkripsi pipeline combo.</td>
+            </tr>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/api/jobs/:id</code></td>
+              <td>Memeriksa status proses transkripsi realtime.</td>
+            </tr>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/api/transcripts</code></td>
+              <td>Mengambil daftar riwayat seluruh transkripsi dari database MySQL.</td>
+            </tr>
+            <tr>
+              <td><code>DELETE</code></td>
+              <td><code>/api/transcripts/:id</code></td>
+              <td>Menghapus notulen dan file markdown terkait dari sistem.</td>
+            </tr>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/api/transcripts/:id/download-md</code></td>
+              <td>Mengunduh file dokumen Markdown resmi MoM.</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td><code>/api/paraphrase</code></td>
+              <td>Memparafrase dokumen teks rapat sesuai gaya yang dipilih.</td>
+            </tr>
+            <tr>
+              <td><code>GET / POST</code></td>
+              <td><code>/api/settings</code></td>
+              <td>Melihat atau memperbarui konfigurasi AI dan gaya parafrase.</td>
+            </tr>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/api/preflight</code></td>
+              <td>Memeriksa kesiapan direktori, modul FFmpeg, Whisper, dan database.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- 8. Troubleshooting -->
+      <section id="troubleshooting">
+        <h2>8. Troubleshooting &amp; FAQ</h2>
+        <div class="card" style="margin-bottom: 14px;">
+          <h3 style="color: #f59e0b; margin-top: 0;">Q: whisper-cli error exit code 10 saat menggunakan Combo 3?</h3>
+          <p style="font-size: 13px; margin-bottom: 0;">
+            Masalah ini terjadi jika flag <code>--vad</code> diberikan pada whisper-cli tanpa file model VAD terpisah. 
+            Pada versi terbaru, segmentasi VAD Silero-VAD dilakukan langsung di fase pra-proses Python dengan ONNX runtime, sehingga whisper-cli memproses audio bersih tanpa error.
+          </p>
+        </div>
+
+        <div class="card">
+          <p style="font-size: 13px; margin-bottom: 0;"><strong>Q: Mengapa whisper.cpp jauh lebih hemat RAM dibanding Python faster-whisper?</strong><br>
+            Whisper.cpp dikompilasi langsung ke native C++ dengan pustaka GGML yang dioptimasi khusus untuk arsitektur CPU dan Apple Silicon Metal. Kuantisasi bobot ke format Q5_0 mereduksi ukuran memori dari 1.5GB menjadi hanya ~546MB tanpa kehilangan akurasi kata.
+          </p>
+        </div>
+      </section>
+
+      <footer style="margin-top: 60px; padding-top: 24px; border-top: 1px solid var(--card-border); color: #64748b; font-size: 12px; text-align: center;">
+        Dokumentasi Resmi Resmeet-STT · Dibuat untuk Efisiensi &amp; Notulensi Modern
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

@@ -22,5 +22,7 @@ CREATE TABLE IF NOT EXISTS transcripts (
     ai_corrected_text LONGTEXT      DEFAULT NULL      COMMENT 'Teks hasil koreksi AI',
     ai_summary      LONGTEXT        DEFAULT NULL      COMMENT 'Ringkasan dari AI',
     md_path         VARCHAR(500)    DEFAULT NULL      COMMENT 'Path file Markdown hasil transkrip',
-    ai_correction_status VARCHAR(50) DEFAULT 'skipped' COMMENT 'Status koreksi AI'
+    ai_correction_status VARCHAR(50) DEFAULT 'skipped' COMMENT 'Status koreksi AI',
+    directed_topics JSON            DEFAULT NULL      COMMENT 'Topik terarah dari model Jev-ultrafast',
+    ai_data         JSON            DEFAULT NULL      COMMENT 'Data mentah respons AI dan metadata'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

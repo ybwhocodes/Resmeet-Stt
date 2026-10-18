@@ -1,39 +1,66 @@
+# Environment variables & secrets
+.env
+*.env
+.env.*
+!.env.example
+backend/.env
+
+# macOS system files
+.DS_Store
+**/.DS_Store
+._*
+**/._*
+
+# Python & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+backend/whisperx-env/
+venv/
+.venv/
+env/
+
+# Model binaries & lock files (large binaries should be downloaded via scripts)
 backend/models/models--mobiuslabsgmbh--faster-whisper-large-v3-turbo/
+backend/models/*.bin
+backend/models/*.onnx
+backend/models/.locks/
+
+# Node & Package Managers
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Frontend builds
+frontend/dist/
+frontend/dist-ssr/
+frontend/*.local
+
+# Local application state & uploads
+backend/settings.json
 backend/transcription_cache.json
 backend/transcription_cache.json.tmp
 backend/transcripts_md/*.md
+backend/uploads/*
+!backend/uploads/.gitkeep
 
-# OS files
-.DS_Store
+# Logs
+*.log
+logs/
+frontend/logs/
 
-# Backend
-backend/.env
-backend/whisperx-env/
-backend/**/.DS_Store
-backend/knowledge/.DS_Store
+# IDE & Editor files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
 
-# Frontend logs
-frontend/logs
-frontend/*.log
-frontend/npm-debug.log*
-frontend/yarn-debug.log*
-frontend/yarn-error.log*
-frontend/pnpm-debug.log*
-frontend/lerna-debug.log*
-
-# Frontend build and env
-frontend/node_modules
-frontend/dist
-frontend/dist-ssr
-frontend/*.local
-
-# Frontend editor directories and files
-frontend/.vscode/*
-!frontend/.vscode/extensions.json
-frontend/.idea
-frontend/.DS_Store
-frontend/*.suo
-frontend/*.ntvs*
-frontend/*.njsproj
-frontend/*.sln
-frontend/*.sw?
+# Task scratch
+task.md

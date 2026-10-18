@@ -1,0 +1,20 @@
+{
+  "name": "resmeet-stt-backend",
+  "version": "1.0.0",
+  "description": "STT Backend in Bun.js + TypeScript with whisper.cpp and Jev-ultrafast guided AI topics",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun --watch run src/index.ts"
+  },
+  "dependencies": {
+    "mysql2": "^3.12.0",
+    "socket.io": "^4.8.1",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.3",
+    "@types/node": "^22.13.0",
+    "typescript": "^5.7.3"
+  }
+}
