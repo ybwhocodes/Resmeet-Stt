@@ -195,7 +195,7 @@ npm run dev
    - Pastikan indikator **Preflight Status Checklist** semua berwarna hijau (*uploads_writable, knowledge_readable, transcripts_md_writable, ffmpeg, format_mom, whisper_model, database, ai_config*).
    - Masukkan AI URL & API-Key Anda, lalu klik tombol **Uji Koneksi AI**.
 3. Kembali ke menu **Transkripsi**:
-   - Tarik & lepas file audio rapat Anda (`.m4a`, `.mp3`, `.wav`, dll.).
+   - Tarik & lepas file audio/suara rapat Anda (`.mp4`, `.mpeg`, `.m4a`, `.mp3`, `.wav`, `.aac`, dll.).
    - Pilih **Combo Pipeline** (Combo 1 untuk akurasi tertinggi).
    - Klik **Mulai Transkripsi & Analisis**.
 4. Setelah selesai, jelajahi **3 Format Output**:

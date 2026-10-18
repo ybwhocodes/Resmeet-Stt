@@ -198,8 +198,21 @@ export default function App() {
   useEffect(() => { fetchPreflight(); }, [fetchPreflight]);
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
 
+  const ALLOWED_AUDIO_EXTENSIONS = ["mp3", "wav", "m4a", "ogg", "flac", "webm", "aac", "mp4", "mpeg", "mpg", "m4v"];
+
   const acceptFile = (f) => {
-    if (!f.type.startsWith("audio/")) return setError("Harap unggah file audio valid.");
+    if (!f) return;
+    const ext = f.name?.split(".").pop()?.toLowerCase() || "";
+    const isMimeValid =
+      f.type.startsWith("audio/") ||
+      f.type.startsWith("video/") ||
+      f.type === "video/mp4" ||
+      f.type === "video/mpeg";
+    const isExtValid = ALLOWED_AUDIO_EXTENSIONS.includes(ext);
+
+    if (!isMimeValid && !isExtValid) {
+      return setError(`Format file tidak didukung: .${ext || "unknown"}. Gunakan: ${ALLOWED_AUDIO_EXTENSIONS.join(", ")}`);
+    }
     setFile(f);
     setAudioUrl(URL.createObjectURL(f));
     setResult(null);
@@ -520,8 +533,14 @@ export default function App() {
                   <p className="text-slate-400 text-sm">
                     <span className="text-indigo-400 font-medium">Klik untuk memilih file</span> atau seret audio ke sini
                   </p>
-                  <p className="text-slate-600 text-xs font-mono">Format didukung: MP3, WAV, OGG, FLAC, M4A, WEBM</p>
-                  <input ref={fileRef} type="file" accept="audio/*" className="hidden" onChange={(e) => e.target.files[0] && acceptFile(e.target.files[0])} />
+                  <p className="text-slate-500 text-xs font-mono">Format didukung: MP3, WAV, M4A, MP4, MPEG, OGG, FLAC, AAC, WEBM</p>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="audio/*,video/mp4,video/mpeg,.mp3,.wav,.m4a,.ogg,.flac,.webm,.aac,.mp4,.mpeg,.mpg,.m4v"
+                    className="hidden"
+                    onChange={(e) => e.target.files[0] && acceptFile(e.target.files[0])}
+                  />
                 </div>
               ) : (
                 <div className="space-y-4">

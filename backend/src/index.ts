@@ -11,7 +11,7 @@ import { convertWithFfmpeg, transcribeWithProgress, getWhisperModelPath, findWhi
 import { callAiCorrection, callAiParaphrase, isAiConfigured, testAiConnection } from "./ai";
 import { renderMarkdown } from "./markdown";
 
-const ALLOWED_EXTENSIONS = new Set(["mp3", "wav", "ogg", "flac", "m4a", "webm"]);
+const ALLOWED_EXTENSIONS = new Set(["mp3", "wav", "ogg", "flac", "m4a", "webm", "mp4", "mpeg", "mpg", "m4v", "aac"]);
 
 interface JobStatus {
   status: string;
