@@ -148,14 +148,120 @@ export async function testAiConnection(
   }
 }
 
+export interface ParaphraseStyleDetails {
+  key: string;
+  name: string;
+  description: string;
+  promptInstruction: string;
+  discussionRequirement: string;
+  summaryRequirement: string;
+  markdownRequirement: string;
+}
+
+export const PARAPHRASE_STYLES: Record<string, ParaphraseStyleDetails> = {
+  poin_singkat: {
+    key: "poin_singkat",
+    name: "Poin-poin Penting",
+    description:
+      "Deskripsi singkat (minimal 2 paragraf), to the point, padat, dan cepat dipindai pembaca (minimal 2 paragraf per poin dan ada penjelasan konteks yang terarah).",
+    promptInstruction: `TIPE PARAFRASE: POIN-POIN PENTING (DENGAN PENJELASAN KONTEKS TERARAH)
+Aturan Penulisan Wajib:
+1. Deskripsi singkat, to the point, padat, lugas, dan cepat dipindai pembaca.
+2. Pembahasan (discussion) untuk setiap topik/poin WAJIB ditulis MINIMAL 2 PARAGRAF LENGKAP dengan penjelasan konteks yang terarah (DILARANG hanya 1 paragraf atau hanya daftar bullet pendek).
+   - Paragraf 1: Penjelasan konteks terarah, latar belakang masalah, dan urgensi pembahasan to-the-point.
+   - Paragraf 2: Substansi dinamika pembahasan, rumusan solusi inti, dan arah kesepakatan secara padat.
+3. Ringkasan Eksekutif (summary) WAJIB minimal 2 paragraf padat dan cepat dipindai.
+4. Pada Dokumen Markdown (markdown): uraikan setiap topik bahasan minimal 2 paragraf padat dan berkonteks terarah.`,
+    discussionRequirement:
+      "WAJIB MINIMAL 2 PARAGRAF LENGKAP per poin/topik: Paragraf 1 menjelaskan konteks terarah dan esensi masalah, Paragraf 2 menjelaskan dinamika pembahasan serta rumusan solusi to-the-point secara padat dan mudah dipindai pembaca.",
+    summaryRequirement: "Minimal 2 paragraf padat, to the point, dan cepat dipindai pembaca.",
+    markdownRequirement:
+      "Setiap topik bahasan wajib dijabarkan minimal 2 paragraf padat berkonteks terarah.",
+  },
+  detail_deskriptif: {
+    key: "detail_deskriptif",
+    name: "Detail & Deskriptif",
+    description:
+      "Penjelasan komprehensif latar belakang, argumen peserta, dan rincian aksi penjelasannya lengkap dengan konteks dengan minimalnya 4 paragraf panjang dan penuh pengetahuan dari hasil meeting dan juga tambahkan insight dan jelaskan juga yang deskriptif agar pembaca mengetahui meskipun tidak ikut meeting.",
+    promptInstruction: `TIPE PARAFRASE: DETAIL & DESKRIPTIF (KOMPREHENSIF DENGAN PENGETAHUAN & INSIGHT MENDALAM)
+Aturan Penulisan Wajib:
+1. Penjelasan komprehensif mengenai latar belakang masalah, dinamika argumen peserta rapat, serta rincian teknis/operasional aksi secara utuh.
+2. Pembahasan (discussion) untuk setiap topik/poin WAJIB ditulis MINIMAL 4 PARAGRAF PANJANG yang penuh pengetahuan dan konteks nyata dari hasil rapat (DILARANG SINGKAT/DILARANG HANYA 1-2 PARAGRAF).
+   - Paragraf 1: Latar belakang masalah secara komprehensif, konteks industri/organisasi, dan akar persoalan yang mendasari rapat.
+   - Paragraf 2: Dinamika diskusi, argumen dan pertimbangan yang diajukan para peserta rapat, serta alternatif yang sempat diperdebatkan.
+   - Paragraf 3: Rincian teknis/operasional solusi, mekanisme eksekusi, pembagian tanggung jawab, dan rincian aksi tindak lanjut secara detail.
+   - Paragraf 4 (Insight & Analisis Deskriptif): Uraian insight strategis dan penjelasan deskriptif yang mendalam sehingga siapapun yang TIDAK HADIR dalam rapat dapat memahami konteks, alasan keputusan, dan substansi meeting seutuhnya.
+3. Ringkasan Eksekutif (summary) WAJIB minimal 3-4 paragraf panjang komprehensif dengan cakupan menyeluruh dan insight kunci.
+4. Pada Dokumen Markdown (markdown): setiap topik agenda wajib memuat uraian mendalam minimal 4 paragraf panjang dan memuat sub-bagian Insight & Analisis Deskriptif.`,
+    discussionRequirement:
+      "WAJIB MINIMAL 4 PARAGRAF PANJANG per topik/poin: (1) Latar belakang & urgensi masalah, (2) Dinamika argumen & sudut pandang peserta, (3) Rincian teknis solusi & rencana aksi, (4) Insight strategis deskriptif yang sangat jelas agar pembaca yang tidak hadir rapat paham seutuhnya.",
+    summaryRequirement:
+      "Minimal 3-4 paragraf komprehensif mencakup latar belakang, dinamika rapat, keputusan, dan insight strategis.",
+    markdownRequirement:
+      "Setiap topik pembahasan wajib dijabarkan minimal 4 paragraf panjang mendalam dilengkapi latar belakang, argumen peserta, rincian teknis, dan insight deskriptif.",
+  },
+  eksekutif: {
+    key: "eksekutif",
+    name: "Ringkasan Eksekutif",
+    description:
+      "Deskripsi singkat (minimal 2 paragraf), to the point, padat, dan cepat dipindai pembaca (minimal 2 paragraf per poin dan ada penjelasan konteks yang terarah) dengan format strategis tingkat manajemen untuk pengambil keputusan beserta konteks dan analisis pro-kontra setiap keputusannya.",
+    promptInstruction: `TIPE PARAFRASE: RINGKASAN EKSEKUTIF (FORMAT STRATEGIS TINGKAT MANAJEMEN & ANALISIS PRO-KONTRA)
+Aturan Penulisan Wajib:
+1. Format strategis tingkat manajemen tinggi untuk pengambil keputusan (C-Level / Board of Directors / Stakeholders).
+2. Pembahasan (discussion) untuk setiap topik WAJIB ditulis MINIMAL 2 PARAGRAF TERARAH dengan fokus implikasi strategis, dampak organisasi, efisiensi sumber daya, dan mitigasi risiko.
+3. WAJIB menyertakan ANALISIS PRO & KONTRA (pertimbangan keuntungan vs risiko/tantangan) secara eksplisit untuk setiap keputusan atau opsi yang disepakati.
+4. Ringkasan Eksekutif (summary) WAJIB minimal 2-3 paragraf strategis padat berorientasi keputusan, implikasi bisnis, dan prioritas implementasi.
+5. Pada Dokumen Markdown (markdown): setiap topik pembahasan wajib memuat uraian strategis minimal 2 paragraf plus analisis Pro & Kontra setiap keputusan.`,
+    discussionRequirement:
+      "WAJIB MINIMAL 2 PARAGRAF TERARAH berfokus strategis manajerial (dampak organisasi & mitigasi risiko), ditambah WAJIB menyertakan Analisis Pro & Kontra dari setiap keputusan yang disepakati.",
+    summaryRequirement:
+      "Minimal 2-3 paragraf strategis berstandar eksekutif manajemen, menonjolkan arah strategis, trade-offs, dan keputusan kunci.",
+    markdownRequirement:
+      "Setiap topik pembahasan wajib memuat minimal 2 paragraf terarah strategis dilengkapi analisis Pro-Kontra untuk pengambil keputusan.",
+  },
+};
+
+export function resolveParaphraseStyle(styleInput?: string): ParaphraseStyleDetails {
+  const norm = (styleInput || "").trim().toLowerCase();
+  if (norm === "detail_deskriptif" || norm === "detail" || norm.includes("detail") || norm.includes("deskriptif")) {
+    return PARAPHRASE_STYLES.detail_deskriptif;
+  }
+  if (norm === "eksekutif" || norm === "executive" || norm.includes("eksekutif") || norm.includes("manajemen")) {
+    return PARAPHRASE_STYLES.eksekutif;
+  }
+  if (norm === "poin_singkat" || norm === "poin" || norm.includes("singkat") || norm.includes("poin")) {
+    return PARAPHRASE_STYLES.poin_singkat;
+  }
+  if (styleInput && styleInput.trim().length > 0) {
+    return {
+      key: "kustom",
+      name: `Kustom (${styleInput.trim()})`,
+      description: styleInput.trim(),
+      promptInstruction: `GAYA PENULISAN KUSTOM: ${styleInput.trim()}
+Pastikan setiap topik bahasan diuraikan minimal 2 paragraf mendalam dengan penjelasan konteks yang terarah, serta menyertakan keputusan dan tindak lanjut yang jelas.`,
+      discussionRequirement: `Wajib diuraikan minimal 2 paragraf mendalam sesuai instruksi kustom: "${styleInput.trim()}", mencakup konteks terarah dan penjelasan detail.`,
+      summaryRequirement: `Minimal 2 paragraf padat sesuai instruksi: "${styleInput.trim()}".`,
+      markdownRequirement: `Setiap topik pembahasan wajib dijabarkan minimal 2 paragraf mendalam sesuai instruksi: "${styleInput.trim()}".`,
+    };
+  }
+  return PARAPHRASE_STYLES.poin_singkat;
+}
+
+export const PARAPHRASE_STYLE_PROMPTS: Record<string, string> = {
+  poin_singkat: PARAPHRASE_STYLES.poin_singkat.description,
+  detail_deskriptif: PARAPHRASE_STYLES.detail_deskriptif.description,
+  eksekutif: PARAPHRASE_STYLES.eksekutif.description,
+};
+
 /**
  * Calls AI for MoM correction and goal-directed topic extraction.
- * Integrates the Jev-ultrafast structured goal-directed topic paradigm.
+ * Integrates the Jev-ultrafast structured goal-directed topic paradigm with rich style-based paraphrasing.
  */
 export async function callAiCorrection(
   rawText: string,
   filename = "Audio Transkrip",
-  durationS = 0
+  durationS = 0,
+  styleInput?: string
 ): Promise<{ data: AiCorrectionResult | null; status: "completed" | "skipped" | "failed" }> {
   if (!config.aiEnableCorrection || !isAiConfigured()) {
     return { data: null, status: "skipped" };
@@ -170,28 +276,31 @@ export async function callAiCorrection(
     ragInstructions = "";
   }
 
-  let formatMom = "";
-  try {
-    formatMom = fs.readFileSync(path.join(PATHS.knowledgeDir, "format-mom.md"), "utf-8");
-  } catch {
-    formatMom = "";
-  }
-
   const existingKnowledge = readKnowledge(4000);
+  const activeStyle = resolveParaphraseStyle(styleInput || config.aiParaphraseStyle);
 
-  const systemPrompt = `Anda adalah Sekretaris Notulis Senior yang bertugas menyusun Minutes of Meeting (MoM) profesional dan terarah (menggunakan paradigma Jev-Guided Topics).
+  const systemPrompt = `Anda adalah Sekretaris Notulis Eksekutif Senior berpengalaman 20 tahun yang bertugas menyusun Minutes of Meeting (MoM) profesional, mendalam, dan terarah (menggunakan paradigma Jev-Guided Topics).
 
-Tugas Utama:
-1. Analisis transkrip audio secara cermat, pertahankan fakta dan keputusan rapat.
-2. Petakan pembahasan ke dalam 'directed_topics' (Topik Terarah): setiap topik memiliki sasaran (goal), pembahasan terarah (discussion), keputusan (decisions), dan tindak lanjut (action_items).
-3. Ekstrak istilah teknis/domain baru ke 'terms' dan koreksi salah dengar STT ke 'corrections'.
-4. Buat dokumen MoM lengkap berformat Markdown pada atribut 'markdown'.
-5. Output WAJIB JSON murni tanpa markdown fence backticks.`;
+TUGAS UTAMA:
+1. Analisis transkrip audio mentah secara cermat, pertahankan seluruh fakta nyata, nama orang/peserta, tanggal, angka/data, istilah teknis, dan kesepakatan rapat.
+2. JANGAN hanya membuat bullet poin dangkal/singkat! Anda WAJIB langsung memparafrase dan menjabarkan hasil rapat secara mendalam, jelas, dan kaya konteks sesuai Tipe Parafrase aktif: ${activeStyle.name}.
+3. Terapkan seluruh aturan gaya penulisan berikut:
+${activeStyle.promptInstruction}
+4. Petakan pembahasan ke dalam 'directed_topics' (Topik Terarah): setiap topik memiliki sasaran (goal), pembahasan yang mendalam dan diparafrase (discussion), keputusan (decisions), dan tindak lanjut (action_items).
+5. Buat dokumen MoM lengkap berformat Markdown resmi pada atribut 'markdown' (terdiri dari Informasi Rapat, Agenda, Pembahasan mendalam per topik, Tabel Keputusan, Tabel Tindak Lanjut, dan Catatan).
+6. Ekstrak istilah teknis/domain baru ke 'terms' dan koreksi salah dengar STT ke 'corrections'.
+7. Output WAJIB JSON murni tanpa markdown fence backticks (\`\`\`json).`;
 
   const userPrompt = `Metadata Rapat:
 - File: ${filename}
 - Durasi Audio: ${Math.round(durationS)} detik
 - Model STT: Whisper.cpp (${config.whisperModel})
+- Tipe Parafrase Aktif: ${activeStyle.name} (${activeStyle.key})
+
+ATURAN KEDALAMAN DAN PANJANG KONTEN:
+- Discussion per topik: ${activeStyle.discussionRequirement}
+- Ringkasan eksekutif (summary): ${activeStyle.summaryRequirement}
+- Dokumen Markdown (markdown): ${activeStyle.markdownRequirement}
 
 Knowledge & Referensi Istilah:
 ${existingKnowledge || "- Belum ada knowledge tersimpan"}
@@ -201,27 +310,36 @@ ${rawText}
 
 Panduan Struktur Dokumen Markdown 'markdown':
 # Minutes of Meeting
-## Informasi Umum Rapat (Nama Rapat, Tanggal, Peserta)
+## Informasi Umum Rapat
+| Informasi | Keterangan |
+|---|---|
+| **Nama File** | ${filename} |
+| **Tanggal Transkripsi** | ${new Date().toLocaleDateString("id-ID")} |
+| **Durasi Audio** | ${Math.round(durationS)} detik |
+| **Tipe Parafrase** | ${activeStyle.name} |
 ## Agenda Rapat
 ## Pembahasan (per Topik Terarah)
+(Uraikan setiap topik secara mendalam sesuai aturan ${activeStyle.name}: ${activeStyle.markdownRequirement})
+${activeStyle.key === "eksekutif" ? "### Analisis Pro & Kontra Keputusan Strategis\n(Sertakan pertimbangan pro & kontra untuk setiap keputusan penting)\n" : ""}
+${activeStyle.key === "detail_deskriptif" ? "### Insight & Analisis Deskriptif\n(Uraian mendalam dan deskriptif agar pembaca yang tidak ikut meeting memahami konteks seutuhnya)\n" : ""}
 ## Keputusan / Kesepakatan (Tabel: No, Keputusan, PIC, Target Waktu)
 ## Tindak Lanjut (Action Items) (Tabel: No, Aksi, PIC, Deadline)
 ## Catatan Tambahan & Jadwal Rapat Berikutnya
 
 Kembalikan output JSON dengan schema berikut:
 {
-  "summary": "Ringkasan eksekutif jalannya rapat 1-2 paragraf",
+  "summary": "${activeStyle.summaryRequirement}",
   "entities": ["Peserta / Pihak yang terdeteksi"],
   "directed_topics": [
     {
       "topic": "Nama topik terarah",
       "goal": "Sasaran pembahasan topik ini",
-      "discussion": "Poin pembahasan terarah",
-      "decisions": "Keputusan / kesepakatan final",
+      "discussion": "${activeStyle.discussionRequirement}",
+      "decisions": "Keputusan / kesepakatan final ${activeStyle.key === 'eksekutif' ? '(sertakan analisis pro-kontra keputusan)' : ''}",
       "action_items": ["Tindak lanjut spesifik topik ini"]
     }
   ],
-  "markdown": "Dokumen Minutes of Meeting (MoM) final lengkap sesuai panduan struktur di atas",
+  "markdown": "Dokumen Minutes of Meeting (MoM) final lengkap sesuai panduan struktur di atas dengan pembahasan mendalam",
   "terms": [
     {
       "term": "Istilah teknis/domain",
@@ -257,6 +375,9 @@ Kembalikan output JSON dengan schema berikut:
     if (!parsed.corrected_text) {
       parsed.corrected_text = parsed.markdown || parsed.summary || rawText;
     }
+    if (!Array.isArray(parsed.directed_topics) || parsed.directed_topics.length === 0) {
+      parsed.directed_topics = extractTopicsFromMarkdown(parsed.markdown || parsed.corrected_text || rawText);
+    }
     return { data: parsed, status: "completed" };
   } catch (err) {
     console.warn("[AI] AI correction failed:", err);
@@ -264,14 +385,58 @@ Kembalikan output JSON dengan schema berikut:
   }
 }
 
-export const PARAPHRASE_STYLE_PROMPTS: Record<string, string> = {
-  detail_deskriptif:
-    "sangat detail, komprehensif, dan deskriptif. Jabarkan setiap topik agenda secara mendalam mencakup latar belakang, konteks pembahasan, pertimbangan teknis/operasional, rumusan kesepakatan secara terperinci, dan rincian tindak lanjut (Action Items) lengkap dengan PIC serta tenggat waktu.",
-  poin_singkat:
-    "terstruktur dalam poin-poin penting bernomor dengan deskripsi singkat, lugas, padat, dan to-the-point. Tonjolkan esensi pokok bahasan, keputusan inti, dan daftar aksi tindak lanjut agar sangat cepat dipindai dan mudah dipahami pembaca.",
-  eksekutif:
-    "berstandar ringkasan eksekutif (Executive Summary) profesional tingkat manajemen yang menonjolkan poin strategis, dampak organisasi, keputusan final, dan aksi kunci.",
-};
+/**
+ * Extracts structured topic cards from Markdown text if AI returns an empty directed_topics array.
+ */
+export function extractTopicsFromMarkdown(md: string): DirectedTopic[] {
+  const topics: DirectedTopic[] = [];
+  if (!md) return topics;
+
+  const pembMatch = md.match(/## Pembahasan[^\n]*\n([\s\S]*?)(?=\n## |$)/i);
+  const content = pembMatch ? pembMatch[1] : md;
+
+  const blocks = content.split(/^### /m);
+  for (const block of blocks) {
+    const trimmed = block.trim();
+    if (!trimmed) continue;
+    const lines = trimmed.split("\n");
+    const rawTitle = lines[0]?.replace(/^###\s*/, "").trim();
+    if (!rawTitle || /^(Informasi|Agenda|Keputusan|Tindak|Catatan)/i.test(rawTitle)) continue;
+
+    const restLines = lines.slice(1);
+    let goal = "";
+    const discussionLines: string[] = [];
+    let decisions = "";
+    const actionItems: string[] = [];
+
+    for (const l of restLines) {
+      const gMatch = l.match(/^>*\s*\**(?:Sasaran|Goal|Tujuan)\**[:\s]+(.+)$/i);
+      const dMatch = l.match(/^>*\s*\**(?:Keputusan|Kesepakatan)\**[:\s]+(.+)$/i);
+      const aMatch = l.match(/^[-*]\s*(?:Aksi|Action Item|Tindak Lanjut)[:\s]+(.+)$/i);
+
+      if (gMatch && !goal) {
+        goal = gMatch[1].trim();
+      } else if (dMatch && !decisions) {
+        decisions = dMatch[1].trim();
+      } else if (aMatch) {
+        actionItems.push(aMatch[1].trim());
+      } else {
+        discussionLines.push(l);
+      }
+    }
+
+    const discussion = discussionLines.join("\n").trim() || trimmed;
+    topics.push({
+      topic: rawTitle.replace(/^\d+[\.\s]+/, "").trim(),
+      goal,
+      discussion,
+      decisions,
+      action_items: actionItems,
+    });
+  }
+
+  return topics;
+}
 
 export interface ParaphraseResult {
   text: string;
@@ -305,35 +470,39 @@ export async function callAiParaphrase(text: string, style = "poin_singkat"): Pr
     rag = "";
   }
 
-  const resolvedInstruction =
-    PARAPHRASE_STYLE_PROMPTS[style] ||
-    (style === "detail" ? PARAPHRASE_STYLE_PROMPTS.detail_deskriptif : null) ||
-    (style === "poin" ? PARAPHRASE_STYLE_PROMPTS.poin_singkat : null) ||
-    style;
+  const activeStyle = resolveParaphraseStyle(style);
 
   const systemPrompt = `Anda adalah Sekretaris Notulis Eksekutif Senior berpengalaman 20 tahun.
-Tugas Anda adalah memparafrase dan menyusun ulang hasil transkrip rapat ke dalam gaya penulisan: ${resolvedInstruction}
+Tugas Anda adalah memparafrase dan menyusun ulang hasil transkrip/dokumen rapat ke dalam gaya penulisan: ${activeStyle.name} (${activeStyle.key}).
+
+ATURAN GAYA PENULISAN & KEDALAMAN:
+${activeStyle.promptInstruction}
 
 ATURAN PENTING:
 1. Pertahankan seluruh fakta nyata, nama orang/pimpinan/peserta, tanggal, keputusan, kesepakatan, PIC, deadline, istilah teknis, dan struktur dokumen Minutes of Meeting resmi.
-2. Hasil output harus menghasilkan data terstruktur lengkap yang sama persis seperti hasil transkripsi AI awal:
+2. JANGAN hanya membuat bullet poin pendek atau ringkasan dangkal! Wajib mematuhi jumlah paragraf dan kedalaman:
+   - Pembahasan topik terarah ('discussion'): ${activeStyle.discussionRequirement}
+   - Dokumen Markdown ('markdown'): ${activeStyle.markdownRequirement}
+   - Ringkasan eksekutif ('summary'): ${activeStyle.summaryRequirement}
+3. Array 'directed_topics' WAJIB diisi (DILARANG kosong []). Petakan setiap pembahasan ke dalam objek topik terarah.
+4. Hasil output harus menghasilkan data terstruktur lengkap yang sama persis seperti hasil transkripsi AI awal:
    - Dokumen Markdown Minutes of Meeting (MoM) final lengkap (# Minutes of Meeting, ## Informasi Umum Rapat, ## Agenda Rapat, ## Pembahasan per Topik, ## Keputusan / Kesepakatan tabel, ## Tindak Lanjut tabel, ## Catatan Tambahan)
-   - Ringkasan eksekutif 1-2 paragraf ('summary')
-   - Ekstraksi topik terarah ('directed_topics') lengkap dengan goal/sasaran, pembahasan yang sudah diparafrase, keputusan, dan action items.
+   - Ringkasan eksekutif ('summary')
+   - Ekstraksi topik terarah ('directed_topics') lengkap dengan goal/sasaran, pembahasan yang sudah diparafrase mendalam, keputusan, dan action items.
 
 Output WAJIB berupa JSON murni tanpa pembuka Markdown fence (\`\`\`json) dengan schema:
 {
-  "summary": "Ringkasan eksekutif jalannya rapat 1-2 paragraf sesuai gaya yang diminta",
+  "summary": "${activeStyle.summaryRequirement}",
   "directed_topics": [
     {
       "topic": "Nama topik terarah",
       "goal": "Sasaran pembahasan topik ini",
-      "discussion": "Poin pembahasan terarah yang sudah diparafrase sesuai gaya yang diminta",
-      "decisions": "Keputusan / kesepakatan final",
+      "discussion": "${activeStyle.discussionRequirement}",
+      "decisions": "Keputusan / kesepakatan final ${activeStyle.key === 'eksekutif' ? '(sertakan analisis pro-kontra keputusan)' : ''}",
       "action_items": ["Tindak lanjut spesifik topik ini"]
     }
   ],
-  "markdown": "Dokumen Minutes of Meeting (MoM) final lengkap format Markdown sesuai gaya yang diminta",
+  "markdown": "Dokumen Minutes of Meeting (MoM) final lengkap format Markdown sesuai gaya yang diminta dengan pembahasan mendalam",
   "text": "Sama dengan isi markdown di atas"
 }`;
 
@@ -350,7 +519,11 @@ ${text}
     const parsed = extractJsonFromAiResponse(rawAiResponse);
     const markdown = parsed.markdown || parsed.text || rawAiResponse;
     const summary = parsed.summary || "";
-    const directed_topics = Array.isArray(parsed.directed_topics) ? parsed.directed_topics : [];
+    let directed_topics = Array.isArray(parsed.directed_topics) ? parsed.directed_topics : [];
+
+    if (directed_topics.length === 0) {
+      directed_topics = extractTopicsFromMarkdown(markdown);
+    }
 
     return {
       text: markdown,
@@ -367,7 +540,7 @@ ${text}
       text,
       markdown: text,
       summary: "",
-      directed_topics: [],
+      directed_topics: extractTopicsFromMarkdown(text),
     };
   }
 }

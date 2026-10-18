@@ -8,7 +8,7 @@ import { initDb, checkDbConnection, saveTranscript, getRecentTranscripts, getTra
 import { ensureKnowledgeFiles, updateKnowledge } from "./knowledge";
 import { calculateFileHash, getCacheKey, readCache, writeCache } from "./cache";
 import { convertWithFfmpeg, transcribeWithProgress, getWhisperModelPath, findWhisperCliBinary } from "./whisper";
-import { callAiCorrection, callAiParaphrase, isAiConfigured, testAiConnection } from "./ai";
+import { callAiCorrection, callAiParaphrase, isAiConfigured, testAiConnection, resolveParaphraseStyle } from "./ai";
 import { renderMarkdown } from "./markdown";
 
 const ALLOWED_EXTENSIONS = new Set(["mp3", "wav", "ogg", "flac", "m4a", "webm", "mp4", "mpeg", "mpg", "m4v", "aac"]);
@@ -315,6 +315,7 @@ const server = http.createServer(async (req, res) => {
       const aiCorrection = formData.get("ai_correction") === "true";
       const outputFormat = formData.get("output_format") === "md" ? "md" : "json";
       const combo = String(formData.get("combo") || "1");
+      const paraphraseStyle = String(formData.get("paraphrase_style") || config.aiParaphraseStyle || "poin_singkat");
 
       const jobId = crypto.randomUUID().replace(/-/g, "");
       const savePath = path.join(PATHS.uploadDir, `${jobId}.${ext}`);
@@ -324,7 +325,7 @@ const server = http.createServer(async (req, res) => {
       await Bun.write(savePath, buffer);
 
       // Start transcription asynchronously in background
-      startTranscriptionWorker(jobId, savePath, filename, wordTimestamps, aiCorrection, outputFormat, combo);
+      startTranscriptionWorker(jobId, savePath, filename, wordTimestamps, aiCorrection, outputFormat, combo, paraphraseStyle);
 
       return sendJson({
         job_id: jobId,
@@ -374,7 +375,8 @@ async function startTranscriptionWorker(
   wordTimestamps: boolean,
   aiCorrection: boolean,
   outputFormat: string,
-  combo = "1"
+  combo = "1",
+  paraphraseStyle = config.aiParaphraseStyle || "poin_singkat"
 ) {
   let processedPath: string | null = null;
   const queuedAt = Date.now();
@@ -385,7 +387,9 @@ async function startTranscriptionWorker(
     "3": "Combo 3 (DeepFilter-Net, NoiseReduce, Silero-VAD & Sherpa-ONNX)",
   };
 
-  setJobStatus(jobId, "queued", { queued_at: new Date().toISOString(), combo });
+  const styleInfo = resolveParaphraseStyle(paraphraseStyle);
+
+  setJobStatus(jobId, "queued", { queued_at: new Date().toISOString(), combo, paraphraseStyle: styleInfo.key });
   io.to(jobId).emit("progress", {
     job_id: jobId,
     percent: 0,
@@ -401,9 +405,9 @@ async function startTranscriptionWorker(
       throw new Error(`Preflight check gagal: ffmpeg=${preflight.ffmpeg}, model=${preflight.whisper_model}`);
     }
 
-    // Check cache
+    // Check cache (keyed with combo and paraphrase style)
     const fileHash = calculateFileHash(savePath);
-    const cacheKey = `${getCacheKey(fileHash, wordTimestamps, aiCorrection)}:combo=${combo}`;
+    const cacheKey = `${getCacheKey(fileHash, wordTimestamps, aiCorrection)}:combo=${combo}:style=${styleInfo.key}`;
     const cached = readCache(cacheKey);
 
     if (cached) {
@@ -432,6 +436,9 @@ async function startTranscriptionWorker(
         id: newId,
         filename: originalFilename,
         ...cached,
+        summary: cached.ai_summary || cached.summary || null,
+        ai_summary: cached.ai_summary || cached.summary || null,
+        directed_topics: cached.directed_topics || cached.ai_data?.directed_topics || [],
         combo,
         created_at: new Date().toISOString(),
         cache_hit: true,
@@ -476,7 +483,7 @@ async function startTranscriptionWorker(
     let aiData: any = null;
     let aiStatus: "completed" | "skipped" | "failed" = "skipped";
 
-    // 3. AI Correction & Jev-ultrafast Goal-Directed Topics Analysis
+    // 3. AI Correction & Jev-ultrafast Goal-Directed Topics Analysis with Paraphrase Style
     if (aiCorrection) {
       setJobStatus(jobId, "correcting");
       io.to(jobId).emit("progress", {
@@ -484,10 +491,10 @@ async function startTranscriptionWorker(
         percent: 96,
         elapsed_s: Math.round(durationS),
         current_text: "",
-        stage: "Menganalisis topik terarah & koreksi AI...",
+        stage: `Menganalisis topik terarah & parafrase AI (${styleInfo.name})...`,
       });
 
-      const aiRes = await callAiCorrection(whisperResult.rawText, originalFilename, durationS);
+      const aiRes = await callAiCorrection(whisperResult.rawText, originalFilename, durationS, paraphraseStyle);
       aiData = aiRes.data;
       aiStatus = aiRes.status;
 
@@ -518,7 +525,7 @@ async function startTranscriptionWorker(
       ai_summary: aiData?.summary || null,
       ai_correction_status: aiStatus,
       ai_data: aiData,
-      directed_topics: aiData?.directed_topics || null,
+      directed_topics: aiData?.directed_topics || [],
     };
 
     if (aiStatus !== "failed") {
@@ -546,6 +553,10 @@ async function startTranscriptionWorker(
       id: newId,
       filename: originalFilename,
       ...payload,
+      summary: aiData?.summary || null,
+      ai_summary: aiData?.summary || null,
+      directed_topics: aiData?.directed_topics || [],
+      combo,
       created_at: new Date().toISOString(),
       cache_hit: false,
       md_url: mdUrl,

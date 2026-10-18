@@ -18,10 +18,10 @@ Dilengkapi dengan antarmuka web modern, streaming progress realtime via WebSocke
   1. **Format .MD (MoM):** Notulen resmi berstandar Markdown lengkap (Unduh `.md`, `.txt`, dan Salin).
   2. **Rangkuman HTML / UI:** Dashboard kartu visual rapat interaktif + tombol **Unduh Rangkuman HTML mandiri**.
   3. **Mindmap Diskusi (Markmap):** Diagram pohon topik interaktif berbasis [Markmap.js.org](https://markmap.js.org/) (zoom, pan, expand/collapse, Unduh HTML mandiri & SVG).
-- **✍️ Pilihan Tipe Parafrase AI di Pengaturan:**
-  - *Poin-poin Penting:* Ringkasan poin bernomor yang singkat, padat, dan to-the-point.
-  - *Detail & Deskriptif:* Pembahasan komprehensif latar belakang, argumen, dan langkah operasional.
-  - *Ringkasan Eksekutif:* Format strategis tingkat manajemen untuk pengambil keputusan.
+- **✍️ Pilihan Tipe Parafrase AI Berbobot (Pengaturan & Toolbar):**
+  - *Poin-poin Penting:* Deskripsi to-the-point, padat, dan cepat dipindai pembaca (**minimal 2 paragraf per poin/topik**) dengan penjelasan konteks yang terarah.
+  - *Detail & Deskriptif:* Uraian komprehensif latar belakang, dinamika argumen peserta, rincian teknis aksi (**minimal 4 paragraf panjang**) ditambah insight & analisis deskriptif mendalam agar pembaca yang tidak hadir paham seutuhnya.
+  - *Ringkasan Eksekutif:* Format strategis tingkat manajemen pengambil keputusan (**minimal 2 paragraf per poin**) dilengkapi konteks serta analisis pro-kontra dari setiap keputusan.
 - **🗃️ Halaman Riwayat Khusus Multi-Kolom:**
   - Tampilan kolom: File Audio/ID, Tanggal, Durasi, Status AI, Cuplikan Notulen, dan Aksi.
   - Klik baris untuk membuka **Halaman Detail Lengkap** dengan 3 tab output.

@@ -246,6 +246,7 @@ export default function App() {
       form.append("combo", selectedCombo);
       form.append("ai_correction", aiCorrection ? "true" : "false");
       form.append("output_format", outputMd ? "md" : "json");
+      form.append("paraphrase_style", paraphraseStyle);
       const res = await fetch(`${API}/upload-and-transcribe`, { method: "POST", body: form });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload gagal");
@@ -751,6 +752,21 @@ export default function App() {
                     </button>
                   </div>
 
+                  <div className="text-[11px] text-slate-400 bg-[#12151e] border border-[#1e2330] rounded-lg px-3 py-1.5 flex items-center gap-2">
+                    {paraphraseStyle === "poin_singkat" && (
+                      <span>📌 <strong>Poin-poin Penting:</strong> Min. 2 paragraf per poin, to the point, padat, cepat dipindai, berkonteks terarah.</span>
+                    )}
+                    {paraphraseStyle === "detail_deskriptif" && (
+                      <span>📖 <strong>Detail &amp; Deskriptif:</strong> Min. 4 paragraf panjang per poin, latar belakang, argumen peserta, rincian aksi &amp; insight mendalam.</span>
+                    )}
+                    {paraphraseStyle === "eksekutif" && (
+                      <span>💼 <strong>Ringkasan Eksekutif:</strong> Min. 2 paragraf per poin format strategis manajemen + analisis pro &amp; kontra keputusan.</span>
+                    )}
+                    {!["poin_singkat", "detail_deskriptif", "eksekutif"].includes(paraphraseStyle) && (
+                      <span>✨ <strong>Kustom:</strong> Parafrase sesuai instruksi prompt khusus pengguna.</span>
+                    )}
+                  </div>
+
                   <div className="flex flex-col sm:flex-row gap-2">
                     <input
                       value={paraphraseStyle}
@@ -1071,6 +1087,21 @@ export default function App() {
                 </button>
               </div>
 
+              <div className="text-[11px] text-slate-400 bg-[#12151e] border border-[#1e2330] rounded-lg px-3 py-1.5 flex items-center gap-2">
+                {paraphraseStyle === "poin_singkat" && (
+                  <span>📌 <strong>Poin-poin Penting:</strong> Min. 2 paragraf per poin, to the point, padat, cepat dipindai, berkonteks terarah.</span>
+                )}
+                {paraphraseStyle === "detail_deskriptif" && (
+                  <span>📖 <strong>Detail &amp; Deskriptif:</strong> Min. 4 paragraf panjang per poin, latar belakang, argumen peserta, rincian aksi &amp; insight mendalam.</span>
+                )}
+                {paraphraseStyle === "eksekutif" && (
+                  <span>💼 <strong>Ringkasan Eksekutif:</strong> Min. 2 paragraf per poin format strategis manajemen + analisis pro &amp; kontra keputusan.</span>
+                )}
+                {!["poin_singkat", "detail_deskriptif", "eksekutif"].includes(paraphraseStyle) && (
+                  <span>✨ <strong>Kustom:</strong> Parafrase sesuai instruksi prompt khusus pengguna.</span>
+                )}
+              </div>
+
               <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   value={paraphraseStyle}
@@ -1201,7 +1232,7 @@ export default function App() {
                         {paraphraseStyle === "poin_singkat" && <Check className="w-3.5 h-3.5 text-indigo-400" />}
                       </div>
                       <p className="text-[11px] text-slate-400 leading-relaxed">
-                        Deskripsi singkat, to the point, padat, dan cepat dipindai pembaca.
+                        Deskripsi singkat (minimal 2 paragraf), to the point, padat, dan cepat dipindai pembaca (minimal 2 paragraf per poin dan ada penjelasan konteks yang terarah).
                       </p>
                     </div>
 
@@ -1214,7 +1245,7 @@ export default function App() {
                         {paraphraseStyle === "detail_deskriptif" && <Check className="w-3.5 h-3.5 text-indigo-400" />}
                       </div>
                       <p className="text-[11px] text-slate-400 leading-relaxed">
-                        Penjelasan komprehensif latar belakang, argumen peserta, dan rincian aksi.
+                        Penjelasan komprehensif latar belakang, argumen peserta, dan rincian aksi penjelasannya lengkap dengan konteks dengan minimalnya 4 paragraf panjang dan penuh pengetahuan dari hasil meeting dan juga tambahkan insight dan jelaskan juga yang deskriptif agar pembaca mengetahui meskipun tidak ikut meeting.
                       </p>
                     </div>
 
@@ -1227,7 +1258,7 @@ export default function App() {
                         {paraphraseStyle === "eksekutif" && <Check className="w-3.5 h-3.5 text-indigo-400" />}
                       </div>
                       <p className="text-[11px] text-slate-400 leading-relaxed">
-                        Format strategis tingkat manajemen untuk pengambil keputusan.
+                        Deskripsi singkat (minimal 2 paragraf), to the point, padat, dan cepat dipindai pembaca (minimal 2 paragraf per poin dan ada penjelasan konteks yang terarah) akan tetapi format strategis tingkat manajemen untuk pengambil keputusan dengan konteks dan pro kontranya setiap keputusannya.
                       </p>
                     </div>
                   </div>
