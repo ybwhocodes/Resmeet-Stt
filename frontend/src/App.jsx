@@ -6,7 +6,8 @@ import {
   Trash2, Mic, Zap, Brain, ShieldCheck,
   Settings, Eye, EyeOff, Save, Target, Check,
   ArrowLeft, ChevronRight, Sliders, Search, Layers, X,
-  Layout, GitBranch, Copy, Sparkles, Server, HardDrive, Star
+  Layout, GitBranch, Copy, Sparkles, Server, HardDrive, Star,
+  Square, Pause, Play, Radio
 } from "lucide-react";
 import MarkmapView from "./components/MarkmapView";
 import UiSummary from "./components/UiSummary";
@@ -22,6 +23,12 @@ const fmtDur = (s) => {
   if (!s) return "-";
   const m = Math.floor(s / 60), sec = Math.round(s % 60);
   return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+};
+
+const fmtTimer = (s) => {
+  if (!s) return "00:00";
+  const m = Math.floor(s / 60), sec = s % 60;
+  return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 };
 
 // 3 Combos Definitions
@@ -139,6 +146,16 @@ export default function App() {
   const [paraphrasing, setParaphrasing] = useState(false);
   const [paraphraseStyle, setParaphraseStyle] = useState("poin_singkat");
 
+  // Audio Input Source State: "upload" | "record"
+  const [audioSource, setAudioSource] = useState("upload");
+  const [isRecording, setIsRecording] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const timerRef = useRef(null);
+  const streamRef = useRef(null);
+
   const fileRef = useRef(null);
   const socketRef = useRef(null);
 
@@ -224,6 +241,44 @@ export default function App() {
 
   const ALLOWED_AUDIO_EXTENSIONS = ["mp3", "wav", "m4a", "ogg", "flac", "webm", "aac", "mp4", "mpeg", "mpg", "m4v"];
 
+  const stopRecordingTracks = useCallback(() => {
+    if (streamRef.current) {
+      try {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+      } catch {
+        // ignore
+      }
+      streamRef.current = null;
+    }
+  }, []);
+
+  const cancelRecording = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.ondataavailable = null;
+      mediaRecorderRef.current.onstop = null;
+      if (mediaRecorderRef.current.state !== "inactive") {
+        try { mediaRecorderRef.current.stop(); } catch { /* ignore */ }
+      }
+      mediaRecorderRef.current = null;
+    }
+    stopRecordingTracks();
+    audioChunksRef.current = [];
+    setIsRecording(false);
+    setIsPaused(false);
+    setRecordSeconds(0);
+  }, [stopRecordingTracks]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      stopRecordingTracks();
+    };
+  }, [stopRecordingTracks]);
+
   const acceptFile = (f) => {
     if (!f) return;
     const ext = f.name?.split(".").pop()?.toLowerCase() || "";
@@ -245,11 +300,107 @@ export default function App() {
   };
 
   const clearFile = () => {
+    cancelRecording();
     setFile(null);
     setAudioUrl(null);
     setResult(null);
     setProgress(null);
     if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const startRecording = async () => {
+    setError("");
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      return setError("Browser Anda tidak mendukung perekaman audio langsung (getUserMedia tidak tersedia).");
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+
+      let mimeType = "";
+      if (typeof MediaRecorder !== "undefined") {
+        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) mimeType = "audio/webm;codecs=opus";
+        else if (MediaRecorder.isTypeSupported("audio/webm")) mimeType = "audio/webm";
+        else if (MediaRecorder.isTypeSupported("audio/mp4")) mimeType = "audio/mp4";
+        else if (MediaRecorder.isTypeSupported("audio/ogg")) mimeType = "audio/ogg";
+      }
+
+      const options = mimeType ? { mimeType } : undefined;
+      const mediaRecorder = new MediaRecorder(stream, options);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const actualMime = mediaRecorder.mimeType || mimeType || "audio/webm";
+        const ext = actualMime.includes("mp4") ? "mp4" : actualMime.includes("ogg") ? "ogg" : actualMime.includes("wav") ? "wav" : "webm";
+        const blob = new Blob(audioChunksRef.current, { type: actualMime });
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, "0");
+        const filename = `rekaman_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.${ext}`;
+        const recFile = new File([blob], filename, { type: actualMime });
+        acceptFile(recFile);
+        stopRecordingTracks();
+      };
+
+      mediaRecorder.start(250);
+      setRecordSeconds(0);
+      setIsRecording(true);
+      setIsPaused(false);
+
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = setInterval(() => {
+        setRecordSeconds((prev) => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error("Recording error:", err);
+      stopRecordingTracks();
+      setError(`Gagal mengakses mikrofon: ${err.message || "Izin mikrofon ditolak."}`);
+    }
+  };
+
+  const pauseRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.pause();
+      setIsPaused(true);
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+  };
+
+  const resumeRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "paused") {
+      mediaRecorderRef.current.resume();
+      setIsPaused(false);
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = setInterval(() => {
+        setRecordSeconds((prev) => prev + 1);
+      }, 1000);
+    }
+  };
+
+  const stopRecording = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+    setIsPaused(false);
+  };
+
+  const handleSourceChange = (newSource) => {
+    if (isRecording) {
+      cancelRecording();
+    }
+    setAudioSource(newSource);
+    clearFile();
   };
 
   const copyToClipboard = (text) => {
@@ -646,63 +797,229 @@ export default function App() {
               </div>
             </div>
 
-            {/* Step 2: Audio Uploader */}
+            {/* Step 2: Audio Source (Upload or Direct Browser Record) */}
             <div className="bg-[#151821] border border-[#1e2330] rounded-2xl p-6 space-y-4">
-              <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-                <Upload className="w-4 h-4 text-indigo-400" />
-                Unggah File Audio Rapat
-              </h2>
-
-              {!file ? (
-                <div
-                  onClick={() => fileRef.current?.click()}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => { e.preventDefault(); e.dataTransfer.files[0] && acceptFile(e.dataTransfer.files[0]); }}
-                  className="border-2 border-dashed border-[#1e2330] hover:border-indigo-500/50 rounded-xl p-10 flex flex-col items-center justify-center gap-3 cursor-pointer transition-all group"
-                >
-                  <div className="w-14 h-14 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center group-hover:bg-indigo-600/20 transition-all">
-                    <FileAudio className="w-7 h-7 text-indigo-400" />
-                  </div>
-                  <p className="text-slate-400 text-sm">
-                    <span className="text-indigo-400 font-medium">Klik untuk memilih file</span> atau seret audio ke sini
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                    {audioSource === "upload" ? (
+                      <Upload className="w-4 h-4 text-indigo-400" />
+                    ) : (
+                      <Mic className="w-4 h-4 text-rose-400 animate-pulse" />
+                    )}
+                    Sumber Audio Rapat
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Pilih metode input: unggah berkas audio/video atau rekam langsung percakapan dari browser
                   </p>
-                  <p className="text-slate-500 text-xs font-mono">Format didukung: MP3, WAV, M4A, MP4, MPEG, OGG, FLAC, AAC, WEBM</p>
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept="audio/*,video/mp4,video/mpeg,.mp3,.wav,.m4a,.ogg,.flac,.webm,.aac,.mp4,.mpeg,.mpg,.m4v"
-                    className="hidden"
-                    onChange={(e) => e.target.files[0] && acceptFile(e.target.files[0])}
-                  />
                 </div>
-              ) : (
+
+                {/* Dropdown Selector */}
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-slate-400 font-medium">Sumber Audio:</label>
+                  <select
+                    value={audioSource}
+                    disabled={isRecording || processing}
+                    onChange={(e) => handleSourceChange(e.target.value)}
+                    className="bg-[#0c0e14] border border-[#1e2330] text-slate-200 text-xs rounded-xl px-3 py-2 font-medium focus:outline-none focus:border-indigo-500 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <option value="upload">📁 Unggah File Audio</option>
+                    <option value="record">🎙️ Rekam Langsung dari Browser</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Mode 1: Unggah File Audio */}
+              {audioSource === "upload" && (
+                !file ? (
+                  <div
+                    onClick={() => fileRef.current?.click()}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => { e.preventDefault(); e.dataTransfer.files[0] && acceptFile(e.dataTransfer.files[0]); }}
+                    className="border-2 border-dashed border-[#1e2330] hover:border-indigo-500/50 rounded-xl p-10 flex flex-col items-center justify-center gap-3 cursor-pointer transition-all group"
+                  >
+                    <div className="w-14 h-14 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center group-hover:bg-indigo-600/20 transition-all">
+                      <FileAudio className="w-7 h-7 text-indigo-400" />
+                    </div>
+                    <p className="text-slate-400 text-sm">
+                      <span className="text-indigo-400 font-medium">Klik untuk memilih file</span> atau seret audio ke sini
+                    </p>
+                    <p className="text-slate-500 text-xs font-mono">Format didukung: MP3, WAV, M4A, MP4, MPEG, OGG, FLAC, AAC, WEBM</p>
+                    <input
+                      ref={fileRef}
+                      type="file"
+                      accept="audio/*,video/mp4,video/mpeg,.mp3,.wav,.m4a,.ogg,.flac,.webm,.aac,.mp4,.mpeg,.mpg,.m4v"
+                      className="hidden"
+                      onChange={(e) => e.target.files[0] && acceptFile(e.target.files[0])}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between bg-[#0c0e14] border border-[#1e2330] rounded-xl px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <FileAudio className="w-4 h-4 text-indigo-400" />
+                        <div>
+                          <p className="text-sm font-medium text-slate-200 truncate max-w-[280px] md:max-w-md">{file.name}</p>
+                          <p className="text-xs text-slate-500">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                        </div>
+                      </div>
+                      {!processing && (
+                        <button onClick={clearFile} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-950/30 rounded-lg">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                    {audioUrl && <audio src={audioUrl} controls className="w-full h-9 rounded-lg accent-indigo-500" />}
+                    <button
+                      onClick={handleProcess}
+                      disabled={processing}
+                      className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white py-3.5 rounded-xl font-semibold text-sm transition-all shadow-lg shadow-indigo-600/20"
+                    >
+                      {processing ? (
+                        <><RefreshCw className="w-4 h-4 animate-spin" /> Memproses Transkripsi ({COMBOS.find((c) => c.id === selectedCombo)?.badge})...</>
+                      ) : (
+                        <><Zap className="w-4 h-4" /> Mulai Transkripsi dengan Combo #{selectedCombo}</>
+                      )}
+                    </button>
+                  </div>
+                )
+              )}
+
+              {/* Mode 2: Rekam Langsung dari Browser */}
+              {audioSource === "record" && (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between bg-[#0c0e14] border border-[#1e2330] rounded-xl px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <FileAudio className="w-4 h-4 text-indigo-400" />
+                  {!file && !isRecording && (
+                    <div className="border border-[#1e2330] bg-[#0c0e14] rounded-xl p-8 flex flex-col items-center justify-center gap-4 text-center">
+                      <button
+                        onClick={startRecording}
+                        disabled={processing}
+                        className="w-20 h-20 rounded-full bg-gradient-to-tr from-rose-600 to-red-500 hover:from-rose-500 hover:to-red-400 text-white flex items-center justify-center shadow-lg shadow-rose-600/30 hover:scale-105 transition-all group cursor-pointer"
+                      >
+                        <Mic className="w-8 h-8 group-hover:scale-110 transition-transform" />
+                      </button>
                       <div>
-                        <p className="text-sm font-medium text-slate-200 truncate max-w-[280px] md:max-w-md">{file.name}</p>
-                        <p className="text-xs text-slate-500">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                        <h3 className="text-sm font-semibold text-slate-200">Mulai Perekaman Audio Rapat</h3>
+                        <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                          Pastikan mikrofon browser diizinkan. Klik tombol di atas untuk mulai merekam percakapan rapat secara langsung.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono bg-[#151821] px-3 py-1 rounded-full border border-[#1e2330]">
+                        <Radio className="w-3.5 h-3.5 text-rose-400" /> Siap Merekam Mikrofon Browser
                       </div>
                     </div>
-                    {!processing && (
-                      <button onClick={clearFile} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-950/30 rounded-lg">
-                        <Trash2 className="w-4 h-4" />
+                  )}
+
+                  {isRecording && (
+                    <div className="border border-rose-500/40 bg-gradient-to-b from-rose-950/20 to-[#0c0e14] rounded-xl p-6 space-y-6">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <span className={`w-3 h-3 rounded-full ${isPaused ? "bg-amber-400" : "bg-rose-500 animate-ping"}`} />
+                          <span className={`text-xs font-semibold uppercase tracking-wider ${isPaused ? "text-amber-400" : "text-rose-400"}`}>
+                            {isPaused ? "Perekaman Dijeda" : "Sedang Merekam Suara..."}
+                          </span>
+                        </div>
+                        <div className="font-mono text-2xl font-bold text-white tracking-widest tabular-nums bg-[#151821] px-4 py-1.5 rounded-xl border border-[#1e2330]">
+                          {fmtTimer(recordSeconds)}
+                        </div>
+                      </div>
+
+                      {/* Animated Wave Indicator */}
+                      <div className="flex items-center justify-center gap-1.5 h-12">
+                        {[40, 75, 55, 90, 65, 80, 45, 95, 60, 85, 50, 70, 90, 40, 60].map((h, i) => (
+                          <span
+                            key={i}
+                            className={`w-1.5 rounded-full transition-all duration-300 ${
+                              isPaused
+                                ? "bg-slate-700 h-2"
+                                : "bg-rose-500 animate-pulse"
+                            }`}
+                            style={{
+                              height: isPaused ? "8px" : `${Math.max(12, Math.round(h * (0.5 + ((i % 5) * 0.1))))}px`,
+                              animationDelay: `${(i * 0.1).toFixed(1)}s`,
+                            }}
+                          />
+                        ))}
+                      </div>
+
+                      {/* Control Buttons */}
+                      <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                        {isPaused ? (
+                          <button
+                            onClick={resumeRecording}
+                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-medium text-xs shadow-lg shadow-amber-600/20 transition-all"
+                          >
+                            <Play className="w-4 h-4 fill-current" /> Lanjutkan (Resume)
+                          </button>
+                        ) : (
+                          <button
+                            onClick={pauseRecording}
+                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1e2330] hover:bg-[#282f40] text-slate-200 font-medium text-xs border border-slate-700 transition-all"
+                          >
+                            <Pause className="w-4 h-4" /> Jeda (Pause)
+                          </button>
+                        )}
+
+                        <button
+                          onClick={stopRecording}
+                          className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs shadow-lg shadow-rose-600/30 transition-all"
+                        >
+                          <Square className="w-4 h-4 fill-current" /> Selesai Merekam
+                        </button>
+
+                        <button
+                          onClick={cancelRecording}
+                          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-transparent hover:bg-red-950/40 text-slate-400 hover:text-red-400 text-xs transition-all"
+                        >
+                          <X className="w-4 h-4" /> Batalkan
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Recorded File Ready for Preview & Transcription */}
+                  {!isRecording && file && (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between bg-[#0c0e14] border border-emerald-500/30 rounded-xl px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                            <CheckCircle className="w-4 h-4 text-emerald-400" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-slate-200 truncate max-w-[280px] md:max-w-md">{file.name}</p>
+                            <p className="text-xs text-slate-500 font-mono">
+                              {(file.size / 1024 / 1024).toFixed(2)} MB • Durasi rekaman: {fmtTimer(recordSeconds)}
+                            </p>
+                          </div>
+                        </div>
+                        {!processing && (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={clearFile}
+                              title="Rekam Ulang"
+                              className="px-2.5 py-1 text-xs text-slate-400 hover:text-slate-200 hover:bg-[#1e2330] rounded-lg border border-[#1e2330] transition-all flex items-center gap-1"
+                            >
+                              <RefreshCw className="w-3 h-3" /> Rekam Ulang
+                            </button>
+                            <button onClick={clearFile} title="Hapus" className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-950/30 rounded-lg">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {audioUrl && <audio src={audioUrl} controls className="w-full h-9 rounded-lg accent-indigo-500" />}
+                      <button
+                        onClick={handleProcess}
+                        disabled={processing}
+                        className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white py-3.5 rounded-xl font-semibold text-sm transition-all shadow-lg shadow-indigo-600/20"
+                      >
+                        {processing ? (
+                          <><RefreshCw className="w-4 h-4 animate-spin" /> Memproses Transkripsi ({COMBOS.find((c) => c.id === selectedCombo)?.badge})...</>
+                        ) : (
+                          <><Zap className="w-4 h-4" /> Mulai Transkripsi Rekaman dengan Combo #{selectedCombo}</>
+                        )}
                       </button>
-                    )}
-                  </div>
-                  {audioUrl && <audio src={audioUrl} controls className="w-full h-9 rounded-lg accent-indigo-500" />}
-                  <button
-                    onClick={handleProcess}
-                    disabled={processing}
-                    className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white py-3.5 rounded-xl font-semibold text-sm transition-all shadow-lg shadow-indigo-600/20"
-                  >
-                    {processing ? (
-                      <><RefreshCw className="w-4 h-4 animate-spin" /> Memproses Transkripsi ({COMBOS.find((c) => c.id === selectedCombo)?.badge})...</>
-                    ) : (
-                      <><Zap className="w-4 h-4" /> Mulai Transkripsi dengan Combo #{selectedCombo}</>
-                    )}
-                  </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

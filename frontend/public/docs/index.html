@@ -268,6 +268,7 @@
 
         <div class="nav-group">
           <div class="nav-label">Pipeline &amp; Output</div>
+          <a href="#dual-audio-source" class="nav-item">Dual Sumber Audio (Unggah &amp; Rekam)</a>
           <a href="#combos" class="nav-item">3 Combo Pipeline STT</a>
           <a href="#outputs" class="nav-item">3 Format Output Rapat</a>
           <a href="#paraphrase" class="nav-item">Gaya Parafrase AI</a>
@@ -392,6 +393,7 @@
       <section id="fitur">
         <h2>2. Fitur Unggulan</h2>
         <ul style="padding-left: 20px; margin-bottom: 24px; color: #cbd5e1; font-size: 14.5px;">
+          <li style="margin-bottom: 8px;"><strong>Dual Sumber Audio (Unggah Berkas &amp; Rekam Langsung Browser):</strong> Pilihan fleksibel menggunakan dropdown selector untuk mengunggah file rekaman (MP3, WAV, M4A, MP4, MPEG, WebM, OGG, dll.) atau merekam percakapan rapat langsung dari mikrofon browser secara realtime dengan indikator gelombang suara audio, timer berjalan, tombol jeda/lanjutkan, dan pratinjau audio sebelum ditranskrip.</li>
           <li style="margin-bottom: 8px;"><strong>Pemilihan 3 Combo Pipeline:</strong> Opsi konfigurasi audio &amp; model sebelum menjalankan proses sesuai kebutuhan akurasi atau kecepatan.</li>
           <li style="margin-bottom: 8px;"><strong>3 Format Output Rapat:</strong> MoM Markdown standar (.md), Rangkuman visual interaktif (HTML/UI), dan Mindmap diskusi pohon topik (Markmap).</li>
           <li style="margin-bottom: 8px;"><strong>Pilihan Tipe Parafrase AI:</strong> Fleksibilitas memilih gaya "Poin-poin Penting" (ringkas &amp; padat), "Detail &amp; Deskriptif" (komprehensif), atau "Ringkasan Eksekutif".</li>
@@ -561,9 +563,9 @@ npm run dev
         <p>Buka browser Anda di **<a href="http://localhost:5173" target="_blank">http://localhost:5173</a>**:</p>
         <ol style="padding-left: 20px; font-size: 14px; color: #cbd5e1; line-height: 1.8;">
           <li>Klik menu <strong>Pengaturan</strong>: Periksa checklist <strong>Preflight Status</strong> untuk memastikan modul <em>uploads, knowledge, ffmpeg, format_mom, whisper_model, database</em> semua centang hijau.</li>
-          <li>Periksa bagian <strong>Penyimpanan Database</strong>: default menggunakan SQLite lokal mandiri tanpa setup. Jika menggunakan MySQL atau Postgres, masukkan data koneksi dan klik tombol <strong>Migrate Database</strong>.</li>
+          <li>Periksa bagian <strong>Penyimpanan Database</strong>: default menggunakan SQLite lokal mandiri tanpa setup. Jika menggunakan MySQL atau Postgres, masukkan data koneksi dan klik tombol <strong>Migrate Database</strong> atau <strong>Set Default</strong>.</li>
           <li>Klik tombol <strong>Uji Koneksi AI</strong> untuk memastikan integrasi LLM terhubung.</li>
-          <li>Kembali ke menu <strong>Transkripsi</strong>: Drag &amp; drop file audio/video rapat Anda (<code>.mp4</code>, <code>.mpeg</code>, <code>.m4a</code>, <code>.mp3</code>, <code>.wav</code>, dll.), pilih <strong>Combo 1</strong>, lalu klik <strong>Mulai Transkripsi &amp; Analisis</strong>!</li>
+          <li>Kembali ke menu <strong>Transkripsi</strong>: Pilih dropdown <strong>Sumber Audio</strong> (<em>📁 Unggah File Audio</em> atau <em>🎙️ Rekam Langsung dari Browser</em>). Jika merekam langsung, klik tombol mikrofon, bicara, lalu klik "Selesai Merekam". Pilih <strong>Combo 1</strong>, lalu klik <strong>Mulai Transkripsi</strong>!</li>
         </ol>
       </section>
 
@@ -634,6 +636,43 @@ bun build --compile --minify backend/src/index.ts --outfile release/resmeet-mac
 
 # Kompilasi executable standalone Windows (.exe)
 bun build --compile --minify --target=bun-windows-x64 backend/src/index.ts --outfile release/resmeet-win.exe</code></pre>
+        </div>
+      </section>
+
+      <!-- Dual Sumber Audio: Unggah File atau Rekam Langsung Browser -->
+      <section id="dual-audio-source">
+        <h2>Dual Sumber Audio: Unggah File atau Rekam Langsung Browser</h2>
+        <p>
+          Resmeet-STT menyediakan 2 metode input audio fleksibel yang dapat dipilih melalui dropdown selector pada panel Transkripsi:
+        </p>
+        <div class="grid-2">
+          <div class="card">
+            <h3 style="color: #818cf8; margin-top: 0; display: flex; align-items: center; gap: 8px;">
+              <span>📁 1. Unggah File Audio / Video</span>
+            </h3>
+            <p style="font-size: 13px; color: #cbd5e1; margin-bottom: 8px;">
+              Mendukung drag-and-drop berkas audio maupun video rapat yang sudah direkam sebelumnya dari laptop, recorder eksternal, atau aplikasi meeting (Zoom, Google Meet, Teams):
+            </p>
+            <ul style="font-size: 12px; color: #94a3b8; padding-left: 18px; line-height: 1.6;">
+              <li><strong>Format Audio:</strong> MP3, WAV, M4A, OGG, FLAC, AAC, WEBM.</li>
+              <li><strong>Format Video (Suara):</strong> MP4, MPEG, MPG, M4V (audio langsung diekstrak otomatis oleh FFmpeg 16kHz mono).</li>
+              <li>Pratinjau pemutar suara (audio player) interaktif dan tampilan ukuran berkas instan.</li>
+            </ul>
+          </div>
+
+          <div class="card">
+            <h3 style="color: #f43f5e; margin-top: 0; display: flex; align-items: center; gap: 8px;">
+              <span>🎙️ 2. Rekam Langsung dari Browser</span>
+            </h3>
+            <p style="font-size: 13px; color: #cbd5e1; margin-bottom: 8px;">
+              Perekaman audio rapat langsung menggunakan mikrofon laptop atau headset secara realtime via browser tanpa memerlukan software tambahan:
+            </p>
+            <ul style="font-size: 12px; color: #94a3b8; padding-left: 18px; line-height: 1.6;">
+              <li><strong>Live Audio Waveform:</strong> Bar animasi gelombang suara interaktif saat berbicara.</li>
+              <li><strong>Timer &amp; Kontrol Lengkap:</strong> Durasi berjalan (mm:ss), tombol Jeda (Pause), Lanjutkan (Resume), Batalkan, dan Selesai Merekam.</li>
+              <li><strong>Pratinjau &amp; Rekam Ulang:</strong> Dengarkan hasil rekaman sebelum diproses atau klik tombol <em>Rekam Ulang</em> jika ingin mengulang.</li>
+            </ul>
+          </div>
         </div>
       </section>
 

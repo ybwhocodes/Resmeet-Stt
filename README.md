@@ -29,6 +29,10 @@ Bagi pengguna yang ingin langsung menggunakan aplikasi tanpa perlu `git clone` a
 ## 🌟 Fitur Utama
 
 - **⚡ Runtime Bun.js Super Cepat (Port 8200):** Concurrency tinggi, startup instan, konsumsi RAM sangat rendah (<100MB), dan streaming progress WebSocket Socket.IO realtime.
+- **🎙️ Dual Sumber Audio (Unggah Berkas & Rekam Langsung dari Browser):**
+  - **Dropdown Pemilih Sumber:** Pengguna dapat beralih antara *📁 Unggah File Audio* dan *🎙️ Rekam Langsung dari Browser*.
+  - **Mode Unggah:** Mendukung drag-and-drop file audio (`.mp3`, `.wav`, `.m4a`, `.ogg`, `.flac`, `.webm`, `.aac`) dan file video (`.mp4`, `.mpeg`, `.mpg`, `.m4v`).
+  - **Mode Rekam Langsung Browser:** Merekam percakapan langsung melalui mikrofon dengan live waveform visualizer, penghitung durasi (timer), kontrol Jeda (Pause) / Lanjutkan (Resume), Batal, Selesai, serta pratinjau player dan opsi rekam ulang.
 - **🗄️ Multi-Database Storage, Set Default Driver & Tombol Migrasi In-App:**
   - **Tombol "Set Default Database":** Tersedia tombol 'Set Default' untuk SQLite, MySQL, maupun PostgreSQL dengan indikator badge 'Default Aktif' realtime di header panel dan kartu pilihan.
   - **SQLite (Default Mandiri):** Aktif otomatis out-of-the-box tanpa konfigurasi eksternal. Tabel `transcripts` langsung siap dipakai tanpa tombol migrasi.
@@ -227,9 +231,11 @@ npm run dev
    - Periksa bagian **Penyimpanan Database**: secara default **SQLite** aktif mandiri. Jika memilih MySQL atau Postgres, masukkan data koneksi lalu klik tombol **Migrate Database**.
    - Masukkan AI URL & API-Key Anda, lalu klik tombol **Uji Koneksi AI**.
 3. Kembali ke menu **Transkripsi**:
-   - Tarik & lepas file audio/video rapat Anda (`.mp4`, `.mpeg`, `.m4a`, `.mp3`, `.wav`, `.aac`, dll.).
+   - Pilih sumber audio via dropdown: **📁 Unggah File Audio** atau **🎙️ Rekam Langsung dari Browser**.
+   - Jika memilih *Unggah File*: Tarik & lepas file audio/video rapat Anda (`.mp4`, `.mpeg`, `.m4a`, `.mp3`, `.wav`, `.aac`, dll.).
+   - Jika memilih *Rekam Langsung*: Klik tombol mikrofon merah, rekam percakapan rapat, gunakan tombol Jeda (Pause) jika perlu jeda, lalu klik **Selesai Merekam**.
    - Pilih **Combo Pipeline** (Combo 1 untuk akurasi tertinggi).
-   - Klik **Mulai Transkripsi & Analisis**.
+   - Klik **Mulai Transkripsi**.
 4. Setelah selesai, jelajahi **3 Format Output**:
    - **Tab 1: Format .MD (MoM)** — Notulen lengkap format Markdown.
    - **Tab 2: Rangkuman HTML/UI** — Kartu topik, keputusan, checklist aksi tindak lanjut interaktif, dan tombol download HTML mandiri.
