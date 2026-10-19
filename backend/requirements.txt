@@ -1,0 +1,18 @@
+# Resmeet-STT Python Dependencies
+# Audio Preprocessing & ASR Engine
+pydub>=0.25.1
+scipy>=1.13.0
+numpy>=1.26.0
+soundfile>=0.12.1
+noisereduce>=3.0.0
+torch>=2.0.0
+torchaudio>=2.0.0
+silero-vad>=5.1.0
+faster-whisper>=1.0.0
+whisperx>=3.1.0
+librosa>=0.10.0
+flask>=3.0.0
+flask-cors>=4.0.0
+flask-socketio>=5.3.0
+mysql-connector-python>=8.0.0
+python-dotenv>=1.0.0

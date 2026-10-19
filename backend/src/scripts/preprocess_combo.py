@@ -52,6 +52,94 @@ def apply_bandpass(audio, sr, low_hz=80, high_hz=7500):
     b, a = butter(2, [low, high], btype='bandpass')
     return filtfilt(b, a, audio)
 
+def apply_spectral_smoothing(audio, kernel_size=3):
+    """
+    Applies 1D median filter from scipy.signal to eliminate electrical clicks/pops
+    without smearing speech formants.
+    """
+    try:
+        from scipy.signal import medfilt
+        if len(audio) > kernel_size:
+            return medfilt(audio, kernel_size=kernel_size).astype(float)
+    except Exception as e:
+        log_err(f"scipy medfilt skipped: {e}")
+    return audio
+
+def pydub_inspect_and_load(input_path: str, target_sr: int = 16000):
+    """
+    Inspects audio using pydub:
+    - Measures dBFS (average RMS level) and max_dBFS (peak level)
+    - If audio is too faint (dBFS < -30), applies headroom normalization via pydub
+    - Falls back to loading via pydub if soundfile fails
+    Returns (audio_np, sr, pydub_stats)
+    """
+    import numpy as np
+    stats = {
+        "pydub_available": False,
+        "raw_dbfs": None,
+        "max_dbfs": None,
+        "normalized_applied": False,
+        "loudness_boost_db": 0.0,
+        "loader": "soundfile",
+    }
+
+    try:
+        from pydub import AudioSegment, effects
+        stats["pydub_available"] = True
+        seg = AudioSegment.from_file(input_path)
+        stats["raw_dbfs"] = round(float(seg.dBFS), 2)
+        stats["max_dbfs"] = round(float(seg.max_dBFS), 2)
+
+        # If audio is very faint (< -30 dBFS), normalize headroom via pydub
+        if seg.dBFS < -30.0 and seg.max_dBFS < -8.0:
+            boosted = effects.normalize(seg, headroom=1.0)
+            boost_gain = round(float(boosted.dBFS - seg.dBFS), 2)
+            stats["normalized_applied"] = True
+            stats["loudness_boost_db"] = boost_gain
+            seg = boosted
+            log_err(f"pydub: faint audio boosted by +{boost_gain}dB (was {stats['raw_dbfs']} dBFS)")
+
+        # Ensure 16kHz mono PCM
+        seg = seg.set_channels(1).set_frame_rate(target_sr)
+        samples = np.array(seg.get_array_of_samples(), dtype=np.float32)
+        max_possible = float(1 << (seg.sample_width * 8 - 1))
+        audio = samples / max_possible
+        stats["loader"] = "pydub"
+        return audio.astype(np.float32), target_sr, stats
+
+    except Exception as e_pydub:
+        log_err(f"pydub loader notice ({e_pydub}) — using soundfile")
+        import soundfile as sf
+        audio, sr = sf.read(input_path, always_2d=False)
+        if audio.ndim > 1:
+            audio = audio.mean(axis=1)
+        return audio.astype(np.float32), sr, stats
+
+def detect_speech_with_pydub(input_path: str, min_silence_len: int = 300, silence_thresh_offset: float = -16.0):
+    """
+    Fallback VAD using pydub.silence.detect_nonsilent.
+    Preserves exact timestamp offsets.
+    """
+    try:
+        from pydub import AudioSegment, silence
+        seg = AudioSegment.from_file(input_path)
+        thresh = max(-45.0, seg.dBFS + silence_thresh_offset)
+        intervals = silence.detect_nonsilent(seg, min_silence_len=min_silence_len, silence_thresh=thresh)
+        if not intervals:
+            return None
+        return [
+            {
+                "start_sample": int((s / 1000.0) * 16000),
+                "end_sample": int((e / 1000.0) * 16000),
+                "start_s": round(s / 1000.0, 4),
+                "end_s": round(e / 1000.0, 4),
+            }
+            for s, e in intervals
+        ]
+    except Exception as e:
+        log_err(f"pydub silence detection error: {e}")
+        return None
+
 def apply_speech_agc(audio, sr, target_rms=0.08, max_gain=4.0):
     """
     Automatic Gain Control (AGC) with smooth envelope to boost quiet speech
@@ -204,10 +292,8 @@ def run_combo_processing(input_path: str, output_path: str, combo: str):
     }
 
     try:
-        audio, sr = sf.read(input_path, always_2d=False)
-        if audio.ndim > 1:
-            audio = audio.mean(axis=1)
-        audio = audio.astype(np.float32)
+        audio, sr, pydub_stats = pydub_inspect_and_load(input_path, target_sr=16000)
+        diag['pydub_stats'] = pydub_stats
 
         diag['input_duration_s'] = round(len(audio) / sr, 3)
 
@@ -215,10 +301,11 @@ def run_combo_processing(input_path: str, output_path: str, combo: str):
             diag['warnings'].append("Input audio is empty — using 0.5s silence fallback")
             audio = np.zeros(int(sr * 0.5), dtype=np.float32)
 
-        # ── Step 1: Frequency Filtering ──────────────────────────────────
+        # ── Step 1: Frequency Filtering (scipy Butterworth + median filter) ────
         if combo == '2':
             # Combo 2: Vocal bandpass (80Hz - 7.5kHz) isolates human speech frequencies
             audio = apply_bandpass(audio, sr, low_hz=80, high_hz=7500)
+            audio = apply_spectral_smoothing(audio, kernel_size=3)
         else:
             audio = apply_highpass(audio, sr, cutoff_hz=65)
 
@@ -245,6 +332,13 @@ def run_combo_processing(input_path: str, output_path: str, combo: str):
                 min_silence_ms=300,
                 speech_pad_ms=200,
             )
+
+            # Robust fallback to pydub VAD if Silero returns no segments
+            if not segments:
+                pydub_segs = detect_speech_with_pydub(input_path)
+                if pydub_segs:
+                    segments = pydub_segs
+                    diag['warnings'].append("Silero VAD fallback: used pydub non-silent intervals")
 
             if segments:
                 audio = build_silenced_audio(audio, sr, segments)
@@ -279,6 +373,13 @@ def run_combo_processing(input_path: str, output_path: str, combo: str):
                     audio = audio[first_start:last_end]
                     diag['vad_segment_count'] = len(ts)
                     log_err(f"Combo 1 VAD trim: kept {first_start/sr:.2f}s–{last_end/sr:.2f}s of {diag['input_duration_s']:.2f}s")
+                else:
+                    pydub_segs = detect_speech_with_pydub(input_path)
+                    if pydub_segs:
+                        first_start = max(0, pydub_segs[0]['start_sample'] - int(sr * 0.3))
+                        last_end = min(len(audio), pydub_segs[-1]['end_sample'] + int(sr * 0.3))
+                        audio = audio[first_start:last_end]
+                        diag['vad_segment_count'] = len(pydub_segs)
             except Exception as e:
                 diag['warnings'].append(f"Combo 1 VAD trim skipped: {e}")
 
