@@ -41,6 +41,60 @@ def apply_highpass(audio, sr, cutoff_hz=65):
     b, a = butter(2, cutoff_hz / nyq, btype='highpass')
     return filtfilt(b, a, audio)
 
+def apply_bandpass(audio, sr, low_hz=80, high_hz=7500):
+    """Bandpass Butterworth filter isolating vocal speech frequencies (80Hz - 7.5kHz)."""
+    from scipy.signal import butter, filtfilt
+    nyq = 0.5 * sr
+    low = max(low_hz / nyq, 0.001)
+    high = min(high_hz / nyq, 0.999)
+    if low >= high:
+        return audio
+    b, a = butter(2, [low, high], btype='bandpass')
+    return filtfilt(b, a, audio)
+
+def apply_speech_agc(audio, sr, target_rms=0.08, max_gain=4.0):
+    """
+    Automatic Gain Control (AGC) with smooth envelope to boost quiet speech
+    and tame excessive peaks, optimal for small Whisper models.
+    """
+    import numpy as np
+    if len(audio) == 0:
+        return audio
+    frame_len = int(sr * 0.05)  # 50ms window
+    if frame_len <= 1:
+        return audio
+    sq = audio ** 2
+    window = np.ones(frame_len) / frame_len
+    env = np.sqrt(np.convolve(sq, window, mode='same') + 1e-9)
+    noise_floor = 0.003
+    gain = np.where(env > noise_floor, target_rms / np.maximum(env, 0.002), 1.0)
+    gain = np.clip(gain, 0.4, max_gain)
+    smooth_len = int(sr * 0.02)
+    if smooth_len > 1:
+        gain = np.convolve(gain, np.ones(smooth_len) / smooth_len, mode='same')
+    out = audio * gain
+    peak = np.max(np.abs(out))
+    if peak > 0.95:
+        out = (out / peak) * 0.95
+    return out.astype(np.float32)
+
+def apply_noise_gate(audio, sr, threshold_db=-42.0):
+    """Zero out true background hiss during pauses to prevent small-model hallucination."""
+    import numpy as np
+    if len(audio) == 0:
+        return audio
+    threshold = 10.0 ** (threshold_db / 20.0)
+    frame_len = int(sr * 0.03)  # 30ms window
+    if frame_len <= 1:
+        return audio
+    sq = audio ** 2
+    env = np.sqrt(np.convolve(sq, np.ones(frame_len) / frame_len, mode='same') + 1e-9)
+    mask = (env >= threshold).astype(np.float32)
+    smooth_len = int(sr * 0.04)
+    if smooth_len > 1:
+        mask = np.convolve(mask, np.ones(smooth_len) / smooth_len, mode='same')
+    return (audio * np.clip(mask, 0.0, 1.0)).astype(np.float32)
+
 def apply_noisereduce(audio, sr, prop_decrease=0.40, n_fft=1024):
     """Stationary noise reduction. Fails gracefully."""
     try:
@@ -161,15 +215,28 @@ def run_combo_processing(input_path: str, output_path: str, combo: str):
             diag['warnings'].append("Input audio is empty — using 0.5s silence fallback")
             audio = np.zeros(int(sr * 0.5), dtype=np.float32)
 
-        # ── Step 1: Highpass filter (all combos) ─────────────────────────
-        audio = apply_highpass(audio, sr, cutoff_hz=65)
+        # ── Step 1: Frequency Filtering ──────────────────────────────────
+        if combo == '2':
+            # Combo 2: Vocal bandpass (80Hz - 7.5kHz) isolates human speech frequencies
+            audio = apply_bandpass(audio, sr, low_hz=80, high_hz=7500)
+        else:
+            audio = apply_highpass(audio, sr, cutoff_hz=65)
 
         # ── Step 2: Noise reduction (combo-specific strength) ─────────────
         prop = {'1': 0.40, '2': 0.35, '3': 0.25}.get(combo, 0.35)
         audio = apply_noisereduce(audio, sr, prop_decrease=prop, n_fft=1024)
 
-        # ── Step 3: Combo-specific VAD ────────────────────────────────────
-        if combo == '3':
+        # ── Step 3: Combo-specific Conditioning / VAD ────────────────────
+        if combo == '2':
+            # Combo 2 Optimization: AGC dynamics compression + silence noise gate
+            # Equalizes quiet speakers and silences room hiss to prevent small-model hallucination
+            try:
+                audio = apply_speech_agc(audio, sr, target_rms=0.08, max_gain=3.5)
+                audio = apply_noise_gate(audio, sr, threshold_db=-42.0)
+            except Exception as e_c2:
+                diag['warnings'].append(f"Combo 2 AGC/gate skipped: {e_c2}")
+
+        elif combo == '3':
             # Combo 3: Silero VAD with timestamp-preserving silence replacement
             segments = run_silero_vad_with_offsets(
                 audio, sr,
