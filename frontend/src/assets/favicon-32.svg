@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Rounded container -->
+  <rect x="2" y="2" width="28" height="28" rx="7" fill="#18181B" />
+  <!-- Scaled simplified glyphs for high visibility at tiny size -->
+  <line x1="8" y1="13" x2="8" y2="19" stroke="#C084FC" stroke-width="2" stroke-linecap="round" />
+  <line x1="12" y1="9" x2="12" y2="23" stroke="#E879F9" stroke-width="2.2" stroke-linecap="round" />
+  <!-- Central pulse -->
+  <circle cx="16" cy="16" r="1.5" fill="#F43F5E" />
+  <!-- Text bars -->
+  <rect x="19" y="10" width="7" height="2" rx="1" fill="#FFFFFF" />
+  <rect x="19" y="15" width="7" height="2" rx="1" fill="#E879F9" />
+  <rect x="19" y="20" width="4.5" height="2" rx="1" fill="#A78BFA" />
+</svg>

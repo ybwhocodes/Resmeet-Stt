@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 240" width="100%" height="100%">
+  <defs>
+    <linearGradient id="gradA" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4F46E5" />
+      <stop offset="100%" stop-color="#06B6D4" />
+    </linearGradient>
+  </defs>
+
+  <!-- Symbol: 200x200 inside 240 height -->
+  <g id="symbol-a" transform="translate(40, 20)">
+    <!-- Base container / shape R construct -->
+    <!-- Stem: 3 vertical audio bars that align to form the vertical spine of 'R' -->
+    <rect x="20" y="24" width="22" height="152" rx="11" fill="url(#gradA)" />
+
+    <!-- Sound bars expanding outward into R's upper loop -->
+    <path d="M42 46 C 75 46, 120 54, 120 95 C 120 134, 78 142, 42 142"
+          fill="none" stroke="url(#gradA)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" />
+
+    <!-- Text / Speech dynamic diagonal leg of 'R' transitioning into transcription bars -->
+    <path d="M78 136 L 126 176"
+          fill="none" stroke="url(#gradA)" stroke-width="22" stroke-linecap="round" />
+
+    <!-- Sound-to-text pulses inside loop: 3 audio/text dot-bars -->
+    <rect x="62" y="76" width="12" height="38" rx="6" fill="#06B6D4" />
+    <rect x="84" y="68" width="12" height="54" rx="6" fill="#4F46E5" />
+  </g>
+
+  <!-- Wordmark -->
+  <g id="wordmark-a" transform="translate(250, 75)">
+    <!-- Resmeet -->
+    <text x="0" y="65" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="68" font-weight="800" fill="#0F172A" letter-spacing="-1.5">
+      Res<tspan fill="#4F46E5">meet</tspan>
+    </text>
+    <!-- Tagline: SPEECH-TO-TEXT MEETING INTELLIGENCE -->
+    <text x="4" y="102" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="3.5">
+      SPEECH-TO-TEXT • AI TRANSCRIPT
+    </text>
+  </g>
+</svg>

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import MarkmapView from "./components/MarkmapView";
 import UiSummary from "./components/UiSummary";
+import resmeetSymbol from "./assets/resmeet_symbol.svg";
 
 const API = import.meta.env.VITE_API_BASE_URL || "http://localhost:8200/api";
 const SOCKET_URL = API.replace(/\/api\/?$/, "");
@@ -761,19 +762,25 @@ export default function App() {
     <div style={{ fontFamily: "'Sora', 'DM Sans', sans-serif" }} className="min-h-screen bg-[#0c0e14] text-slate-100 p-4 md:p-8">
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Navigation Bar */}
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-[#151821] to-[#0f1118] border border-[#1e2330] rounded-2xl px-6 py-4 shadow-xl">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center">
-              <Mic className="w-5 h-5 text-indigo-400" />
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-[#151821] via-[#12141c] to-[#0f1118] border border-[#1e2330] rounded-2xl px-6 py-4 shadow-xl">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#27272a] to-[#18181b] border border-purple-500/30 flex items-center justify-center p-1.5 shadow-lg shadow-purple-950/40">
+              <img
+                src={resmeetSymbol}
+                alt="Resmeet Symbol"
+                className="w-full h-full object-contain"
+              />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-                SuaraText
-                <span className="text-[10px] bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 px-2 py-0.5 rounded-full font-mono">
+              <h1 className="text-xl font-extrabold text-white tracking-tight flex items-center gap-2">
+                <span>Res<span className="text-purple-400">meet</span></span>
+                <span className="text-[10px] bg-purple-500/15 border border-purple-500/30 text-purple-300 px-2.5 py-0.5 rounded-full font-mono font-medium">
                   Bun + Whisper.cpp
                 </span>
               </h1>
-              <p className="text-xs text-slate-500 mt-0.5">Whisper.cpp STT + Jev-Guided Topics + Continuous RAG</p>
+              <p className="text-xs text-slate-400 mt-0.5 font-medium tracking-wide">
+                Speech-to-Text Intelligence • Notulen MoM & Continuous RAG
+              </p>
             </div>
           </div>
 
@@ -2290,8 +2297,9 @@ export default function App() {
           </div>
         )}
 
-        <footer className="text-center text-xs text-slate-700 py-3">
-          SuaraText · Bun.js + Whisper.cpp + DeepFilter/Silero-VAD + Jev Directed Topics
+        <footer className="text-center text-xs text-slate-500 py-4 flex items-center justify-center gap-2">
+          <img src={resmeetSymbol} alt="Resmeet" className="w-4 h-4 opacity-70" />
+          <span>Resmeet · Bun.js + Whisper.cpp + DeepFilter/Silero-VAD + Jev Directed Topics</span>
         </footer>
       </div>
     </div>

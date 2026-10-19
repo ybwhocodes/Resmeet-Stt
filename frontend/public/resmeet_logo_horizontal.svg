@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 240" width="100%" height="100%">
+  <defs>
+    <linearGradient id="cHorizGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B5CF6" />
+      <stop offset="100%" stop-color="#EC4899" />
+    </linearGradient>
+  </defs>
+
+  <!-- Symbol: 160x160 positioned at x=40, y=40 -->
+  <g id="symbol" transform="translate(40, 40)">
+    <rect x="0" y="0" width="160" height="160" rx="40" fill="#18181B" />
+    <!-- Audio Wave -->
+    <line x1="36" y1="64" x2="36" y2="96" stroke="#A78BFA" stroke-width="8" stroke-linecap="round" />
+    <line x1="52" y1="48" x2="52" y2="112" stroke="#C084FC" stroke-width="8" stroke-linecap="round" />
+    <line x1="68" y1="36" x2="68" y2="124" stroke="#E879F9" stroke-width="8" stroke-linecap="round" />
+    <!-- AI Core -->
+    <circle cx="85" cy="80" r="5" fill="#F43F5E" />
+    <!-- Transcript text -->
+    <rect x="98" y="52" width="38" height="8" rx="4" fill="#FFFFFF" />
+    <rect x="98" y="70" width="30" height="8" rx="4" fill="#FFFFFF" />
+    <rect x="98" y="88" width="40" height="8" rx="4" fill="#E879F9" />
+    <rect x="98" y="106" width="22" height="8" rx="4" fill="#A78BFA" />
+  </g>
+
+  <!-- Wordmark -->
+  <g id="wordmark" transform="translate(240, 75)">
+    <text x="0" y="66" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="72" font-weight="800" fill="#09090B" letter-spacing="-2">
+      Res<tspan fill="#8B5CF6">meet</tspan>
+    </text>
+    <text x="4" y="106" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" fill="#71717A" letter-spacing="4">
+      SPEECH-TO-TEXT INTELLIGENCE
+    </text>
+  </g>
+</svg>

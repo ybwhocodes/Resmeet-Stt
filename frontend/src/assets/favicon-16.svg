@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <rect width="16" height="16" rx="4" fill="#18181B" />
+  <!-- Left wave: 1 clean bar -->
+  <line x1="4.5" y1="4.5" x2="4.5" y2="11.5" stroke="#E879F9" stroke-width="1.8" stroke-linecap="round" />
+  <!-- Center dot -->
+  <circle cx="8" cy="8" r="1.2" fill="#F43F5E" />
+  <!-- Right text: 2 clean bars -->
+  <line x1="10.5" y1="6" x2="13.5" y2="6" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" />
+  <line x1="10.5" y1="10" x2="13.5" y2="10" stroke="#C084FC" stroke-width="1.8" stroke-linecap="round" />
+</svg>

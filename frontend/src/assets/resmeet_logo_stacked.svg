@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <!-- Symbol Centered: 180x180 at x=160, y=70 -->
+  <g id="symbol-stacked" transform="translate(160, 70)">
+    <rect x="0" y="0" width="180" height="180" rx="46" fill="#18181B" />
+    <!-- Audio Wave -->
+    <line x1="40" y1="72" x2="40" y2="108" stroke="#A78BFA" stroke-width="9" stroke-linecap="round" />
+    <line x1="58" y1="54" x2="58" y2="126" stroke="#C084FC" stroke-width="9" stroke-linecap="round" />
+    <line x1="76" y1="40" x2="76" y2="140" stroke="#E879F9" stroke-width="9" stroke-linecap="round" />
+    <!-- Center node -->
+    <circle cx="95" cy="90" r="6" fill="#F43F5E" />
+    <!-- Transcript text -->
+    <rect x="110" y="58" width="42" height="9" rx="4.5" fill="#FFFFFF" />
+    <rect x="110" y="78" width="34" height="9" rx="4.5" fill="#FFFFFF" />
+    <rect x="110" y="98" width="44" height="9" rx="4.5" fill="#E879F9" />
+    <rect x="110" y="118" width="24" height="9" rx="4.5" fill="#A78BFA" />
+  </g>
+
+  <!-- Wordmark Stacked Centered -->
+  <g id="wordmark-stacked" transform="translate(250, 320)">
+    <text x="0" y="40" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="64" font-weight="800" fill="#09090B" letter-spacing="-1.5">
+      Res<tspan fill="#8B5CF6">meet</tspan>
+    </text>
+    <text x="0" y="80" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="700" fill="#71717A" letter-spacing="4">
+      SPEECH-TO-TEXT INTELLIGENCE
+    </text>
+  </g>
+</svg>
