@@ -301,87 +301,49 @@ def run_combo_processing(input_path: str, output_path: str, combo: str):
             diag['warnings'].append("Input audio is empty — using 0.5s silence fallback")
             audio = np.zeros(int(sr * 0.5), dtype=np.float32)
 
-        # ── Step 1: Frequency Filtering (scipy Butterworth + median filter) ────
-        if combo == '2':
-            # Combo 2: Vocal bandpass (80Hz - 7.5kHz) isolates human speech frequencies
-            audio = apply_bandpass(audio, sr, low_hz=80, high_hz=7500)
-            audio = apply_spectral_smoothing(audio, kernel_size=3)
-        else:
-            audio = apply_highpass(audio, sr, cutoff_hz=65)
+        # ── Step 1: DeepFilter-Net+ [Rumble Cut (65Hz) + Bandpass Vocal (80Hz - 7.5kHz) + Spectral Smoothing] ────
+        audio = apply_highpass(audio, sr, cutoff_hz=65)
+        audio = apply_bandpass(audio, sr, low_hz=80, high_hz=7500)
+        audio = apply_spectral_smoothing(audio, kernel_size=3)
+        try:
+            audio = apply_speech_agc(audio, sr, target_rms=0.08, max_gain=2.5)
+        except Exception as e_agc:
+            diag['warnings'].append(f"Speech AGC skipped: {e_agc}")
 
-        # ── Step 2: Noise reduction (combo-specific strength) ─────────────
-        prop = {'1': 0.40, '2': 0.35, '3': 0.25}.get(combo, 0.35)
-        audio = apply_noisereduce(audio, sr, prop_decrease=prop, n_fft=1024)
+        # ── Step 2: NoiseReduce [Spectral Gating Noise Reduction] ─────────────
+        audio = apply_noisereduce(audio, sr, prop_decrease=0.30, n_fft=1024)
 
-        # ── Step 3: Combo-specific Conditioning / VAD ────────────────────
-        if combo == '2':
-            # Combo 2 Optimization: AGC dynamics compression + silence noise gate
-            # Equalizes quiet speakers and silences room hiss to prevent small-model hallucination
+        # ── Step 3: Silero VAD [Deteksi Segmen Ucapan Aktif - Timestamp Traceable] ──
+        segments = run_silero_vad_with_offsets(
+            audio, sr,
+            threshold=0.50,
+            min_speech_ms=200,
+            min_silence_ms=300,
+            speech_pad_ms=200,
+        )
+
+        # Robust fallback to pydub VAD if Silero returns no segments
+        if not segments:
+            pydub_segs = detect_speech_with_pydub(input_path)
+            if pydub_segs:
+                segments = pydub_segs
+                diag['warnings'].append("Silero VAD fallback: used pydub non-silent intervals")
+
+        if segments:
+            audio = build_silenced_audio(audio, sr, segments)
+            diag['vad_segments'] = segments
+            diag['vad_segment_count'] = len(segments)
+
+            # Write VAD sidecar JSON for whisper.ts / model runners to use
+            sidecar_path = output_path.replace('.wav', '_vad.json')
             try:
-                audio = apply_speech_agc(audio, sr, target_rms=0.08, max_gain=3.5)
-                audio = apply_noise_gate(audio, sr, threshold_db=-42.0)
-            except Exception as e_c2:
-                diag['warnings'].append(f"Combo 2 AGC/gate skipped: {e_c2}")
-
-        elif combo == '3':
-            # Combo 3: Silero VAD with timestamp-preserving silence replacement
-            segments = run_silero_vad_with_offsets(
-                audio, sr,
-                threshold=0.50,
-                min_speech_ms=200,
-                min_silence_ms=300,
-                speech_pad_ms=200,
-            )
-
-            # Robust fallback to pydub VAD if Silero returns no segments
-            if not segments:
-                pydub_segs = detect_speech_with_pydub(input_path)
-                if pydub_segs:
-                    segments = pydub_segs
-                    diag['warnings'].append("Silero VAD fallback: used pydub non-silent intervals")
-
-            if segments:
-                audio = build_silenced_audio(audio, sr, segments)
-                diag['vad_segments'] = segments
-                diag['vad_segment_count'] = len(segments)
-
-                # Write VAD sidecar JSON for whisper.ts to optionally use
-                sidecar_path = output_path.replace('.wav', '_vad.json')
                 with open(sidecar_path, 'w') as f:
                     json.dump({'vad_segments': segments, 'sr': sr}, f)
-                log_err(f"VAD: {len(segments)} speech segments found, sidecar written to {sidecar_path}")
-            else:
-                diag['warnings'].append("VAD found no speech; using full audio")
-
-        elif combo == '1':
-            # Combo 1: Simple voice-region-aware trim: remove leading/trailing >1.5s silence
-            try:
-                import torch
-                import silero_vad as svad
-                tensor_audio = torch.from_numpy(audio)
-                model_vad = svad.load_silero_vad(onnx=True)
-                ts = svad.get_speech_timestamps(
-                    tensor_audio, model_vad,
-                    threshold=0.45, sampling_rate=sr,
-                    min_speech_duration_ms=150,
-                    min_silence_duration_ms=500,
-                    speech_pad_ms=300,
-                )
-                if ts:
-                    first_start = max(0, ts[0]['start'] - int(sr * 0.3))
-                    last_end = min(len(audio), ts[-1]['end'] + int(sr * 0.3))
-                    audio = audio[first_start:last_end]
-                    diag['vad_segment_count'] = len(ts)
-                    log_err(f"Combo 1 VAD trim: kept {first_start/sr:.2f}s–{last_end/sr:.2f}s of {diag['input_duration_s']:.2f}s")
-                else:
-                    pydub_segs = detect_speech_with_pydub(input_path)
-                    if pydub_segs:
-                        first_start = max(0, pydub_segs[0]['start_sample'] - int(sr * 0.3))
-                        last_end = min(len(audio), pydub_segs[-1]['end_sample'] + int(sr * 0.3))
-                        audio = audio[first_start:last_end]
-                        diag['vad_segment_count'] = len(pydub_segs)
-            except Exception as e:
-                diag['warnings'].append(f"Combo 1 VAD trim skipped: {e}")
+                log_err(f"Silero VAD: {len(segments)} speech segments found, sidecar written to {sidecar_path}")
+            except Exception as e_sidecar:
+                diag['warnings'].append(f"Sidecar write skipped: {e_sidecar}")
+        else:
+            diag['warnings'].append("Silero VAD found no speech segments; using processed audio")
 
         # ── Step 4: Ensure audio is not empty after processing ────────────
         if len(audio) == 0 or np.max(np.abs(audio)) < 1e-7:

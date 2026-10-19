@@ -173,30 +173,11 @@ export async function convertWithFfmpeg(
   return { outputPath, durationS };
 }
 
-export function getWhisperModelPath(combo = "1"): string {
+export function getWhisperModelPath(): string {
   const modelDir = config.modelDir;
-
-  // Combo 2: prefer small model if available, fallback to base
-  if (combo === "2") {
-    const smallCandidates = [
-      path.join(modelDir, "ggml-small-q5_0.bin"),
-      path.join(modelDir, "ggml-small.bin"),
-      path.join(modelDir, "ggml-base.bin"),
-    ];
-    for (const c of smallCandidates) {
-      if (fs.existsSync(c)) return c;
-    }
-  }
-
-  const requested = config.whisperModel;
   const candidates = [
-    path.join(modelDir, `ggml-${requested}-q5_0.bin`),
-    path.join(modelDir, `ggml-${requested}.bin`),
-    path.join(modelDir, `${requested}.bin`),
-    path.join(modelDir, requested),
     path.join(modelDir, "ggml-large-v3-turbo-q5_0.bin"),
     path.join(modelDir, "ggml-large-v3-turbo.bin"),
-    path.join(modelDir, "ggml-base.bin"),
   ];
 
   for (const c of candidates) {
@@ -205,7 +186,7 @@ export function getWhisperModelPath(combo = "1"): string {
     }
   }
 
-  throw new Error(`Model GGML whisper.cpp tidak ditemukan di ${modelDir}. Harap download ggml-large-v3-turbo.bin atau ggml-base.bin`);
+  throw new Error(`Model GGML whisper.cpp tidak ditemukan di ${modelDir}. Harap sediakan ggml-large-v3-turbo-q5_0.bin atau ggml-large-v3-turbo.bin`);
 }
 
 export function findWhisperCliBinary(): string {
@@ -233,15 +214,12 @@ export async function transcribeWithProgress(
   combo = "1",
   onProgress?: (percent: number, stage: string, currentText?: string) => void
 ): Promise<TranscriptionResult> {
-  const modelPath = getWhisperModelPath(combo);
-  const cliBinary = findWhisperCliBinary();
   const outputPrefix = audioPath.replace(/\.[^/.]+$/, "") + "_out";
   const outputJsonPath = outputPrefix + ".json";
 
   const comboLabels: Record<string, string> = {
-    "1": "Combo 1: DeepFilter-Net+, NoiseReduce, VAD + Fast-Whisper Turbo",
-    "2": "Combo 2: DeepFilter-Net+, NoiseReduce, ggml-base + VAD + Fast-Whisper",
-    "3": "Combo 3: DeepFilter-Net, NoiseReduce, Silero-VAD & Sherpa-ONNX",
+    "1": "Model 1: Fast-Whisper + Silero VAD (ggml-large-v3-turbo.bin)",
+    "2": "Model 2: Faster-Whisper Turbo (faster-whisper-large-v3-turbo)",
   };
 
   onProgress?.(0, `Memulai ${comboLabels[combo] || "Transkripsi"}...`);
@@ -253,32 +231,29 @@ export async function transcribeWithProgress(
     ? `Transkripsi rapat resmi, notulen, agenda terarah, istilah: ${glossaryTerms}.`
     : "Transkripsi rapat resmi bahasa Indonesia, notulen, agenda, keputusan, dan tindak lanjut.";
 
-  // Anti-hallucination parameters verified against whisper-cli v1.9.5 --help
-  // Combo 2 Optimization: Light beam search (-bs 2 -bo 2), tighter no-speech (-nth 0.72) to eliminate silence hallucinations, and wider context (-mc 128)
-  const isCombo2 = combo === "2";
+  // Model 1 (Whisper.cpp native C++ engine with ggml-large-v3-turbo)
+  const modelPath = combo === "2" ? "" : getWhisperModelPath();
+  const cliBinary = findWhisperCliBinary();
+
   const buildArgs = (extraTemp?: number): string[] => {
     const a = [
       "-m", modelPath,
       "-f", audioPath,
       "-l", "id",
       "-t", String(Math.max(config.cpuThreads, 4)),
-      "-fa",                  // Flash Attention — keep for Apple Silicon
-      "-nth", isCombo2 ? "0.72" : "0.6",  // Stricter no-speech threshold for small model to eliminate silence hallucination
-      "-et", isCombo2 ? "2.6" : "2.4",    // entropy threshold
-      "-lpt", isCombo2 ? "-0.8" : "-1.0", // logprob threshold for fallback trigger
+      "-fa",                  // Flash Attention
+      "-nth", "0.6",          // no-speech threshold
+      "-et", "2.4",           // entropy threshold
+      "-lpt", "-1.0",         // logprob threshold
       "-tpi", "0.2",          // temperature increment for fallback
-      "-mc", isCombo2 ? "128" : "64",     // context tokens
+      "-mc", "64",            // context tokens
       "--prompt", initialPrompt,
       "-oj",
       "-of", outputPrefix,
       "-pp",
     ];
-    if (isCombo2) {
-      // Light beam search: beam size 2, best-of 2. Drastically cuts WER on small models with minimal latency cost (<1s)
-      a.push("-bs", "2", "-bo", "2");
-    }
     if (extraTemp !== undefined) {
-      a.push("-tp", String(extraTemp)); // override temperature for retry
+      a.push("-tp", String(extraTemp));
     }
     if (wordTimestamps) {
       a.push("-wt", "0.01");
@@ -286,70 +261,120 @@ export async function transcribeWithProgress(
     return a;
   };
 
-  const runWhisper = async (args: string[]): Promise<string> => {
-    return new Promise<string>((resolve, reject) => {
-      const proc = spawn(cliBinary, args);
+  const runTranscriptionEngine = async (extraTemp?: number): Promise<string> => {
+    if (combo === "2") {
+      // Model 2: Faster-Whisper Turbo (CTranslate2)
+      const scriptPath = path.join(__dirname, "scripts", "transcribe_model2.py");
+      const args = [
+        scriptPath,
+        "--audio", audioPath,
+        "--output", outputPrefix,
+        "--lang", "id",
+      ];
+      if (wordTimestamps) args.push("--word-timestamps");
+      if (extraTemp !== undefined) args.push("--temperature", String(extraTemp));
 
-      let stderr = "";
-      let lastPercent = 0;
+      return new Promise<string>((resolve, reject) => {
+        const proc = spawn("python3", args);
+        let stderr = "";
+        let lastPercent = 0;
 
-      const parseOutput = (data: Buffer) => {
-        const text = data.toString();
-        stderr += text;
+        const parseOutput = (data: Buffer) => {
+          const text = data.toString();
+          stderr += text;
 
-        // Match timestamp lines like: [00:01:23.000 --> 00:01:30.000] text
-        const timeMatches = text.match(/\[(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})\]\s*(.*)/g);
-        if (timeMatches && timeMatches.length > 0) {
-          const lastLine = timeMatches[timeMatches.length - 1];
-          const m = lastLine.match(/\[(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})\]\s*(.*)/);
-          if (m) {
-            const hours = parseInt(m[5], 10);
-            const mins = parseInt(m[6], 10);
-            const secs = parseInt(m[7], 10);
-            const currentAudioSec = hours * 3600 + mins * 60 + secs;
-            const segText = m[9]?.trim() || "";
+          const timeMatches = text.match(/\[(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})\]\s*(.*)/g);
+          if (timeMatches && timeMatches.length > 0) {
+            const lastLine = timeMatches[timeMatches.length - 1];
+            const m = lastLine.match(/\[(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})\]\s*(.*)/);
+            if (m) {
+              const hours = parseInt(m[5], 10);
+              const mins = parseInt(m[6], 10);
+              const secs = parseInt(m[7], 10);
+              const currentAudioSec = hours * 3600 + mins * 60 + secs;
+              const segText = m[9]?.trim() || "";
 
-            let pct = totalDuration > 0 ? (currentAudioSec / totalDuration) * 95 : lastPercent + 5;
-            pct = Math.min(Math.max(pct, lastPercent), 95);
-            lastPercent = pct;
+              let pct = totalDuration > 0 ? (currentAudioSec / totalDuration) * 95 : lastPercent + 5;
+              pct = Math.min(Math.max(pct, lastPercent), 95);
+              lastPercent = pct;
 
-            onProgress?.(Math.round(pct * 10) / 10, `Memproses audio (${Math.round(pct)}%)`, segText);
+              onProgress?.(Math.round(pct * 10) / 10, `Memproses Model 2 (${Math.round(pct)}%)`, segText);
+            }
           }
-        }
+        };
 
-        // Check progress percentage if printed directly (e.g. "whisper_print_progress: progress = 30%")
-        const progMatch = text.match(/progress\s*=\s*(\d+)%/i);
-        if (progMatch) {
-          const pct = Math.min(parseInt(progMatch[1], 10), 95);
-          if (pct > lastPercent) {
-            lastPercent = pct;
-            onProgress?.(pct, `Transcribing ${pct}%`);
+        proc.stdout.on("data", parseOutput);
+        proc.stderr.on("data", parseOutput);
+
+        proc.on("error", (err) => {
+          reject(new Error(`Gagal menjalankan Model 2 (faster-whisper): ${err.message}`));
+        });
+
+        proc.on("close", (code) => {
+          if (code === 0) resolve(stderr);
+          else reject(new Error(`Model 2 (faster-whisper) exit code ${code}: ${stderr.slice(-1000)}`));
+        });
+      });
+    } else {
+      // Model 1: whisper-cli native C++
+      return new Promise<string>((resolve, reject) => {
+        const proc = spawn(cliBinary, buildArgs(extraTemp));
+        let stderr = "";
+        let lastPercent = 0;
+
+        const parseOutput = (data: Buffer) => {
+          const text = data.toString();
+          stderr += text;
+
+          const timeMatches = text.match(/\[(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})\]\s*(.*)/g);
+          if (timeMatches && timeMatches.length > 0) {
+            const lastLine = timeMatches[timeMatches.length - 1];
+            const m = lastLine.match(/\[(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})\]\s*(.*)/);
+            if (m) {
+              const hours = parseInt(m[5], 10);
+              const mins = parseInt(m[6], 10);
+              const secs = parseInt(m[7], 10);
+              const currentAudioSec = hours * 3600 + mins * 60 + secs;
+              const segText = m[9]?.trim() || "";
+
+              let pct = totalDuration > 0 ? (currentAudioSec / totalDuration) * 95 : lastPercent + 5;
+              pct = Math.min(Math.max(pct, lastPercent), 95);
+              lastPercent = pct;
+
+              onProgress?.(Math.round(pct * 10) / 10, `Memproses Model 1 (${Math.round(pct)}%)`, segText);
+            }
           }
-        }
-      };
 
-      proc.stdout.on("data", parseOutput);
-      proc.stderr.on("data", parseOutput);
+          const progMatch = text.match(/progress\s*=\s*(\d+)%/i);
+          if (progMatch) {
+            const pct = Math.min(parseInt(progMatch[1], 10), 95);
+            if (pct > lastPercent) {
+              lastPercent = pct;
+              onProgress?.(pct, `Transcribing ${pct}%`);
+            }
+          }
+        };
 
-      proc.on("error", (err) => {
-        reject(new Error(`Gagal menjalankan whisper-cli: ${err.message}`));
+        proc.stdout.on("data", parseOutput);
+        proc.stderr.on("data", parseOutput);
+
+        proc.on("error", (err) => {
+          reject(new Error(`Gagal menjalankan whisper-cli (Model 1): ${err.message}`));
+        });
+
+        proc.on("close", (code) => {
+          if (code === 0) resolve(stderr);
+          else reject(new Error(`whisper-cli exit code ${code}: ${stderr.slice(-1000)}`));
+        });
       });
-
-      proc.on("close", (code) => {
-        if (code === 0) {
-          resolve(stderr);
-        } else {
-          reject(new Error(`whisper-cli exit code ${code}: ${stderr.slice(-1000)}`));
-        }
-      });
-    });
+    }
   };
 
   // Run first pass
-  await runWhisper(buildArgs());
+  await runTranscriptionEngine();
 
   if (!fs.existsSync(outputJsonPath)) {
-    throw new Error("whisper-cli tidak menghasilkan file JSON transkripsi.");
+    throw new Error(`Engine ${comboLabels[combo] || "transkripsi"} tidak menghasilkan file JSON.`);
   }
 
   // Post-ASR validation via validate_transcript.py
@@ -388,15 +413,13 @@ export async function transcribeWithProgress(
       validationStatus = validationResult.status;
 
       if (validationResult.status === "high_confidence_anomaly") {
-        // Retry with higher temperature to break out of hallucination loops
         console.warn(`[whisper] high_confidence_anomaly detected — retrying with temperature=0.4`);
         onProgress?.(50, "Mendeteksi anomali — mencoba ulang dengan parameter berbeda...");
 
-        // Remove stale output before retry
         try { fs.unlinkSync(outputJsonPath); } catch {}
         try { if (fs.existsSync(validatedOutputPath)) fs.unlinkSync(validatedOutputPath); } catch {}
 
-        await runWhisper(buildArgs(0.4));
+        await runTranscriptionEngine(0.4);
 
         if (!fs.existsSync(outputJsonPath)) {
           throw new Error("whisper-cli retry tidak menghasilkan file JSON transkripsi.");

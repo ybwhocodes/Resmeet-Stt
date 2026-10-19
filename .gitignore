@@ -23,10 +23,11 @@ venv/
 env/
 
 # Model binaries & lock files (large binaries should be downloaded via scripts)
-backend/models/models--mobiuslabsgmbh--faster-whisper-large-v3-turbo/
-backend/models/*.bin
-backend/models/*.onnx
-backend/models/.locks/
+backend/models/
+backend/.locks/
+backend/models--*
+*.bin
+*.onnx
 
 # Node & Package Managers
 node_modules/

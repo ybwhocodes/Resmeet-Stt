@@ -463,8 +463,8 @@ const server = http.createServer(async (req, res) => {
       return sendJson({ success: true, message: `Transkrip ID ${id} berhasil dihapus.` });
     }
 
-    // 9. Job status
-    const jobMatch = pathname.match(/^\/api\/jobs\/([a-zA-Z0-9_-]+)$/);
+    // 9. Job status (supports /api/jobs/:id and /api/status/:id)
+    const jobMatch = pathname.match(/^\/api\/(?:jobs|status)\/([a-zA-Z0-9_-]+)$/);
     if (jobMatch && req.method === "GET") {
       const jobId = jobMatch[1];
       const status = getJobStatus(jobId);
@@ -473,7 +473,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     // 9. Download job markdown
-    const jobMdMatch = pathname.match(/^\/api\/jobs\/([a-zA-Z0-9_-]+)\/download-md$/);
+    const jobMdMatch = pathname.match(/^\/api\/(?:jobs|status)\/([a-zA-Z0-9_-]+)\/download-md$/);
     if (jobMdMatch && req.method === "GET") {
       const jobId = jobMdMatch[1];
       const mdPath = path.join(PATHS.transcriptsMdDir, `${jobId}.md`);
@@ -532,8 +532,8 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    // 11. Upload and Transcribe
-    if (pathname === "/api/upload-and-transcribe" && req.method === "POST") {
+    // 11. Upload and Transcribe (supports /api/upload-and-transcribe, /api/transcribe, and /api/upload)
+    if ((pathname === "/api/upload-and-transcribe" || pathname === "/api/transcribe" || pathname === "/api/upload") && req.method === "POST") {
       ensureKnowledgeFiles();
 
       const responseWrapper = new Response(req as any, {
@@ -541,10 +541,10 @@ const server = http.createServer(async (req, res) => {
       });
 
       const formData = await responseWrapper.formData();
-      const audioFile = formData.get("audioFile");
+      const audioFile = formData.get("audioFile") || formData.get("file") || formData.get("audio");
 
       if (!audioFile || !(audioFile instanceof File)) {
-        return sendJson({ error: "Tidak ada file audio yang diunggah." }, 400);
+        return sendJson({ error: "Tidak ada file audio yang diunggah. Gunakan field 'audioFile' atau 'file'." }, 400);
       }
 
       const filename = audioFile.name || "audio.wav";
@@ -625,9 +625,8 @@ async function startTranscriptionWorker(
   const queuedAt = Date.now();
 
   const comboLabels: Record<string, string> = {
-    "1": "Combo 1 (DeepFilter-Net+, NoiseReduce, VAD + Fast-Whisper Turbo)",
-    "2": "Combo 2 (DeepFilter-Net+, NoiseReduce, ggml-base + VAD + Fast-Whisper)",
-    "3": "Combo 3 (DeepFilter-Net, NoiseReduce, Silero-VAD & Sherpa-ONNX)",
+    "1": "Model 1: Fast-Whisper + Silero VAD (ggml-large-v3-turbo.bin)",
+    "2": "Model 2: Faster-Whisper Turbo (faster-whisper-large-v3-turbo)",
   };
 
   const styleInfo = resolveParaphraseStyle(paraphraseStyle);

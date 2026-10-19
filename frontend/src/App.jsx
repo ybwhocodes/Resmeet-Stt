@@ -36,31 +36,23 @@ const fmtTimer = (s) => {
   return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 };
 
-// 3 Combos Definitions
+// 2 Streamlined Models Definitions (Pydub/Scipy -> DeepFilter-Net+ -> NoiseReduce -> Silero VAD)
 const COMBOS = [
   {
     id: "1",
-    name: "Combo 1: Akurasi Tinggi (Rekomendasi)",
-    tag: "DeepFilter-Net+ • NoiseReduce • VAD • Fast-Whisper Turbo",
-    desc: "Neural Spectral Denoise + Voice Activity Gating + Whisper.cpp Large-v3-Turbo Q5. Akurasi notulen MoM tertinggi dengan ekstraksi topik komprehensif.",
-    badge: "Akurasi Terbaik",
+    name: "Model 1: Fast-Whisper + Silero VAD",
+    tag: "Pydub/Scipy • DeepFilter-Net+ • NoiseReduce • Silero VAD • ggml-large-v3-turbo",
+    desc: "Whisper.cpp native C++ engine dengan model ggml-large-v3-turbo-q5_0 / large-v3-turbo.bin. Tercepat untuk CPU, latensi terendah dengan hasil transkripsi dan MoM AI komprehensif.",
+    badge: "Native C++ (Ultra Cepat)",
     badgeColor: "bg-indigo-950/60 border-indigo-700/60 text-indigo-300",
   },
   {
     id: "2",
-    name: "Combo 2: Ultra Cepat & Ringan",
-    tag: "DeepFilter-Net+ • NoiseReduce • ggml-base • VAD • Fast-Whisper",
-    desc: "Denoise spektral + Model GGML Base 141MB (~2-3 detik inferensi). Sangat hemat RAM dan komputasi, ideal untuk audio jelas.",
-    badge: "Super Cepat (<3s)",
+    name: "Model 2: Faster-Whisper Turbo",
+    tag: "Pydub/Scipy • DeepFilter-Net+ • NoiseReduce • Silero VAD • faster-whisper-large-v3-turbo",
+    desc: "CTranslate2 Python engine dengan model faster-whisper-large-v3-turbo (int8 quantization). Akurasi dan presisi tinggi dengan VAD filtering terintegrasi.",
+    badge: "CTranslate2 (Presisi Tinggi)",
     badgeColor: "bg-emerald-950/60 border-emerald-700/60 text-emerald-300",
-  },
-  {
-    id: "3",
-    name: "Combo 3: Neural VAD & Fast ONNX",
-    tag: "DeepFilter-Net • Fast NoiseReduce • Silero-VAD (ONNX) • Comfort Pad",
-    desc: "Segmentasi neural Silero-VAD via ONNX runtime + padding alami 250ms & jeda hening agar kalimat tidak terpotong dan transkripsi jernih.",
-    badge: "Neural VAD (ONNX)",
-    badgeColor: "bg-purple-950/60 border-purple-700/60 text-purple-300",
   },
 ];
 
@@ -844,18 +836,18 @@ export default function App() {
                 <div>
                   <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
                     <Layers className="w-4 h-4 text-indigo-400" />
-                    Pilih Audio & STT Combo Pipeline
+                    Pilih Engine Model Transkripsi (Pipeline Suara Terpadu)
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Pilih konfigurasi denoising, voice activity detection, dan model sebelum menjalankan transkripsi
+                    Audio diproses otomatis: <span className="text-slate-400">Pydub/Scipy (Loudness &amp; dBFS)</span> → <span className="text-slate-400">DeepFilter-Net+ (80Hz-7.5kHz + Rumble Cut)</span> → <span className="text-slate-400">NoiseReduce (Spectral Gating)</span> → <span className="text-slate-400">Silero VAD (Timestamp Traceable)</span> → Validasi Post-ASR &amp; Anti-Loop
                   </p>
                 </div>
                 <span className="text-xs text-indigo-400 font-mono bg-indigo-500/10 px-2.5 py-1 rounded-full border border-indigo-500/20">
-                  Combo Aktif: #{selectedCombo}
+                  Model Aktif: #{selectedCombo}
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {COMBOS.map((combo) => {
                   const isSelected = selectedCombo === combo.id;
                   return (
@@ -962,7 +954,7 @@ export default function App() {
                       {processing ? (
                         <><RefreshCw className="w-4 h-4 animate-spin" /> Memproses Transkripsi ({COMBOS.find((c) => c.id === selectedCombo)?.badge})...</>
                       ) : (
-                        <><Zap className="w-4 h-4" /> Mulai Transkripsi dengan Combo #{selectedCombo}</>
+                        <><Zap className="w-4 h-4" /> Mulai Transkripsi dengan Model #{selectedCombo}</>
                       )}
                     </button>
                   </div>
@@ -1159,7 +1151,7 @@ export default function App() {
                         {processing ? (
                           <><RefreshCw className="w-4 h-4 animate-spin" /> Memproses Transkripsi ({COMBOS.find((c) => c.id === selectedCombo)?.badge})...</>
                         ) : (
-                          <><Zap className="w-4 h-4" /> Mulai Transkripsi Rekaman dengan Combo #{selectedCombo}</>
+                          <><Zap className="w-4 h-4" /> Mulai Transkripsi Rekaman dengan Model #{selectedCombo}</>
                         )}
                       </button>
                     </div>
@@ -2246,19 +2238,18 @@ export default function App() {
                 />
               </label>
 
-              {/* Default Combo Selection */}
+              {/* Default Model Selection */}
               <div className="bg-[#0c0e14] border border-[#1e2330] rounded-xl p-4 space-y-2">
                 <label className="block text-xs font-medium text-slate-300">
-                  Combo Pipeline Default
+                  Model Engine Default
                 </label>
                 <select
                   value={selectedCombo}
                   onChange={(e) => setSelectedCombo(e.target.value)}
                   className="w-full bg-[#151821] border border-[#1e2330] focus:border-indigo-500/50 rounded-xl px-3.5 py-2 text-xs text-slate-200 outline-none font-sans"
                 >
-                  <option value="1">Combo 1: DeepFilter-Net+, NoiseReduce, VAD + Fast-Whisper Turbo (Akurasi Tinggi)</option>
-                  <option value="2">Combo 2: DeepFilter-Net+, NoiseReduce, ggml-base + VAD + Fast-Whisper (Super Cepat &lt;3s)</option>
-                  <option value="3">Combo 3: DeepFilter-Net, NoiseReduce, Silero-VAD &amp; Sherpa-ONNX (Neural Segmentation)</option>
+                  <option value="1">Model 1: Fast-Whisper + Silero VAD (ggml-large-v3-turbo.bin / Native C++)</option>
+                  <option value="2">Model 2: Faster-Whisper Turbo (faster-whisper-large-v3-turbo / CTranslate2)</option>
                 </select>
               </div>
             </div>
