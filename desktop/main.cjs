@@ -1,5 +1,6 @@
 const { app, BrowserWindow, shell, ipcMain } = require("electron");
 const path = require("path");
+const fs = require("fs");
 const { spawn } = require("child_process");
 
 let mainWindow = null;
@@ -10,19 +11,49 @@ const IS_DEV = process.env.NODE_ENV === "development";
 
 function startBackend() {
   const rootDir = path.resolve(__dirname, "..");
-  const backendDir = path.join(rootDir, "backend");
+  const isWin = process.platform === "win32";
+  const binaryName = isWin ? "resmeet-backend.exe" : "resmeet-backend";
+
+  // Check potential locations for standalone binary
+  const candidates = [
+    path.join(process.resourcesPath || "", "bin", binaryName),
+    path.join(__dirname, "bin", binaryName),
+    path.join(rootDir, "release", isWin ? "resmeet-win.exe" : "resmeet-mac"),
+    path.join(rootDir, "release", isWin ? "resmeet-backend-win.exe" : "resmeet-backend-mac"),
+  ];
+
+  let executable = null;
+  for (const c of candidates) {
+    if (fs.existsSync(c)) {
+      executable = c;
+      try { fs.chmodSync(c, 0o755); } catch {}
+      break;
+    }
+  }
+
+  const env = {
+    ...process.env,
+    PORT: String(PORT),
+    DB_TYPE: "sqlite",
+  };
 
   try {
-    // Attempt spawning Bun backend with SQLite default
-    backendProcess = spawn("bun", ["run", "src/index.ts"], {
-      cwd: backendDir,
-      env: {
-        ...process.env,
-        PORT: String(PORT),
-        DB_TYPE: "sqlite",
-      },
-      stdio: "pipe",
-    });
+    if (executable) {
+      console.log(`[Desktop] Launching bundled standalone backend: ${executable}`);
+      backendProcess = spawn(executable, [], {
+        cwd: rootDir,
+        env,
+        stdio: "pipe",
+      });
+    } else {
+      console.log("[Desktop] Launching backend via Bun development runner...");
+      const backendDir = path.join(rootDir, "backend");
+      backendProcess = spawn("bun", ["run", "src/index.ts"], {
+        cwd: backendDir,
+        env,
+        stdio: "pipe",
+      });
+    }
 
     backendProcess.stdout?.on("data", (data) => {
       console.log(`[Backend]: ${data.toString()}`);
@@ -36,7 +67,7 @@ function startBackend() {
       console.log(`[Backend] exited with code ${code}`);
     });
   } catch (err) {
-    console.warn("Could not launch bundled backend automatically:", err.message);
+    console.warn("Could not launch backend automatically:", err.message);
   }
 }
 

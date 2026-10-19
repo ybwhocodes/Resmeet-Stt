@@ -14,13 +14,22 @@
   "build": {
     "appId": "com.resmeet.stt",
     "productName": "Resmeet-STT",
+    "asar": false,
     "directories": {
       "output": "../release"
     },
     "files": [
       "main.cjs",
       "preload.cjs",
+      "assets/**/*",
       "../frontend/dist/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "bin",
+        "to": "bin",
+        "filter": ["**/*"]
+      }
     ],
     "mac": {
       "category": "public.app-category.productivity",
@@ -28,7 +37,7 @@
         "dmg",
         "zip"
       ],
-      "icon": "assets/icon.png"
+      "icon": "assets/icon.icns"
     },
     "win": {
       "target": [

@@ -23,15 +23,20 @@ echo -e "\n[1/3] Membangun Frontend (Vite Build)..."
 
 # 2. Compile Standalone Bun Binary (Lokal Mandiri dengan SQLite)
 echo -e "\n[2/3] Mengompilasi Binary Standalone Bun Server..."
+mkdir -p "$DESKTOP_DIR/bin"
+
 if command -v bun >/dev/null 2>&1; then
-  echo "Mengompilasi binary macOS (arm64/x64)..."
-  bun build --compile --minify "$BACKEND_DIR/src/index.ts" --outfile "$RELEASE_DIR/resmeet-backend-mac" || true
+  echo "Mengompilasi binary macOS (arm64)..."
+  bun build --compile --minify "$BACKEND_DIR/src/index.ts" --outfile "$RELEASE_DIR/resmeet-mac" || true
+  cp -f "$RELEASE_DIR/resmeet-mac" "$DESKTOP_DIR/bin/resmeet-backend" 2>/dev/null || true
+  chmod +x "$DESKTOP_DIR/bin/resmeet-backend" 2>/dev/null || true
   
   echo "Mengompilasi binary Windows (x64 exe)..."
-  bun build --compile --minify --target=bun-windows-x64 "$BACKEND_DIR/src/index.ts" --outfile "$RELEASE_DIR/resmeet-backend-win.exe" || true
+  bun build --compile --minify --target=bun-windows-x64 "$BACKEND_DIR/src/index.ts" --outfile "$RELEASE_DIR/resmeet-win.exe" || true
+  cp -f "$RELEASE_DIR/resmeet-win.exe" "$DESKTOP_DIR/bin/resmeet-backend.exe" 2>/dev/null || true
 fi
 
-# 3. Build Electron DMG / EXE Installer (jika electron-builder terpasang)
+# 3. Build Electron DMG / EXE Installer
 echo -e "\n[3/3] Menyiapkan Paket Installer Desktop..."
 if [ -d "$DESKTOP_DIR" ]; then
   cd "$DESKTOP_DIR"
@@ -40,21 +45,11 @@ if [ -d "$DESKTOP_DIR" ]; then
     npm install --silent
   fi
 
-  # Cek OS untuk target build
-  case "$(uname -s)" in
-    Darwin*)
-      echo "Membangun installer macOS (.DMG)..."
-      npx electron-builder --mac dmg --publish never || true
-      ;;
-    MINGW*|CYGWIN*|MSYS*)
-      echo "Membangun installer Windows (.EXE)..."
-      npx electron-builder --win nsis portable --publish never || true
-      ;;
-    *)
-      echo "Sistem operasi terdeteksi: Linux / Non-Mac. Menjalankan builder universal..."
-      npx electron-builder -mw --publish never || true
-      ;;
-  esac
+  echo "Membangun installer macOS (.DMG)..."
+  npx electron-builder --mac dmg --publish never || true
+
+  echo "Membangun installer Windows (.EXE)..."
+  npx electron-builder --win portable nsis --publish never || true
 fi
 
 echo -e "\n=================================================="

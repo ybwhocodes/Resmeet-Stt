@@ -55,6 +55,7 @@ backend/uploads/*
 release/
 desktop/dist/
 desktop/node_modules/
+desktop/bin/
 
 # Logs
 *.log
