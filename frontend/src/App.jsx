@@ -13,7 +13,11 @@ import MarkmapView from "./components/MarkmapView";
 import UiSummary from "./components/UiSummary";
 import resmeetSymbol from "./assets/resmeet_symbol.svg";
 
-const API = import.meta.env.VITE_API_BASE_URL || "http://localhost:8200/api";
+const isViteDev = typeof window !== "undefined" && window.location.port === "5173";
+const defaultOrigin = typeof window !== "undefined" && window.location.origin && window.location.origin !== "null" && !window.location.origin.startsWith("file:") && !isViteDev
+  ? window.location.origin
+  : "http://127.0.0.1:8200";
+const API = import.meta.env.VITE_API_BASE_URL || `${defaultOrigin}/api`;
 const SOCKET_URL = API.replace(/\/api\/?$/, "");
 
 const fmt = (iso) => iso ? new Date(iso).toLocaleString("id-ID", {

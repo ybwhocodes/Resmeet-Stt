@@ -39,6 +39,7 @@ pnpm-debug.log*
 
 # Frontend builds
 frontend/dist/
+backend/dist/
 frontend/dist-ssr/
 frontend/*.local
 

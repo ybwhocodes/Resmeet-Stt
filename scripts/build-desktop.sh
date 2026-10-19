@@ -21,6 +21,12 @@ echo "=================================================="
 echo -e "\n[1/3] Membangun Frontend (Vite Build)..."
 (cd "$FRONTEND_DIR" && npm run build)
 
+echo "Menyinkronkan aset frontend ke desktop dan backend..."
+rm -rf "$DESKTOP_DIR/dist" "$BACKEND_DIR/dist"
+mkdir -p "$DESKTOP_DIR/dist" "$BACKEND_DIR/dist"
+cp -r "$FRONTEND_DIR/dist"/* "$DESKTOP_DIR/dist"/
+cp -r "$FRONTEND_DIR/dist"/* "$BACKEND_DIR/dist"/
+
 # 2. Compile Standalone Bun Binary (Lokal Mandiri dengan SQLite)
 echo -e "\n[2/3] Mengompilasi Binary Standalone Bun Server..."
 mkdir -p "$DESKTOP_DIR/bin"
@@ -48,8 +54,18 @@ if [ -d "$DESKTOP_DIR" ]; then
   echo "Membangun installer macOS (.DMG)..."
   npx electron-builder --mac dmg --publish never || true
 
-  echo "Membangun installer Windows (.EXE)..."
-  npx electron-builder --win portable nsis --publish never || true
+  echo "Membangun installer Windows (.EXE x64)..."
+  npx electron-builder --win nsis portable --x64 --publish never || true
+
+  # Standardize friendly release filenames
+  cd "$RELEASE_DIR"
+  if [ -f "Resmeet-STT Setup 1.0.0.exe" ]; then
+    cp -f "Resmeet-STT Setup 1.0.0.exe" "Resmeet-STT-Windows-Setup.exe"
+    cp -f "Resmeet-STT Setup 1.0.0.exe" "Resmeet-STT-Windows.exe"
+  fi
+  if [ -f "Resmeet-STT-1.0.0-arm64.dmg" ]; then
+    cp -f "Resmeet-STT-1.0.0-arm64.dmg" "Resmeet-STT-macOS.dmg"
+  fi
 fi
 
 echo -e "\n=================================================="

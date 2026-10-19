@@ -80,6 +80,119 @@ async function runPreflight(requireAi = false) {
   return checks;
 }
 
+const MIME_TYPES: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".mjs": "application/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml",
+  ".ico": "image/x-icon",
+  ".webp": "image/webp",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
+  ".otf": "font/otf",
+  ".wasm": "application/wasm",
+  ".wav": "audio/wav",
+  ".mp3": "audio/mpeg",
+};
+
+export function getFrontendDistDir(): string | null {
+  const candidates = [
+    process.env.FRONTEND_DIST_DIR,
+    path.join(PATHS.baseDir, "..", "frontend", "dist"),
+    path.join(PATHS.baseDir, "frontend", "dist"),
+    path.join(PATHS.baseDir, "dist"),
+    path.join(PATHS.dataDir, "dist"),
+    path.join(process.cwd(), "frontend", "dist"),
+    path.join(process.cwd(), "dist"),
+    path.join(path.dirname(process.execPath), "..", "app", "dist"),
+    path.join(path.dirname(process.execPath), "..", "dist"),
+    path.join(path.dirname(process.execPath), "dist"),
+  ].filter(Boolean) as string[];
+
+  for (const c of candidates) {
+    if (fs.existsSync(c) && fs.existsSync(path.join(c, "index.html"))) {
+      return c;
+    }
+  }
+  return null;
+}
+
+function serveStaticFrontend(pathname: string, req: http.IncomingMessage, res: http.ServerResponse): boolean {
+  if (req.method !== "GET" && req.method !== "HEAD") return false;
+
+  const distDir = getFrontendDistDir();
+  if (!distDir) {
+    if (pathname === "/" || pathname === "/index.html") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(`<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <title>Resmeet STT Server</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0c0e14; color: #f1f5f9; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+    .box { background: #151821; border: 1px solid #1e2330; border-radius: 16px; padding: 32px; max-width: 520px; text-align: center; }
+    h1 { color: #818cf8; margin-top: 0; font-size: 22px; }
+    p { color: #94a3b8; font-size: 14px; line-height: 1.6; }
+    .status { display: inline-block; padding: 6px 14px; background: #10b981; color: #fff; border-radius: 9999px; font-size: 12px; font-weight: 700; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="status">✓ Resmeet-STT Backend Online</div>
+    <h1>Resmeet STT API Server</h1>
+    <p>Backend API berjalan normal pada port ${config.port}. Jika menggunakan frontend web mandiri, pastikan berkas web telah dikompilasi atau buka <code>http://localhost:5173</code>.</p>
+  </div>
+</body>
+</html>`);
+      return true;
+    }
+    return false;
+  }
+
+  // Sanitize path to prevent directory traversal
+  const safePath = path.normalize(pathname).replace(/^(\.\.[/\\])+/, "");
+  let filePath = path.join(distDir, safePath);
+
+  // If path is a directory or root, serve index.html
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
+    filePath = path.join(filePath, "index.html");
+  }
+
+  // If file doesn't exist, fallback to index.html (SPA client-side routing)
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    filePath = path.join(distDir, "index.html");
+  }
+
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    const ext = path.extname(filePath).toLowerCase();
+    const contentType = MIME_TYPES[ext] || "application/octet-stream";
+    const isImmutable = pathname.startsWith("/assets/");
+
+    res.writeHead(200, {
+      "Content-Type": contentType,
+      "Cache-Control": isImmutable ? "public, max-age=31536000, immutable" : "no-cache",
+    });
+
+    if (req.method === "HEAD") {
+      res.end();
+      return true;
+    }
+
+    fs.createReadStream(filePath).pipe(res);
+    return true;
+  }
+
+  return false;
+}
+
 // Start HTTP and Socket.IO server
 const server = http.createServer(async (req, res) => {
   // CORS Headers
@@ -95,6 +208,13 @@ const server = http.createServer(async (req, res) => {
 
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   const pathname = url.pathname;
+
+  // Serve static frontend assets and SPA routes when not an /api route
+  if (!pathname.startsWith("/api")) {
+    if (serveStaticFrontend(pathname, req, res)) {
+      return;
+    }
+  }
 
   // JSON helper
   const sendJson = (data: any, statusCode = 200) => {

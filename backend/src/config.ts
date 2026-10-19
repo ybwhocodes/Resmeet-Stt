@@ -30,7 +30,23 @@ export interface AppSettings {
   dbPassword: string;
 }
 
-const SETTINGS_FILE = path.join(baseDir, "settings.json");
+const dataDir = process.env.RESMEET_DATA_DIR
+  ? path.resolve(process.env.RESMEET_DATA_DIR)
+  : baseDir;
+
+// Ensure writable directories exist
+for (const p of [
+  dataDir,
+  path.join(dataDir, "uploads"),
+  path.join(dataDir, "knowledge"),
+  path.join(dataDir, "transcripts_md"),
+]) {
+  try {
+    if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
+  } catch {}
+}
+
+const SETTINGS_FILE = path.join(dataDir, "settings.json");
 
 function loadSavedSettings(): Partial<AppSettings> {
   try {
@@ -52,7 +68,7 @@ const defaultDbType: "sqlite" | "mysql" | "postgres" =
   "sqlite";
 
 export const config: AppSettings = {
-  port: Number(saved.port || process.env.PORT || 8200),
+  port: Number(process.env.PORT || saved.port || 8200),
   aiBaseUrl: saved.aiBaseUrl || (process.env.AI_BASE_URL || "http://localhost:20128/v1").replace(/\/+$/, ""),
   aiApiKey: saved.aiApiKey || (process.env.AI_API_KEY || "sk-ff353870199354cb-rvq507-8ef93405"),
   aiModelId: saved.aiModelId || (process.env.AI_MODEL_ID || "9R-Gemini"),
@@ -62,12 +78,16 @@ export const config: AppSettings = {
   aiEnableRag: (process.env.AI_ENABLE_RAG || "true").toLowerCase() === "true",
   aiEnableKnowledgeExtraction: (process.env.AI_ENABLE_KNOWLEDGE_EXTRACTION || "true").toLowerCase() === "true",
   whisperModel: process.env.WHISPER_MODEL || "large-v3-turbo",
-  modelDir: (process.env.MODEL_DIR && fs.existsSync(process.env.MODEL_DIR)) ? process.env.MODEL_DIR : path.join(baseDir, "models"),
+  modelDir: (process.env.MODEL_DIR && fs.existsSync(process.env.MODEL_DIR))
+    ? process.env.MODEL_DIR
+    : (fs.existsSync(path.join(dataDir, "models"))
+      ? path.join(dataDir, "models")
+      : path.join(baseDir, "models")),
   cpuThreads: Number(process.env.CPU_THREADS || 4),
   enableDenoise: (process.env.ENABLE_AUDIO_DENOISE || "false").toLowerCase() === "true",
   ffmpegTimeoutS: Number(process.env.FFMPEG_TIMEOUT_S || 600),
   dbType: defaultDbType,
-  dbSqlitePath: path.join(baseDir, "resmeet.sqlite"),
+  dbSqlitePath: path.join(dataDir, "resmeet.sqlite"),
   dbHost: saved.dbHost || process.env.DB_HOST || "127.0.0.1",
   dbPort: Number(saved.dbPort || process.env.DB_PORT || (defaultDbType === "postgres" ? 5432 : 3307)),
   dbName: saved.dbName || process.env.DB_NAME || "stt_db",
@@ -77,12 +97,13 @@ export const config: AppSettings = {
 
 export const PATHS = {
   baseDir,
-  uploadDir: path.join(baseDir, "uploads"),
-  knowledgeDir: path.join(baseDir, "knowledge"),
-  transcriptsMdDir: path.join(baseDir, "transcripts_md"),
-  cacheFile: path.join(baseDir, "transcription_cache.json"),
+  dataDir,
+  uploadDir: path.join(dataDir, "uploads"),
+  knowledgeDir: path.join(dataDir, "knowledge"),
+  transcriptsMdDir: path.join(dataDir, "transcripts_md"),
+  cacheFile: path.join(dataDir, "transcription_cache.json"),
   settingsFile: SETTINGS_FILE,
-  sqliteFile: path.join(baseDir, "resmeet.sqlite"),
+  sqliteFile: path.join(dataDir, "resmeet.sqlite"),
 };
 
 export function saveSettingsToFile() {
