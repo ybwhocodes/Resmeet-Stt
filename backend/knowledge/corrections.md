@@ -503,3 +503,31 @@
 - Koreksi: [Tawa audio non-linguistik]
 - Alasan: Halusinasi autoregressive decoding pada model Whisper akibat ketiadaan VAD saat memproses tawa pembicara di akhir audio.
 - Sumber: job_id=a0adbd87848b4cc99604551ebf0b5143
+
+## pingguh di vegan -> bingung di lapangan
+
+- Salah dengar: pingguh di vegan
+- Koreksi: bingung di lapangan
+- Alasan: Konteks kalimat menunjukkan kebingungan operasional tim di lapangan akibat fitur aplikasi yang terlalu banyak.
+- Sumber: job_id=3be48a030dcf47558b446571fb341cde
+
+## kressna doru / kasah rasio -> kapasitas rasio
+
+- Salah dengar: kressna doru / kasah rasio
+- Koreksi: kapasitas rasio
+- Alasan: Merujuk pada perhitungan rasio kapasitas pengguna dan jaringan fiber optik.
+- Sumber: job_id=3be48a030dcf47558b446571fb341cde
+
+## sing topir secara teknis -> staf R&D / teknis
+
+- Salah dengar: sing topir secara teknis
+- Koreksi: staf R&D / teknis
+- Alasan: Pembicaraan berfokus pada penambahan kuota personel yang mahir di bidang keahlian teknis R&D.
+- Sumber: job_id=3be48a030dcf47558b446571fb341cde
+
+## sepersat / datapis / datap berhose -> separate / database / data warehouse
+
+- Salah dengar: sepersat / datapis / datap berhose
+- Koreksi: separate / database / data warehouse
+- Alasan: Istilah teknis arsitektur perangkat lunak untuk pemisahan basis data dan gudang data analitik.
+- Sumber: job_id=3be48a030dcf47558b446571fb341cde

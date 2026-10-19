@@ -245,3 +245,21 @@
 - Alias: VAD
 - Arti: Teknik pemrosesan sinyal untuk mendeteksi keberadaan suara manusia vs hening/kebisingan latar belakang sebelum diproses oleh model STT.
 - Sumber: job_id=a0adbd87848b4cc99604551ebf0b5143
+
+## Data Warehouse
+
+- Alias: DWH
+- Arti: Repositori data terpusat terpisah yang dirancang khusus untuk analisis pelaporan dan agregasi data historis tanpa membebani database transaksional.
+- Sumber: job_id=3be48a030dcf47558b446571fb341cde
+
+## Redundansi Sistem
+
+- Alias: Redundant System
+- Arti: Penyediaan komponen atau server cadangan yang otomatis mengambil alih fungsi saat komponen utama mengalami gangguan teknis.
+- Sumber: job_id=3be48a030dcf47558b446571fb341cde
+
+## Latensi Jaringan
+
+- Alias: Network Latency
+- Arti: Durasi waktu yang dibutuhkan data untuk berpindah dari satu titik komputasi ke titik tujuan dalam jaringan infrastruktur.
+- Sumber: job_id=3be48a030dcf47558b446571fb341cde

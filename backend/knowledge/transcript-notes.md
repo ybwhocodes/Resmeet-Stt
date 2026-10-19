@@ -59,3 +59,7 @@
 - Durasi rekaman sangat singkat (34 detik), difokuskan semata-mata pada validasi teknis input audio multi-speaker. _(job_id=a0adbd87848b4cc99604551ebf0b5143)_
 
 - Bagian tawa berulang dikonfirmasi murni artefak inferensi STT dan telah diisolasi dari substansi pembahasan operasional. _(job_id=a0adbd87848b4cc99604551ebf0b5143)_
+
+- Pertumbuhan pelanggan dari 30.000 menuju 50.000–90.000 membutuhkan penataan arsitektur sistem yang redundan dan terpisah. _(job_id=3be48a030dcf47558b446571fb341cde)_
+
+- Komunikasi serah terima (handover) antara tim produk dan pengembang wajib diperketat agar tidak terjadi penerimaan fitur di luar alur kerja bisnis inti. _(job_id=3be48a030dcf47558b446571fb341cde)_

@@ -149,3 +149,18 @@
 
 - Deskripsi: Penerapan ambang batas kompresi, VAD, dan penalti repetisi untuk mencegah dekoder model menghasilkan output palsu berulang.
 - Sumber: job_id=a0adbd87848b4cc99604551ebf0b5143
+
+## Core Business Alignment
+
+- Deskripsi: Prinsip pengembangan perangkat lunak yang hanya memprioritaskan fitur yang secara langsung mendukung proses bisnis utama perusahaan.
+- Sumber: job_id=3be48a030dcf47558b446571fb341cde
+
+## Separation of Concerns (Database vs Data Warehouse)
+
+- Deskripsi: Pemisahan arsitektur antara pemrosesan transaksi real-time (OLTP) dan pengolahan data analitik (OLAP) guna menjamin kestabilan performa sistem.
+- Sumber: job_id=3be48a030dcf47558b446571fb341cde
+
+## Human-System Balance
+
+- Deskripsi: Keseimbangan adaptif antara kesiapan kapabilitas teknis personel pelaksana dengan kompleksitas sistem teknologi yang diimplementasikan.
+- Sumber: job_id=3be48a030dcf47558b446571fb341cde
