@@ -58,6 +58,7 @@ release/
 desktop/dist/
 desktop/node_modules/
 desktop/bin/
+backend/bin/
 
 # Logs
 *.log

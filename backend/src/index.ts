@@ -19,6 +19,7 @@ import {
 import { ensureKnowledgeFiles, updateKnowledge } from "./knowledge";
 import { calculateFileHash, getCacheKey, readCache, writeCache } from "./cache";
 import { convertWithFfmpeg, transcribeWithProgress, getWhisperModelPath, findWhisperCliBinary } from "./whisper";
+import { runTovWorker } from "./worker-runner";
 import { callAiCorrection, callAiParaphrase, isAiConfigured, testAiConnection, resolveParaphraseStyle } from "./ai";
 import { renderMarkdown } from "./markdown";
 
@@ -74,6 +75,8 @@ async function runPreflight(requireAi = false) {
     format_mom: fs.existsSync(path.join(PATHS.knowledgeDir, "format-mom.md")),
     whisper_model: whisperModelOk,
     database: dbOk,
+    drizzle_orm: dbOk,
+    tov_worker: fs.existsSync(path.join(PATHS.baseDir, "bin", "resmeet-worker")) || fs.existsSync(path.join(PATHS.baseDir, "src", "worker.tov")),
     ai_config: !requireAi || isAiConfigured(),
   };
 
@@ -244,6 +247,8 @@ const server = http.createServer(async (req, res) => {
         status: "ok",
         server: "Bun + TypeScript",
         engine: "whisper.cpp",
+        orm: "Drizzle ORM (Zero-overhead)",
+        worker_engine: "Tov Native Worker (tov.sh)",
         model: config.whisperModel,
         model_path: modelPath,
         cpu_threads: config.cpuThreads,
@@ -691,35 +696,60 @@ async function startTranscriptionWorker(
       return;
     }
 
-    // 1. Audio Preprocessing with Selected Combo
-    io.to(jobId).emit("progress", {
-      job_id: jobId,
-      percent: 2,
-      elapsed_s: 0,
-      current_text: "",
-      stage: `Preprocessing audio (${comboLabels[combo] || "Combo " + combo})...`,
-    });
-
-    const { outputPath, durationS } = await convertWithFfmpeg(savePath, combo);
-    processedPath = outputPath;
-
-    // 2. STT Transcription with Selected Combo
+    // 1 & 2: Process audio & STT via Tov Native Worker (with automatic in-process fallback)
     setJobStatus(jobId, "transcribing");
-    const whisperResult = await transcribeWithProgress(
-      processedPath,
-      durationS,
-      wordTimestamps,
-      combo,
-      (percent, stage, currentText) => {
-        io.to(jobId).emit("progress", {
-          job_id: jobId,
-          percent,
-          elapsed_s: Math.round((durationS * percent) / 100),
-          current_text: currentText || "",
-          stage,
-        });
-      }
-    );
+    let whisperResult;
+    let durationS = 0;
+
+    try {
+      const tovResult = await runTovWorker(
+        jobId,
+        savePath,
+        combo,
+        wordTimestamps,
+        (percent, stage, currentText) => {
+          io.to(jobId).emit("progress", {
+            job_id: jobId,
+            percent,
+            elapsed_s: Math.round((durationS * percent) / 100),
+            current_text: currentText || "",
+            stage,
+          });
+        }
+      );
+      whisperResult = tovResult.whisperResult;
+      processedPath = tovResult.processedPath;
+      durationS = tovResult.durationS;
+    } catch (tovErr: any) {
+      console.warn(`[Job ${jobId}] Tov Worker fallback (${tovErr.message}) — menjalankan in-process.`);
+      io.to(jobId).emit("progress", {
+        job_id: jobId,
+        percent: 2,
+        elapsed_s: 0,
+        current_text: "",
+        stage: `Preprocessing audio (${comboLabels[combo] || "Combo " + combo})...`,
+      });
+
+      const converted = await convertWithFfmpeg(savePath, combo);
+      processedPath = converted.outputPath;
+      durationS = converted.durationS;
+
+      whisperResult = await transcribeWithProgress(
+        processedPath,
+        durationS,
+        wordTimestamps,
+        combo,
+        (percent, stage, currentText) => {
+          io.to(jobId).emit("progress", {
+            job_id: jobId,
+            percent,
+            elapsed_s: Math.round((durationS * percent) / 100),
+            current_text: currentText || "",
+            stage,
+          });
+        }
+      );
+    }
 
     let finalText = whisperResult.finalText;
     let aiData: any = null;

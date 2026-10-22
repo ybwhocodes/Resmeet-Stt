@@ -1,0 +1,327 @@
+import { spawnSync } from "child_process";
+import * as fs from "fs";
+import * as path from "path";
+
+type WorkerArgs = {
+  jobId: string,
+  inputPath: string,
+  outputPrefix: string,
+  combo: string,
+  wordTimestamps: bool,
+  modelDir: string,
+  scriptsDir: string,
+}
+
+function parseCliArgs(): WorkerArgs {
+  const args = process.argv;
+  let jobId = "job";
+  let inputPath = "";
+  let outputPrefix = "";
+  let combo = "1";
+  let wordTimestamps = false;
+  let modelDir = "models";
+  let scriptsDir = "src/scripts";
+
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!;
+    if (a === "--job-id" && i + 1 < args.length) {
+      jobId = args[i + 1]!;
+    } else if (a === "--input" && i + 1 < args.length) {
+      inputPath = args[i + 1]!;
+    } else if (a === "--output-prefix" && i + 1 < args.length) {
+      outputPrefix = args[i + 1]!;
+    } else if (a === "--combo" && i + 1 < args.length) {
+      combo = args[i + 1]!;
+    } else if (a === "--word-timestamps") {
+      wordTimestamps = true;
+    } else if (a === "--model-dir" && i + 1 < args.length) {
+      modelDir = args[i + 1]!;
+    } else if (a === "--scripts-dir" && i + 1 < args.length) {
+      scriptsDir = args[i + 1]!;
+    }
+  }
+
+  if (outputPrefix === "" && inputPath !== "") {
+    outputPrefix = `${inputPath}_out`;
+  }
+
+  return {
+    jobId,
+    inputPath,
+    outputPrefix,
+    combo,
+    wordTimestamps,
+    modelDir,
+    scriptsDir,
+  };
+}
+
+function emitProgress(percent: int, stage: string, currentText: string) {
+  const payload = {
+    type: "progress",
+    percent,
+    stage,
+    currentText,
+  };
+  console.log(JSON.stringify(payload));
+}
+
+function emitError(message: string) {
+  const payload = {
+    type: "error",
+    message,
+  };
+  console.log(JSON.stringify(payload));
+}
+
+function emitCompleted(outputJson: string, audioPath: string) {
+  const payload = {
+    type: "completed",
+    outputJson,
+    audioPath,
+  };
+  console.log(JSON.stringify(payload));
+}
+
+function findWhisperModel(modelDir: string): string {
+  const candidates: string[] = [
+    path.join(modelDir, "ggml-large-v3-turbo-q5_0.bin"),
+    path.join(modelDir, "ggml-large-v3-turbo.bin"),
+  ];
+
+  for (let i = 0; i < candidates.length; i++) {
+    const c = candidates[i]!;
+    let exists = false;
+    try {
+      exists = fs.existsSync(c);
+    } catch (e) {
+      exists = false;
+    }
+    if (exists) {
+      return c;
+    }
+  }
+  return path.join(modelDir, "ggml-large-v3-turbo.bin");
+}
+
+function findWhisperCli(): string {
+  const potentialPaths: string[] = [
+    "/opt/homebrew/bin/whisper-cli",
+    "/usr/local/bin/whisper-cli",
+    "whisper-cli",
+  ];
+
+  for (let i = 0; i < potentialPaths.length; i++) {
+    const p = potentialPaths[i]!;
+    if (p.startsWith("/")) {
+      let exists = false;
+      try {
+        exists = fs.existsSync(p);
+      } catch (e) {
+        exists = false;
+      }
+      if (exists) return p;
+    }
+  }
+  return "whisper-cli";
+}
+
+function main() {
+  const args = parseCliArgs();
+
+  if (args.inputPath === "") {
+    emitError("Input audio path (--input) tidak boleh kosong");
+    return;
+  }
+
+  emitProgress(5, "Worker Tov dimulai: Menginisialisasi pipeline audio...", "");
+
+  // Step 1: Standardize with FFmpeg (16kHz mono PCM)
+  const intermediatePath = `${args.inputPath}_tov_raw.wav`;
+  const preprocessedPath = `${args.inputPath}_tov_combo${args.combo}.wav`;
+
+  emitProgress(10, "Menstandarisasi format audio (16kHz mono PCM)...", "");
+  const ffmpegRes = try spawnSync("ffmpeg", [
+    "-y",
+    "-threads", "4",
+    "-i", args.inputPath,
+    "-vn", "-sn", "-dn",
+    "-ac", "1",
+    "-ar", "16000",
+    "-c:a", "pcm_s16le",
+    intermediatePath,
+  ]);
+
+  if (ffmpegRes.status !== 0) {
+    let errStr = "FFmpeg gagal mengonversi audio";
+    if (ffmpegRes.stderr) {
+      try {
+        errStr = String(ffmpegRes.stderr).trim();
+      } catch (e) {}
+    }
+    emitError(`FFmpeg error: ${errStr}`);
+    return;
+  }
+
+  // Step 2: Audio Preprocessing (Pydub/Scipy dBFS + DeepFilter-Net+ + NoiseReduce + Silero VAD)
+  emitProgress(25, "Memproses pemfilteran suara & VAD via Tov Worker...", "");
+  const preprocessScript = path.join(args.scriptsDir, "preprocess_combo.py");
+  let preprocessExists = false;
+  try {
+    preprocessExists = fs.existsSync(preprocessScript);
+  } catch (e) {
+    preprocessExists = false;
+  }
+
+  if (preprocessExists) {
+    const pyPreprocess = try spawnSync("python3", [
+      preprocessScript,
+      "--input", intermediatePath,
+      "--output", preprocessedPath,
+      "--combo", args.combo,
+    ]);
+
+    try {
+      if (fs.existsSync(intermediatePath)) {
+        fs.unlinkSync(intermediatePath);
+      }
+    } catch (e) {}
+
+    let processedExists = false;
+    try {
+      processedExists = fs.existsSync(preprocessedPath);
+    } catch (e) {
+      processedExists = false;
+    }
+
+    if (!processedExists) {
+      emitError("Audio preprocessing tidak menghasilkan file audio");
+      return;
+    }
+  } else {
+    // If script not found, use intermediate directly
+    try {
+      try spawnSync("cp", [intermediatePath, preprocessedPath]);
+      fs.unlinkSync(intermediatePath);
+    } catch (e) {}
+  }
+
+  // Step 3: STT Transcription
+  const outputJson = `${args.outputPrefix}.json`;
+  try {
+    if (fs.existsSync(outputJson)) {
+      fs.unlinkSync(outputJson);
+    }
+  } catch (e) {}
+
+  if (args.combo === "2") {
+    // Model 2: Faster-Whisper Turbo
+    emitProgress(50, "Menjalankan Model 2 (Faster-Whisper Turbo) via Tov Worker...", "");
+    const model2Script = path.join(args.scriptsDir, "transcribe_model2.py");
+    const m2Args: string[] = [
+      model2Script,
+      "--audio", preprocessedPath,
+      "--output", args.outputPrefix,
+      "--lang", "id",
+    ];
+    if (args.wordTimestamps) {
+      m2Args.push("--word-timestamps");
+    }
+
+    const m2Res = try spawnSync("python3", m2Args);
+    if (m2Res.status !== 0) {
+      let m2Err = "Model 2 gagal";
+      if (m2Res.stderr) {
+        try {
+          m2Err = String(m2Res.stderr).trim();
+        } catch (e) {}
+      }
+      emitError(`Model 2 (faster-whisper) error: ${m2Err}`);
+      return;
+    }
+  } else {
+    // Model 1: Whisper.cpp Turbo Native C++
+    emitProgress(50, "Menjalankan Model 1 (Whisper.cpp Turbo) via Tov Worker...", "");
+    const modelPath = findWhisperModel(args.modelDir);
+    const cliBinary = findWhisperCli();
+
+    const wArgs: string[] = [
+      "-m", modelPath,
+      "-f", preprocessedPath,
+      "-l", "id",
+      "-t", "4",
+      "-fa",
+      "-nth", "0.6",
+      "-et", "2.4",
+      "-lpt", "-1.0",
+      "-tpi", "0.2",
+      "-mc", "64",
+      "--prompt", "Transkripsi rapat resmi bahasa Indonesia, notulen, agenda, keputusan, dan tindak lanjut.",
+      "-oj",
+      "-of", args.outputPrefix,
+      "-pp",
+    ];
+    if (args.wordTimestamps) {
+      wArgs.push("-wt");
+      wArgs.push("0.01");
+    }
+
+    const wRes = try spawnSync(cliBinary, wArgs);
+    if (wRes.status !== 0) {
+      let wErr = "whisper-cli gagal";
+      if (wRes.stderr) {
+        try {
+          wErr = String(wRes.stderr).trim();
+        } catch (e) {}
+      }
+      emitError(`whisper-cli (Model 1) error: ${wErr}`);
+      return;
+    }
+  }
+
+  let jsonCreated = false;
+  try {
+    jsonCreated = fs.existsSync(outputJson);
+  } catch (e) {
+    jsonCreated = false;
+  }
+
+  if (!jsonCreated) {
+    emitError(`File transkripsi ${outputJson} tidak ditemukan`);
+    return;
+  }
+
+  // Step 4: Post-ASR Validation & Anti-Loop
+  emitProgress(85, "Memvalidasi teks transkripsi (Anti-Loop & Repetition Check)...", "");
+  const validateScript = path.join(args.scriptsDir, "validate_transcript.py");
+  let validateExists = false;
+  try {
+    validateExists = fs.existsSync(validateScript);
+  } catch (e) {
+    validateExists = false;
+  }
+
+  let finalJsonPath = outputJson;
+  if (validateExists) {
+    const validatedJsonPath = `${args.outputPrefix}_validated.json`;
+    const valRes = try spawnSync("python3", [
+      validateScript,
+      "--input", outputJson,
+      "--output", validatedJsonPath,
+    ]);
+
+    let valOk = false;
+    try {
+      valOk = fs.existsSync(validatedJsonPath);
+    } catch (e) {
+      valOk = false;
+    }
+
+    if (valOk) {
+      finalJsonPath = validatedJsonPath;
+    }
+  }
+
+  emitProgress(95, "Pemrosesan Tov Worker selesai, menyerahkan ke database & AI...", "");
+  emitCompleted(finalJsonPath, preprocessedPath);
+}

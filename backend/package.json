@@ -5,10 +5,12 @@
   "main": "src/index.ts",
   "scripts": {
     "start": "bun run src/index.ts",
-    "dev": "bun --watch run src/index.ts"
+    "dev": "bun --watch run src/index.ts",
+    "build:worker": "tov build src/worker.tov -o bin/resmeet-worker"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.45.4",
     "mysql2": "^3.12.0",
     "pg": "^8.23.1",
     "socket.io": "^4.8.1"
