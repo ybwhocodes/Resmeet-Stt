@@ -263,3 +263,63 @@
 - Alias: Network Latency
 - Arti: Durasi waktu yang dibutuhkan data untuk berpindah dari satu titik komputasi ke titik tujuan dalam jaringan infrastruktur.
 - Sumber: job_id=3be48a030dcf47558b446571fb341cde
+
+## Kohort (Cohort)
+
+- Alias: Cohort Analysis, Pengelompokan Kohort
+- Arti: Metode analisis pengelompokan pelanggan berdasarkan kesamaan periode waktu aktivasi pemasangan (misal kohort Juni 2026) guna memantau pola ketahanan pembayaran dari bulan ke bulan.
+- Sumber: job_id=fe795bc56d3c4df1937d51369cfcffbd
+
+## Work Order Visit
+
+- Alias: WO Visit, Perintah Kunjungan Lapangan
+- Arti: Surat tugas elektronik yang diterbitkan sistem ERP kepada Account Executive untuk melakukan kunjungan fisik ke rumah pelanggan berstatus isolir guna investigasi dan mediasi.
+- Sumber: job_id=fe795bc56d3c4df1937d51369cfcffbd
+
+## Survival Rate
+
+- Alias: Tingkat Ketahanan Pelanggan
+- Arti: Persentase pelanggan dari suatu kelompok kohort yang tetap aktif membayar dan tidak melakukan terminasi layanan hingga periode waktu tertentu.
+- Sumber: job_id=fe795bc56d3c4df1937d51369cfcffbd
+
+## Daftar Batasan Bekerja (DBB)
+
+- Alias: DWP, Daftar Batasan Pekerjaan
+- Arti: Dokumen acuan batasan tugas, alur kerja operasional, dan parameter tanggung jawab baku yang menjadi pedoman kerja suatu divisi atau jabatan.
+- Sumber: job_id=fe795bc56d3c4df1937d51369cfcffbd
+
+## Threshold Wajar
+
+- Alias: Ambang Batas Toleransi Churn
+- Arti: Batas persentase maksimal angka pemutusan layanan yang masih dapat ditoleransi oleh manajemen (misalnya 3% per payment atau maksimal 9% pada payment ke-4).
+- Sumber: job_id=fe795bc56d3c4df1937d51369cfcffbd
+
+## Coverage Area
+
+- Alias: Cover Area, Area
+- Arti: Seluruh wilayah jangkauan jaringan fiber optik aktif perusahaan yang mencakup pembukaan teritori baru (Primary) maupun perluasan wilayah eksisting (Overlay).
+- Sumber: job_id=cbab485d23124a7194e3f67e4f40c8b4
+
+## Primary Area
+
+- Alias: Primary
+- Arti: Klasifikasi wilayah jaringan baru yang dibuka dari tahap awal pembangunan infrastruktur kabel optik perusahaan.
+- Sumber: job_id=cbab485d23124a7194e3f67e4f40c8b4
+
+## Overlay Area
+
+- Alias: Overlay
+- Arti: Klasifikasi penambahan jaringan atau peningkatan kapasitas port kabel optik di atas wilayah cakupan operasional yang sebelumnya sudah beroperasi.
+- Sumber: job_id=cbab485d23124a7194e3f67e4f40c8b4
+
+## Mode Switcher
+
+- Alias: Ganti Mode, Branch Mode
+- Arti: Komponen kontrol navigasi global di bar atas (top bar) untuk beralih konteks tampilan data antara seluruh cabang (All) atau satu cabang spesifik secara persisten.
+- Sumber: job_id=cbab485d23124a7194e3f67e4f40c8b4
+
+## Manpower Planning
+
+- Alias: MPP
+- Arti: Modul perencanaan dan pemantauan jumlah serta persebaran tenaga kerja operasional (khususnya engineer/teknisi) di berbagai cabang.
+- Sumber: job_id=cbab485d23124a7194e3f67e4f40c8b4

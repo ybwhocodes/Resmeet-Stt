@@ -63,3 +63,13 @@
 - Pertumbuhan pelanggan dari 30.000 menuju 50.000–90.000 membutuhkan penataan arsitektur sistem yang redundan dan terpisah. _(job_id=3be48a030dcf47558b446571fb341cde)_
 
 - Komunikasi serah terima (handover) antara tim produk dan pengembang wajib diperketat agar tidak terjadi penerimaan fitur di luar alur kerja bisnis inti. _(job_id=3be48a030dcf47558b446571fb341cde)_
+
+- Peniadaan kompensasi cashback telah memberikan dampak positif langsung terhadap penurunan rasio pembatalan semu di sebagian besar cabang. _(job_id=fe795bc56d3c4df1937d51369cfcffbd)_
+
+- Pelatihan Branch Leader harus menekankan aspek praktis pembacaan anomali data sales guna menghindari pengulangan rendahnya tingkat pemahaman seperti pada modul pelatihan PSB sebelumnya. _(job_id=fe795bc56d3c4df1937d51369cfcffbd)_
+
+- Rapat pleno lintas direktorat dijadwalkan berlangsung esok hari guna memfinalisasi kesiapan sistem ERP, instrumen SOP, dan modul pelatihan sebelum diluncurkan ke seluruh cabang. _(job_id=fe795bc56d3c4df1937d51369cfcffbd)_
+
+- Pengembangan antarmuka CVR/dasbor pengawas ini secara bertahap dirancang modular dan terpisah dari dependensi langsung monolit ERP untuk menjaga performa rendering data analitik. _(job_id=cbab485d23124a7194e3f67e4f40c8b4)_
+
+- Proses revisi teknisi dan alur PSB (Pasang Sambungan Baru) saat ini masih berstatus 'on review' di tingkat manajemen dan akan ditindaklanjuti pada rapat koordinasi teknis berikutnya. _(job_id=cbab485d23124a7194e3f67e4f40c8b4)_

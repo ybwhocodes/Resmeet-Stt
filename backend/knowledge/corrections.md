@@ -531,3 +531,122 @@
 - Koreksi: separate / database / data warehouse
 - Alasan: Istilah teknis arsitektur perangkat lunak untuk pemisahan basis data dan gudang data analitik.
 - Sumber: job_id=3be48a030dcf47558b446571fb341cde
+
+## disuamir / disoler -> diisolir
+
+- Salah dengar: disuamir / disoler
+- Koreksi: diisolir
+- Alasan: Konteks kalimat merujuk pada status isolir (pemutusan sementara koneksi internet pelanggan akibat tunggakan tagihan).
+- Sumber: job_id=fe795bc56d3c4df1937d51369cfcffbd
+
+## terminator / terminit -> terminate
+
+- Salah dengar: terminator / terminit
+- Koreksi: terminate
+- Alasan: Istilah teknis operasional telekomunikasi untuk pemutusan permanen layanan berlangganan pelanggan.
+- Sumber: job_id=fe795bc56d3c4df1937d51369cfcffbd
+
+## pribara -> peta / persiapan arah
+
+- Salah dengar: pribara
+- Koreksi: peta / persiapan arah
+- Alasan: Konteks kalimat menunjukkan kesiapan rencana kerja divisi retensi yang belum terstruktur.
+- Sumber: job_id=fe795bc56d3c4df1937d51369cfcffbd
+
+## IRP / PRB -> ERP
+
+- Salah dengar: IRP / PRB
+- Koreksi: ERP
+- Alasan: Enterprise Resource Planning, sistem perangkat lunak terintegrasi yang digunakan perusahaan untuk mengelola data operasional cabang.
+- Sumber: job_id=fe795bc56d3c4df1937d51369cfcffbd
+
+## bjo / bdi -> PCO
+
+- Salah dengar: bjo / bdi
+- Koreksi: PCO
+- Alasan: Process & Capability Optimization, divisi internal yang bertanggung jawab menyusun kurikulum pelatihan dan standardisasi proses.
+- Sumber: job_id=fe795bc56d3c4df1937d51369cfcffbd
+
+## ddwp / dbb -> DBB / DWP
+
+- Salah dengar: ddwp / dbb
+- Koreksi: DBB / DWP
+- Alasan: Daftar Batasan Bekerja / Detailed Working Procedure, dokumen acuan tata kelola kerja karyawan.
+- Sumber: job_id=fe795bc56d3c4df1937d51369cfcffbd
+
+## sedinom -> sehari (bahasa Jawa: sedina)
+
+- Salah dengar: sedinom
+- Koreksi: sehari (bahasa Jawa: sedina)
+- Alasan: Ungkapan bahasa daerah peserta rapat yang bermakna durasi waktu pelaksanaan pelatihan tidak cukup hanya satu hari.
+- Sumber: job_id=fe795bc56d3c4df1937d51369cfcffbd
+
+## kudung ngetraining BLE -> kudu men-training BL-nya
+
+- Salah dengar: kudung ngetraining BLE
+- Koreksi: kudu men-training BL-nya
+- Alasan: Kewajiban memberikan pelatihan manajerial kepada Branch Leader (BL).
+- Sumber: job_id=fe795bc56d3c4df1937d51369cfcffbd
+
+## kejualan -> penjualan
+
+- Salah dengar: kejualan
+- Koreksi: penjualan
+- Alasan: Konteks kalimat merujuk pada 'modul penjualan' dalam aplikasi dasbor bisnis.
+- Sumber: job_id=cbab485d23124a7194e3f67e4f40c8b4
+
+## main power planning / main power planting -> manpower planning
+
+- Salah dengar: main power planning / main power planting
+- Koreksi: manpower planning
+- Alasan: Istilah manajemen SDM baku untuk perencanaan alokasi tenaga kerja (Manpower Planning / MPP).
+- Sumber: job_id=cbab485d23124a7194e3f67e4f40c8b4
+
+## bodoh sih pak -> baku sih pak
+
+- Salah dengar: bodoh sih pak
+- Koreksi: baku sih pak
+- Alasan: Koreksi salah dengar Whisper; pembicara membahas standarisasi istilah posisi pekerjaan yang baku.
+- Sumber: job_id=cbab485d23124a7194e3f67e4f40c8b4
+
+## setelit -> satelit
+
+- Salah dengar: setelit
+- Koreksi: satelit
+- Alasan: Koreksi fonetik pengucapan kantor satelit/cabang pembantu.
+- Sumber: job_id=cbab485d23124a7194e3f67e4f40c8b4
+
+## SPBA / SP-BL / SPVR / CVR / SMPR -> SPV / BL
+
+- Salah dengar: SPBA / SP-BL / SPVR / CVR / SMPR
+- Koreksi: SPV / BL
+- Alasan: Penyebutan variasi jabatan Supervisor (SPV) dan Branch Leader (BL) yang terdistorsi oleh modul ASR.
+- Sumber: job_id=cbab485d23124a7194e3f67e4f40c8b4
+
+## NIP-BL -> NIP BL
+
+- Salah dengar: NIP-BL
+- Koreksi: NIP BL
+- Alasan: Merujuk pada Nomor Induk Pegawai milik Branch Leader untuk autentikasi sistem.
+- Sumber: job_id=cbab485d23124a7194e3f67e4f40c8b4
+
+## nahbar / nalihair akbar -> navbar
+
+- Salah dengar: nahbar / nalihair akbar
+- Koreksi: navbar
+- Alasan: Salah dengar istilah antarmuka Navigation Bar (Navbar).
+- Sumber: job_id=cbab485d23124a7194e3f67e4f40c8b4
+
+## Casmu -> Customer
+
+- Salah dengar: Casmu
+- Koreksi: Customer
+- Alasan: Penyebutan tidak tuntas dari metrik tren status pelanggan (Customer Active/Isolir/Terminate).
+- Sumber: job_id=cbab485d23124a7194e3f67e4f40c8b4
+
+## arjen -> urgent
+
+- Salah dengar: arjen
+- Koreksi: urgent
+- Alasan: Pelafalan istilah serapan urgensi/kategori area.
+- Sumber: job_id=cbab485d23124a7194e3f67e4f40c8b4

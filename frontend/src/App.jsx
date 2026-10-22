@@ -1180,7 +1180,15 @@ export default function App() {
                   </div>
                   <div>
                     <h3 className="text-sm font-semibold text-emerald-300">Transkripsi & Topik Terarah Selesai</h3>
-                    <p className="text-xs text-slate-500">Audio durasi: {fmtDur(progress.elapsed_s)}</p>
+                    <p className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
+                      <span>Audio durasi: {fmtDur(progress.elapsed_s)}</span>
+                      {result?.generation_time_s != null && (
+                        <span className="inline-flex items-center gap-1 text-amber-300 font-mono text-[11px] bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                          <Zap className="w-3 h-3 text-amber-400" />
+                          Generate: {result.generation_time_s}s
+                        </span>
+                      )}
+                    </p>
                   </div>
                 </div>
                 {result && (
@@ -1409,7 +1417,8 @@ export default function App() {
                     <tr>
                       <th className="py-3 px-4">File Audio / ID</th>
                       <th className="py-3 px-4">Tanggal</th>
-                      <th className="py-3 px-4">Durasi</th>
+                      <th className="py-3 px-4">Durasi Audio</th>
+                      <th className="py-3 px-4">Lama Generate</th>
                       <th className="py-3 px-4">Status AI</th>
                       <th className="py-3 px-4">Ringkasan Pembahasan</th>
                       <th className="py-3 px-4 text-right">Aksi</th>
@@ -1437,6 +1446,12 @@ export default function App() {
                         </td>
                         <td className="py-3 px-4 text-indigo-300 font-mono whitespace-nowrap">
                           {fmtDur(item.duration_s)}
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1 font-mono text-[11px] text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
+                            <Zap className="w-3 h-3 text-amber-400" />
+                            {item.generation_time_s != null ? `${item.generation_time_s}s` : "-"}
+                          </span>
                         </td>
                         <td className="py-3 px-4">
                           <span className={`text-[10px] px-2 py-0.5 rounded-full border ${item.ai_correction_status === "completed" ? "bg-emerald-950/40 border-emerald-700/40 text-emerald-400" : "bg-slate-800/40 border-slate-700/40 text-slate-400"}`}>
@@ -1534,7 +1549,7 @@ export default function App() {
             </div>
 
             {/* Metadata Bar */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-[#0c0e14] border border-[#1e2330] rounded-xl p-4 text-xs">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 bg-[#0c0e14] border border-[#1e2330] rounded-xl p-4 text-xs">
               <div>
                 <span className="text-slate-500 block text-[10px] uppercase tracking-wider">File Audio</span>
                 <span className="font-medium text-slate-200 truncate block mt-0.5">{selectedItem.filename}</span>
@@ -1546,6 +1561,13 @@ export default function App() {
               <div>
                 <span className="text-slate-500 block text-[10px] uppercase tracking-wider">Durasi Audio</span>
                 <span className="font-medium text-indigo-300 block mt-0.5">{fmtDur(selectedItem.duration_s)}</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[10px] uppercase tracking-wider">Lama Generate</span>
+                <span className="font-medium text-amber-300 flex items-center gap-1 mt-0.5 font-mono">
+                  <Zap className="w-3 h-3 text-amber-400" />
+                  {selectedItem.generation_time_s != null ? `${selectedItem.generation_time_s}s` : "-"}
+                </span>
               </div>
               <div>
                 <span className="text-slate-500 block text-[10px] uppercase tracking-wider">Koreksi AI</span>

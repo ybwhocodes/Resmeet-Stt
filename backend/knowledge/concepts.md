@@ -164,3 +164,38 @@
 
 - Deskripsi: Keseimbangan adaptif antara kesiapan kapabilitas teknis personel pelaksana dengan kompleksitas sistem teknologi yang diimplementasikan.
 - Sumber: job_id=3be48a030dcf47558b446571fb341cde
+
+## Demarkasi Tanggung Jawab Retensi Berbasis Usia Langganan
+
+- Deskripsi: Pembagian wewenang tegas di mana retensi pelanggan 1-4 bulan ditangani cabang dan AE perolehan, sedangkan bulan ke-5 ke atas ditangani oleh divisi retensi pusat.
+- Sumber: job_id=fe795bc56d3c4df1937d51369cfcffbd
+
+## Multi-Level Cohort Monitoring
+
+- Deskripsi: Struktur pemantauan visual data churn dari level makro korporasi hingga level mikro kantor cabang dan riwayat individu tenaga penjual (AE).
+- Sumber: job_id=fe795bc56d3c4df1937d51369cfcffbd
+
+## Tiga Lapis Validasi Kunjungan Lapangan
+
+- Deskripsi: Mekanisme anti-fraud verifikasi laporan visit melalui pencocokan foto perangkat fisik modem, barcode serial number, dan geo-tagging koordinat GPS.
+- Sumber: job_id=fe795bc56d3c4df1937d51369cfcffbd
+
+## Protokol Komunikasi Konsultatif Empat Langkah
+
+- Deskripsi: Teknik penanganan pelanggan menunggak oleh AE yang berfokus pada evaluasi kendala teknis dan penawaran jalan keluar finansial tanpa konfrontasi penagihan langsung.
+- Sumber: job_id=fe795bc56d3c4df1937d51369cfcffbd
+
+## Global Context Switching vs Local Filtering
+
+- Deskripsi: Pendekatan arsitektur antarmuka di mana pemilihan lingkup cabang dilakukan pada level global navigasi atas (Top Bar), sehingga seluruh modul di bawahnya secara otomatis menyesuaikan konteks tanpa perlu filter dropdown berulang di tiap halaman.
+- Sumber: job_id=cbab485d23124a7194e3f67e4f40c8b4
+
+## Hierarki Coverage Area (Primary vs Overlay)
+
+- Deskripsi: Klasifikasi struktural wilayah jaringan telekomunikasi yang membedakan teritori pembukaan awal (Primary) dan penambahan kapasitas jaringan eksisting (Overlay) untuk evaluasi investasi infrastruktur yang presisi.
+- Sumber: job_id=cbab485d23124a7194e3f67e4f40c8b4
+
+## Customer Status Lifecycle
+
+- Deskripsi: Siklus pergerakan status pelanggan dari status Aktif, Isolir (pemutusan sementara), hingga Terminate (pemutusan permanen) sebagai indikator performa retensi pada setiap wilayah cakupan jaringan.
+- Sumber: job_id=cbab485d23124a7194e3f67e4f40c8b4

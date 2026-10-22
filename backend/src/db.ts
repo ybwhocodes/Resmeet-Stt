@@ -129,6 +129,7 @@ export async function initDb(): Promise<{ success: boolean; type: string; messag
           final_text TEXT NOT NULL,
           created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
           duration_s REAL DEFAULT NULL,
+          generation_time_s REAL DEFAULT NULL,
           language TEXT DEFAULT 'id',
           word_timestamps TEXT DEFAULT NULL,
           raw_text TEXT DEFAULT NULL,
@@ -140,6 +141,7 @@ export async function initDb(): Promise<{ success: boolean; type: string; messag
           ai_data TEXT DEFAULT NULL
         );
       `);
+      try { raw.run("ALTER TABLE transcripts ADD COLUMN generation_time_s REAL DEFAULT NULL;"); } catch {}
       // Warm up Drizzle ORM instance
       getDrizzleSqliteDb();
       console.log(`[Drizzle ORM] SQLite database initialized successfully (${PATHS.sqliteFile}).`);
@@ -326,6 +328,7 @@ export async function migrateDatabase(params: {
           final_text TEXT NOT NULL,
           created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
           duration_s REAL DEFAULT NULL,
+          generation_time_s REAL DEFAULT NULL,
           language TEXT DEFAULT 'id',
           word_timestamps TEXT DEFAULT NULL,
           raw_text TEXT DEFAULT NULL,
@@ -337,6 +340,7 @@ export async function migrateDatabase(params: {
           ai_data TEXT DEFAULT NULL
         );
       `);
+      try { raw.run("ALTER TABLE transcripts ADD COLUMN generation_time_s REAL DEFAULT NULL;"); } catch {}
       return {
         success: true,
         message: "Tabel 'transcripts' pada SQLite lokal berhasil dimigrasi (Drizzle ORM siap).",
@@ -516,6 +520,7 @@ export interface SaveTranscriptParams {
   filename: string;
   finalText: string;
   durationS: number;
+  generationTimeS?: number | null;
   wordTimestamps?: any;
   rawText?: string | null;
   aiText?: string | null;
@@ -535,6 +540,7 @@ export async function saveTranscript(params: SaveTranscriptParams): Promise<numb
   const directedTopicsJson = params.directedTopics ? JSON.stringify(params.directedTopics) : null;
   const aiDataJson = params.aiData ? JSON.stringify(params.aiData) : null;
   const duration = Math.round(params.durationS * 100) / 100;
+  const generationTime = params.generationTimeS != null ? Math.round(params.generationTimeS * 10) / 10 : null;
 
   if (activeType === "sqlite") {
     const orm = getDrizzleSqliteDb();
@@ -542,6 +548,7 @@ export async function saveTranscript(params: SaveTranscriptParams): Promise<numb
       filename: params.filename,
       final_text: params.finalText,
       duration_s: duration,
+      generation_time_s: generationTime,
       word_timestamps: wordTsJson,
       raw_text: params.rawText || null,
       ai_corrected_text: params.aiText || null,
@@ -560,6 +567,7 @@ export async function saveTranscript(params: SaveTranscriptParams): Promise<numb
       filename: params.filename,
       final_text: params.finalText,
       duration_s: duration,
+      generation_time_s: generationTime,
       word_timestamps: params.wordTimestamps || null,
       raw_text: params.rawText || null,
       ai_corrected_text: params.aiText || null,
@@ -578,6 +586,7 @@ export async function saveTranscript(params: SaveTranscriptParams): Promise<numb
       filename: params.filename,
       final_text: params.finalText,
       duration_s: duration,
+      generation_time_s: generationTime,
       word_timestamps: params.wordTimestamps || null,
       raw_text: params.rawText || null,
       ai_corrected_text: params.aiText || null,
@@ -630,6 +639,7 @@ function formatTranscriptRow(row: any) {
   return {
     ...row,
     created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+    generation_time_s: row.generation_time_s != null ? Number(row.generation_time_s) : null,
     word_timestamps: wordTimestamps,
     directed_topics: directedTopics,
     ai_data: aiData,

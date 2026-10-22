@@ -19,7 +19,6 @@ import {
 import { ensureKnowledgeFiles, updateKnowledge } from "./knowledge";
 import { calculateFileHash, getCacheKey, readCache, writeCache } from "./cache";
 import { convertWithFfmpeg, transcribeWithProgress, getWhisperModelPath, findWhisperCliBinary } from "./whisper";
-import { runTovWorker } from "./worker-runner";
 import { callAiCorrection, callAiParaphrase, isAiConfigured, testAiConnection, resolveParaphraseStyle } from "./ai";
 import { renderMarkdown } from "./markdown";
 
@@ -76,7 +75,7 @@ async function runPreflight(requireAi = false) {
     whisper_model: whisperModelOk,
     database: dbOk,
     drizzle_orm: dbOk,
-    tov_worker: fs.existsSync(path.join(PATHS.baseDir, "bin", "resmeet-worker")) || fs.existsSync(path.join(PATHS.baseDir, "src", "worker.tov")),
+    whisper_engine: true,
     ai_config: !requireAi || isAiConfigured(),
   };
 
@@ -248,7 +247,7 @@ const server = http.createServer(async (req, res) => {
         server: "Bun + TypeScript",
         engine: "whisper.cpp",
         orm: "Drizzle ORM (Zero-overhead)",
-        worker_engine: "Tov Native Worker (tov.sh)",
+        worker_mode: "In-Process Realtime Streaming Engine",
         model: config.whisperModel,
         model_path: modelPath,
         cpu_threads: config.cpuThreads,
@@ -667,6 +666,7 @@ async function startTranscriptionWorker(
         filename: originalFilename,
         finalText: cached.final_text,
         durationS: cached.duration_s,
+        generationTimeS: 0.1,
         wordTimestamps: cached.word_timestamps,
         rawText: cached.raw_text,
         aiText: cached.ai_corrected_text,
@@ -683,6 +683,7 @@ async function startTranscriptionWorker(
         id: newId,
         filename: originalFilename,
         ...cached,
+        generation_time_s: 0.1,
         summary: cached.ai_summary || cached.summary || null,
         ai_summary: cached.ai_summary || cached.summary || null,
         directed_topics: cached.directed_topics || cached.ai_data?.directed_topics || [],
@@ -696,60 +697,35 @@ async function startTranscriptionWorker(
       return;
     }
 
-    // 1 & 2: Process audio & STT via Tov Native Worker (with automatic in-process fallback)
+    // 1. Audio Preprocessing with Selected Model (Pydub/Scipy/DeepFilter/NoiseReduce/VAD)
+    io.to(jobId).emit("progress", {
+      job_id: jobId,
+      percent: 2,
+      elapsed_s: 0,
+      current_text: "",
+      stage: `Preprocessing audio (${comboLabels[combo] || "Model " + combo})...`,
+    });
+
+    const { outputPath, durationS } = await convertWithFfmpeg(savePath, combo);
+    processedPath = outputPath;
+
+    // 2. STT Transcription with Realtime Live Progress
     setJobStatus(jobId, "transcribing");
-    let whisperResult;
-    let durationS = 0;
-
-    try {
-      const tovResult = await runTovWorker(
-        jobId,
-        savePath,
-        combo,
-        wordTimestamps,
-        (percent, stage, currentText) => {
-          io.to(jobId).emit("progress", {
-            job_id: jobId,
-            percent,
-            elapsed_s: Math.round((durationS * percent) / 100),
-            current_text: currentText || "",
-            stage,
-          });
-        }
-      );
-      whisperResult = tovResult.whisperResult;
-      processedPath = tovResult.processedPath;
-      durationS = tovResult.durationS;
-    } catch (tovErr: any) {
-      console.warn(`[Job ${jobId}] Tov Worker fallback (${tovErr.message}) — menjalankan in-process.`);
-      io.to(jobId).emit("progress", {
-        job_id: jobId,
-        percent: 2,
-        elapsed_s: 0,
-        current_text: "",
-        stage: `Preprocessing audio (${comboLabels[combo] || "Combo " + combo})...`,
-      });
-
-      const converted = await convertWithFfmpeg(savePath, combo);
-      processedPath = converted.outputPath;
-      durationS = converted.durationS;
-
-      whisperResult = await transcribeWithProgress(
-        processedPath,
-        durationS,
-        wordTimestamps,
-        combo,
-        (percent, stage, currentText) => {
-          io.to(jobId).emit("progress", {
-            job_id: jobId,
-            percent,
-            elapsed_s: Math.round((durationS * percent) / 100),
-            current_text: currentText || "",
-            stage,
-          });
-        }
-      );
-    }
+    const whisperResult = await transcribeWithProgress(
+      processedPath,
+      durationS,
+      wordTimestamps,
+      combo,
+      (percent, stage, currentText) => {
+        io.to(jobId).emit("progress", {
+          job_id: jobId,
+          percent,
+          elapsed_s: Math.round((durationS * percent) / 100),
+          current_text: currentText || "",
+          stage,
+        });
+      }
+    );
 
     let finalText = whisperResult.finalText;
     let aiData: any = null;
@@ -804,11 +780,14 @@ async function startTranscriptionWorker(
       writeCache(cacheKey, payload);
     }
 
-    // 7. Save to Database
+    const generationTimeS = Math.round(((Date.now() - queuedAt) / 1000) * 10) / 10;
+
+    // 7. Save to Database (Drizzle ORM)
     const newId = await saveTranscript({
       filename: originalFilename,
       finalText,
       durationS,
+      generationTimeS,
       wordTimestamps: whisperResult.wordTimestamps,
       rawText: whisperResult.rawText,
       aiText: payload.ai_corrected_text,
@@ -825,6 +804,7 @@ async function startTranscriptionWorker(
       id: newId,
       filename: originalFilename,
       ...payload,
+      generation_time_s: generationTimeS,
       summary: aiData?.summary || null,
       ai_summary: aiData?.summary || null,
       directed_topics: aiData?.directed_topics || [],

@@ -5,8 +5,7 @@
   "main": "src/index.ts",
   "scripts": {
     "start": "bun run src/index.ts",
-    "dev": "bun --watch run src/index.ts",
-    "build:worker": "tov build src/worker.tov -o bin/resmeet-worker"
+    "dev": "bun --watch run src/index.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
