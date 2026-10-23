@@ -26,7 +26,9 @@ export function getSqliteDb(): SqliteDatabase {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
     sqliteInstance = new SqliteDatabase(dbPath);
-    sqliteInstance.run("PRAGMA journal_mode = WAL;");
+    sqliteInstance.run("PRAGMA journal_mode = DELETE;");
+    sqliteInstance.run("PRAGMA synchronous = NORMAL;");
+    sqliteInstance.run("PRAGMA busy_timeout = 15000;");
     sqliteInstance.run("PRAGMA foreign_keys = ON;");
   }
   return sqliteInstance;

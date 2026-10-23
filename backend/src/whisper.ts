@@ -107,7 +107,7 @@ export async function convertWithFfmpeg(
         output_path: outputPath,
         combo,
       }),
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(300000),
     });
     if (res.ok) {
       const diag = await res.json();
@@ -159,7 +159,8 @@ export async function convertWithFfmpeg(
                   console.warn(`[preprocess_combo] Combo ${combo} warnings:`, diag.warnings);
                 }
                 if (diag.vad_segments !== undefined) {
-                  console.log(`[preprocess_combo] Combo ${combo}: ${diag.vad_segments} VAD segments, duration=${diag.duration_s?.toFixed(2)}s`);
+                  const segCount = Array.isArray(diag.vad_segments) ? diag.vad_segments.length : diag.vad_segments;
+                  console.log(`[preprocess_combo] Combo ${combo}: ${segCount} VAD segments, duration=${(diag.duration_s || diag.output_duration_s || 0).toFixed(2)}s`);
                 }
               }
             } catch {

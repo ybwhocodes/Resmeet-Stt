@@ -164,10 +164,13 @@ class PreprocessHandler(BaseHTTPRequestHandler):
 
         diag["processing_time_s"] = round(time.time() - t0, 3)
 
-        self.send_response(200 if diag["success"] else 500)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(json.dumps(diag).encode("utf-8"))
+        try:
+            self.send_response(200 if diag["success"] else 500)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(diag).encode("utf-8"))
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
 def main():
     port = int(os.environ.get("PREPROCESS_PORT", 8179))
