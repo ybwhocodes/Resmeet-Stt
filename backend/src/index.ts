@@ -31,6 +31,12 @@ interface JobStatus {
   error?: string;
   cache_hit?: boolean;
   md_url?: string | null;
+  progress?: {
+    percent: number;
+    stage: string;
+    elapsed_s: number;
+    current_text: string;
+  };
   [key: string]: any;
 }
 
@@ -42,6 +48,15 @@ function setJobStatus(jobId: string, status: string, extra: Record<string, any> 
 
 function getJobStatus(jobId: string): JobStatus | undefined {
   return JOB_STATUS[jobId];
+}
+
+function emitJobProgress(jobId: string, percent: number, stage: string, elapsed_s = 0, current_text = "") {
+  const p = { percent, stage, elapsed_s, current_text };
+  setJobStatus(jobId, "processing", { progress: p });
+  io.to(jobId).emit("progress", {
+    job_id: jobId,
+    ...p,
+  });
 }
 
 // Check system preflight
@@ -577,7 +592,7 @@ const server = http.createServer(async (req, res) => {
       return sendJson({
         job_id: jobId,
         filename,
-        status: "queued",
+        status: "processing",
         combo,
         word_timestamps: wordTimestamps,
         ai_correction: aiCorrection,
@@ -606,9 +621,12 @@ io.on("connection", (socket) => {
     const jobId = data?.job_id;
     if (jobId) {
       socket.join(jobId);
-      const status = getJobStatus(jobId);
-      if (status) {
-        socket.emit("job_status", { job_id: jobId, ...status });
+      const job = getJobStatus(jobId);
+      if (job) {
+        if (job.progress) {
+          socket.emit("progress", { job_id: jobId, ...job.progress });
+        }
+        socket.emit("job_status", { job_id: jobId, ...job });
       }
     }
   });
@@ -635,14 +653,8 @@ async function startTranscriptionWorker(
 
   const styleInfo = resolveParaphraseStyle(paraphraseStyle);
 
-  setJobStatus(jobId, "queued", { queued_at: new Date().toISOString(), combo, paraphraseStyle: styleInfo.key });
-  io.to(jobId).emit("progress", {
-    job_id: jobId,
-    percent: 0,
-    elapsed_s: 0,
-    current_text: "",
-    stage: `Queued (${comboLabels[combo] || "Combo " + combo})`,
-  });
+  setJobStatus(jobId, "processing", { queued_at: new Date().toISOString(), combo, paraphraseStyle: styleInfo.key });
+  emitJobProgress(jobId, 1, `Memulai pemrosesan (${comboLabels[combo] || "Model " + combo})...`);
 
   try {
     setJobStatus(jobId, "preflight");
@@ -698,15 +710,11 @@ async function startTranscriptionWorker(
     }
 
     // 1. Audio Preprocessing with Selected Model (Pydub/Scipy/DeepFilter/NoiseReduce/VAD)
-    io.to(jobId).emit("progress", {
-      job_id: jobId,
-      percent: 2,
-      elapsed_s: 0,
-      current_text: "",
-      stage: `Preprocessing audio (${comboLabels[combo] || "Model " + combo})...`,
-    });
+    emitJobProgress(jobId, 2, `Preprocessing audio (${comboLabels[combo] || "Model " + combo})...`);
 
-    const { outputPath, durationS } = await convertWithFfmpeg(savePath, combo);
+    const { outputPath, durationS } = await convertWithFfmpeg(savePath, combo, 16000, (pct, stage) => {
+      emitJobProgress(jobId, pct, stage);
+    });
     processedPath = outputPath;
 
     // 2. STT Transcription with Realtime Live Progress
@@ -717,13 +725,13 @@ async function startTranscriptionWorker(
       wordTimestamps,
       combo,
       (percent, stage, currentText) => {
-        io.to(jobId).emit("progress", {
-          job_id: jobId,
+        emitJobProgress(
+          jobId,
           percent,
-          elapsed_s: Math.round((durationS * percent) / 100),
-          current_text: currentText || "",
           stage,
-        });
+          Math.round((durationS * percent) / 100),
+          currentText || ""
+        );
       }
     );
 
@@ -734,13 +742,12 @@ async function startTranscriptionWorker(
     // 3. AI Correction & Jev-ultrafast Goal-Directed Topics Analysis with Paraphrase Style
     if (aiCorrection) {
       setJobStatus(jobId, "correcting");
-      io.to(jobId).emit("progress", {
-        job_id: jobId,
-        percent: 96,
-        elapsed_s: Math.round(durationS),
-        current_text: "",
-        stage: `Menganalisis topik terarah & parafrase AI (${styleInfo.name})...`,
-      });
+      emitJobProgress(
+        jobId,
+        95,
+        `Menganalisis topik terarah & parafrase AI (${styleInfo.name})...`,
+        Math.round(durationS)
+      );
 
       const aiRes = await callAiCorrection(whisperResult.rawText, originalFilename, durationS, paraphraseStyle);
       aiData = aiRes.data;

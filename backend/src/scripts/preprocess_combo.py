@@ -302,6 +302,7 @@ def run_combo_processing(input_path: str, output_path: str, combo: str):
             audio = np.zeros(int(sr * 0.5), dtype=np.float32)
 
         # ── Step 1: DeepFilter-Net+ [Rumble Cut (65Hz) + Bandpass Vocal (80Hz - 7.5kHz) + Spectral Smoothing] ────
+        log_err("Step 1: Bandpass Vocal (80Hz - 7.5kHz) & Normalisasi Loudness (Pydub/Scipy)...")
         audio = apply_highpass(audio, sr, cutoff_hz=65)
         audio = apply_bandpass(audio, sr, low_hz=80, high_hz=7500)
         audio = apply_spectral_smoothing(audio, kernel_size=3)
@@ -311,9 +312,11 @@ def run_combo_processing(input_path: str, output_path: str, combo: str):
             diag['warnings'].append(f"Speech AGC skipped: {e_agc}")
 
         # ── Step 2: NoiseReduce [Spectral Gating Noise Reduction] ─────────────
+        log_err("Step 2: Spectral Gating Noise Reduction (NoiseReduce)...")
         audio = apply_noisereduce(audio, sr, prop_decrease=0.30, n_fft=1024)
 
         # ── Step 3: Silero VAD [Deteksi Segmen Ucapan Aktif - Timestamp Traceable] ──
+        log_err("Step 3: Deteksi Segmen Ucapan Aktif (Silero VAD)...")
         segments = run_silero_vad_with_offsets(
             audio, sr,
             threshold=0.50,

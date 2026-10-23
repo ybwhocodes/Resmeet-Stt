@@ -65,10 +65,13 @@ export function postprocess(text: string): string {
 export async function convertWithFfmpeg(
   inputPath: string,
   combo = "1",
-  targetSr = 16000
+  targetSr = 16000,
+  onProgress?: (percent: number, stage: string) => void
 ): Promise<{ outputPath: string; durationS: number }> {
   const intermediatePath = inputPath.replace(/\.[^/.]+$/, "") + "_raw.wav";
   const outputPath = inputPath.replace(/\.[^/.]+$/, "") + `_combo${combo}.wav`;
+
+  onProgress?.(2, "Standardisasi audio dengan FFmpeg (16kHz Mono)...");
 
   // Step 1: Standardize with FFmpeg (16kHz mono PCM)
   await new Promise<void>((resolve, reject) => {
@@ -92,6 +95,8 @@ export async function convertWithFfmpeg(
     });
   });
 
+  onProgress?.(4, "Normalisasi Loudness (Pydub/Scipy)...");
+
   // Step 2: Apply Combo-specific audio preprocessing (DeepFilter-Net, NoiseReduce, Silero-VAD)
   const scriptPath = path.join(__dirname, "scripts", "preprocess_combo.py");
   if (fs.existsSync(scriptPath)) {
@@ -107,7 +112,17 @@ export async function convertWithFfmpeg(
         let pyStdout = "";
         let pyStderr = "";
         py.stdout.on("data", (d: Buffer) => { pyStdout += d.toString(); });
-        py.stderr.on("data", (d: Buffer) => { pyStderr += d.toString(); });
+        py.stderr.on("data", (d: Buffer) => {
+          const text = d.toString();
+          pyStderr += text;
+          if (text.includes("Step 1")) {
+            onProgress?.(5, "Bandpass Vocal & Normalisasi Loudness (Pydub/Scipy)...");
+          } else if (text.includes("Step 2")) {
+            onProgress?.(7, "Reduksi Noise (Spectral Gating NoiseReduce)...");
+          } else if (text.includes("Step 3") || text.includes("Silero VAD")) {
+            onProgress?.(9, "Deteksi Segmen Ucapan Aktif (Silero VAD)...");
+          }
+        });
 
         py.on("close", (code) => {
           // Parse and log diagnostics JSON from Python script
@@ -128,6 +143,7 @@ export async function convertWithFfmpeg(
 
           if (code === 0 && fs.existsSync(outputPath)) {
             try { fs.unlinkSync(intermediatePath); } catch {}
+            onProgress?.(11, "Preprocessing audio selesai.");
             resolve();
           } else {
             // Log error details for debugging
@@ -222,7 +238,7 @@ export async function transcribeWithProgress(
     "2": "Model 2: Faster-Whisper Turbo (faster-whisper-large-v3-turbo)",
   };
 
-  onProgress?.(0, `Memulai ${comboLabels[combo] || "Transkripsi"}...`);
+  onProgress?.(12, `Inisialisasi Whisper Engine & Model (${combo === "2" ? "Faster-Whisper" : "Whisper C++"})...`);
 
   // Import dynamic glossary terms for domain prompt injection
   const { getGlossaryPromptTerms } = await import("./knowledge");
@@ -294,11 +310,11 @@ export async function transcribeWithProgress(
               const currentAudioSec = hours * 3600 + mins * 60 + secs;
               const segText = m[9]?.trim() || "";
 
-              let pct = totalDuration > 0 ? (currentAudioSec / totalDuration) * 95 : lastPercent + 5;
-              pct = Math.min(Math.max(pct, lastPercent), 95);
+              let pct = totalDuration > 0 ? 12 + (currentAudioSec / totalDuration) * 82 : lastPercent + 2;
+              pct = Math.min(Math.max(pct, lastPercent), 94);
               lastPercent = pct;
 
-              onProgress?.(Math.round(pct * 10) / 10, `Memproses Model 2 (${Math.round(pct)}%)`, segText);
+              onProgress?.(Math.round(pct * 10) / 10, `Mentranskripsi (${Math.round(pct)}%)`, segText);
             }
           }
         };
@@ -337,20 +353,21 @@ export async function transcribeWithProgress(
               const currentAudioSec = hours * 3600 + mins * 60 + secs;
               const segText = m[9]?.trim() || "";
 
-              let pct = totalDuration > 0 ? (currentAudioSec / totalDuration) * 95 : lastPercent + 5;
-              pct = Math.min(Math.max(pct, lastPercent), 95);
+              let pct = totalDuration > 0 ? 12 + (currentAudioSec / totalDuration) * 82 : lastPercent + 2;
+              pct = Math.min(Math.max(pct, lastPercent), 94);
               lastPercent = pct;
 
-              onProgress?.(Math.round(pct * 10) / 10, `Memproses Model 1 (${Math.round(pct)}%)`, segText);
+              onProgress?.(Math.round(pct * 10) / 10, `Mentranskripsi (${Math.round(pct)}%)`, segText);
             }
           }
 
           const progMatch = text.match(/progress\s*=\s*(\d+)%/i);
           if (progMatch) {
-            const pct = Math.min(parseInt(progMatch[1], 10), 95);
+            const whisperPct = parseInt(progMatch[1], 10);
+            const pct = Math.min(12 + Math.round((whisperPct * 82) / 100), 94);
             if (pct > lastPercent) {
               lastPercent = pct;
-              onProgress?.(pct, `Transcribing ${pct}%`);
+              onProgress?.(pct, `Mentranskripsi (${pct}%)`);
             }
           }
         };

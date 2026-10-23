@@ -68,11 +68,11 @@ function ProgressPanel({ progress }) {
       </div>
       <div className="flex items-center justify-between">
         <span className="text-indigo-400 font-bold text-lg tabular-nums">{percent}%</span>
-        <span className="text-slate-500 text-xs text-right max-w-[280px] truncate">{stage}</span>
+        <span className="text-slate-300 text-xs text-right max-w-[340px] truncate font-medium">{stage}</span>
       </div>
       {elapsed_s > 0 && (
-        <p className="text-slate-600 text-xs">
-          Audio diproses: <span className="text-slate-400">{fmtDur(elapsed_s)}</span>
+        <p className="text-slate-500 text-xs">
+          Audio diproses: <span className="text-slate-300 font-mono">{fmtDur(elapsed_s)}</span>
         </p>
       )}
       {current_text && (
@@ -220,7 +220,13 @@ export default function App() {
     socket.on("disconnect", () => setSocketStatus("disconnected"));
     socket.on("connect_error", () => setSocketStatus("disconnected"));
     socket.on("progress", (data) => setProgress({ percent: data.percent ?? 0, stage: data.stage ?? "", elapsed_s: data.elapsed_s ?? 0, current_text: data.current_text ?? "" }));
-    socket.on("job_status", (data) => data?.status && setProgress((p) => p || { percent: 0, stage: data.status, elapsed_s: 0, current_text: "" }));
+    socket.on("job_status", (data) => {
+      if (data?.progress) {
+        setProgress(data.progress);
+      } else if (data?.status && data.status !== "queued" && data.status !== "processing") {
+        setProgress((p) => p ? { ...p, stage: data.status } : { percent: 0, stage: data.status, elapsed_s: 0, current_text: "" });
+      }
+    });
     socket.on("done", (data) => {
       setProcessing(false);
       setProgress({ percent: 100, stage: "Selesai", elapsed_s: data.duration_s, current_text: "" });
@@ -484,7 +490,7 @@ export default function App() {
     setProcessing(true);
     setError("");
     setResult(null);
-    setProgress({ percent: 0, stage: "Mengunggah file & menginisialisasi combo...", elapsed_s: 0, current_text: "" });
+    setProgress({ percent: 1, stage: "Mengunggah file & menyiapkan audio...", elapsed_s: 0, current_text: "" });
     try {
       const form = new FormData();
       form.append("audioFile", file);
@@ -497,7 +503,12 @@ export default function App() {
       if (!res.ok) throw new Error(data.error || "Upload gagal");
       setJobId(data.job_id);
       socketRef.current?.emit("join_job", { job_id: data.job_id });
-      setProgress({ percent: 1, stage: data.status || "queued", elapsed_s: 0, current_text: "" });
+      setProgress((prev) => ({
+        percent: Math.max(prev?.percent || 0, 2),
+        stage: "Memulai proses transkripsi...",
+        elapsed_s: 0,
+        current_text: "",
+      }));
     } catch (e) {
       setProcessing(false);
       setProgress(null);
