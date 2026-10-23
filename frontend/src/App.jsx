@@ -36,23 +36,15 @@ const fmtTimer = (s) => {
   return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 };
 
-// 2 Streamlined Models Definitions (Pydub/Scipy -> DeepFilter-Net+ -> NoiseReduce -> Silero VAD)
+// Single Unified Default Model: Large-v3-Turbo + Persistent In-Memory Engine
 const COMBOS = [
   {
     id: "1",
-    name: "Model 1: Fast-Whisper + Silero VAD",
-    tag: "Pydub/Scipy • DeepFilter-Net+ • NoiseReduce • Silero VAD • ggml-large-v3-turbo",
-    desc: "Whisper.cpp native C++ engine dengan model ggml-large-v3-turbo-q5_0 / large-v3-turbo.bin. Tercepat untuk CPU, latensi terendah dengan hasil transkripsi dan MoM AI komprehensif.",
-    badge: "Native C++ (Ultra Cepat)",
-    badgeColor: "bg-indigo-950/60 border-indigo-700/60 text-indigo-300",
-  },
-  {
-    id: "2",
-    name: "Model 2: Faster-Whisper Turbo",
-    tag: "Pydub/Scipy • DeepFilter-Net+ • NoiseReduce • Silero VAD • faster-whisper-large-v3-turbo",
-    desc: "CTranslate2 Python engine dengan model faster-whisper-large-v3-turbo (int8 quantization). Akurasi dan presisi tinggi dengan VAD filtering terintegrasi.",
-    badge: "CTranslate2 (Presisi Tinggi)",
-    badgeColor: "bg-emerald-950/60 border-emerald-700/60 text-emerald-300",
+    name: "Whisper Large-v3-Turbo (Model Default Terpadu)",
+    tag: "Pydub/Scipy • DeepFilter-Net+ • NoiseReduce • Silero VAD • Metal GPU In-Memory Engine",
+    desc: "Engine terpadu Whisper Large-v3-Turbo yang berjalan persistent di RAM dengan akselerasi Metal GPU, Beam Search (size 4), Flash Attention, serta preprocessing suara Pydub, NoiseReduce & Silero VAD untuk akurasi dan kecepatan maksimal.",
+    badge: "⚡ In-Memory Metal GPU + Beam Search 4 (Akurasi & Kecepatan Maksimal)",
+    badgeColor: "bg-indigo-950/60 border-indigo-500/60 text-indigo-300",
   },
 ];
 
@@ -841,46 +833,41 @@ export default function App() {
         {/* ========================================================================= */}
         {nav === "transcribe" && (
           <div className="space-y-6">
-            {/* Step 1: Combo Selector Before Running */}
+            {/* Step 1: Default Model & Audio Pipeline */}
             <div className="bg-[#151821] border border-[#1e2330] rounded-2xl p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
                     <Layers className="w-4 h-4 text-indigo-400" />
-                    Pilih Engine Model Transkripsi (Pipeline Suara Terpadu)
+                    Engine Model Transkripsi Default (Telah Ditetapkan)
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Audio diproses otomatis: <span className="text-slate-400">Pydub/Scipy (Loudness &amp; dBFS)</span> → <span className="text-slate-400">DeepFilter-Net+ (80Hz-7.5kHz + Rumble Cut)</span> → <span className="text-slate-400">NoiseReduce (Spectral Gating)</span> → <span className="text-slate-400">Silero VAD (Timestamp Traceable)</span> → Validasi Post-ASR &amp; Anti-Loop
+                    Pipeline Suara: <span className="text-slate-400">Pydub/Scipy (Loudness &amp; dBFS)</span> → <span className="text-slate-400">DeepFilter-Net+ (80Hz-7.5kHz)</span> → <span className="text-slate-400">NoiseReduce (Spectral Gating)</span> → <span className="text-slate-400">Silero VAD</span> → Validasi Anti-Loop
                   </p>
                 </div>
-                <span className="text-xs text-indigo-400 font-mono bg-indigo-500/10 px-2.5 py-1 rounded-full border border-indigo-500/20">
-                  Model Aktif: #{selectedCombo}
+                <span className="text-xs text-emerald-400 font-medium bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20 flex items-center gap-1.5">
+                  <Check className="w-3.5 h-3.5" />
+                  Model Default Aktif
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {COMBOS.map((combo) => {
-                  const isSelected = selectedCombo === combo.id;
-                  return (
-                    <div
-                      key={combo.id}
-                      onClick={() => setSelectedCombo(combo.id)}
-                      className={`p-4 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${isSelected ? "bg-indigo-600/10 border-indigo-500 shadow-lg shadow-indigo-600/10 ring-1 ring-indigo-500" : "bg-[#0c0e14] border-[#1e2330] hover:border-slate-700"}`}
-                    >
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full border ${combo.badgeColor}`}>
-                            {combo.badge}
-                          </span>
-                          {isSelected && <Check className="w-4 h-4 text-indigo-400" />}
-                        </div>
-                        <h3 className="text-xs font-bold text-slate-200 leading-snug">{combo.name}</h3>
-                        <p className="text-[11px] font-mono text-indigo-300/80 leading-tight">{combo.tag}</p>
-                        <p className="text-[11px] text-slate-500 leading-relaxed pt-1">{combo.desc}</p>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="p-4 rounded-xl border bg-indigo-600/5 border-indigo-500/30">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-slate-100">{COMBOS[0].name}</h3>
+                    <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full border bg-indigo-950/60 border-indigo-500/60 text-indigo-300">
+                      ⚡ In-Memory Metal GPU • Beam Search 4
+                    </span>
+                  </div>
+                  <span className="text-xs text-slate-400 font-mono">0ms Cold Start • Flash Attention</span>
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed">{COMBOS[0].desc}</p>
+                <div className="mt-3 pt-3 border-t border-[#1e2330] flex flex-wrap gap-2 text-[11px] text-slate-400">
+                  <span className="bg-[#0c0e14] px-2.5 py-1 rounded border border-[#1e2330]">🎯 Beam Search (Size 4)</span>
+                  <span className="bg-[#0c0e14] px-2.5 py-1 rounded border border-[#1e2330]">🛡️ Balanced Threshold (0.55)</span>
+                  <span className="bg-[#0c0e14] px-2.5 py-1 rounded border border-[#1e2330]">🔇 Anti-Hallucination Token Filtering</span>
+                  <span className="bg-[#0c0e14] px-2.5 py-1 rounded border border-[#1e2330]">⚡ Apple Metal GPU / SIMD C++</span>
+                </div>
               </div>
             </div>
 

@@ -97,77 +97,103 @@ export async function convertWithFfmpeg(
 
   onProgress?.(4, "Normalisasi Loudness (Pydub/Scipy)...");
 
-  // Step 2: Apply Combo-specific audio preprocessing (DeepFilter-Net, NoiseReduce, Silero-VAD)
-  const scriptPath = path.join(__dirname, "scripts", "preprocess_combo.py");
-  if (fs.existsSync(scriptPath)) {
-    try {
-      await new Promise<void>((resolve) => {
-        const py = spawn("python3", [
-          scriptPath,
-          "--input", intermediatePath,
-          "--output", outputPath,
-          "--combo", combo,
-        ]);
+  let daemonSucceeded = false;
+  try {
+    const res = await fetch("http://127.0.0.1:8179/preprocess", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        input_path: intermediatePath,
+        output_path: outputPath,
+        combo,
+      }),
+      signal: AbortSignal.timeout(20000),
+    });
+    if (res.ok) {
+      const diag = await res.json();
+      if (diag.success && fs.existsSync(outputPath)) {
+        try { fs.unlinkSync(intermediatePath); } catch {}
+        daemonSucceeded = true;
+        onProgress?.(11, `Preprocessing audio selesai (${diag.processing_time_s}s, ${diag.vad_segment_count || 0} VAD segments).`);
+      }
+    }
+  } catch {
+    // Daemon not reachable, fallback to direct script
+  }
 
-        let pyStdout = "";
-        let pyStderr = "";
-        py.stdout.on("data", (d: Buffer) => { pyStdout += d.toString(); });
-        py.stderr.on("data", (d: Buffer) => {
-          const text = d.toString();
-          pyStderr += text;
-          if (text.includes("Step 1")) {
-            onProgress?.(5, "Bandpass Vocal & Normalisasi Loudness (Pydub/Scipy)...");
-          } else if (text.includes("Step 2")) {
-            onProgress?.(7, "Reduksi Noise (Spectral Gating NoiseReduce)...");
-          } else if (text.includes("Step 3") || text.includes("Silero VAD")) {
-            onProgress?.(9, "Deteksi Segmen Ucapan Aktif (Silero VAD)...");
-          }
-        });
+  // Step 2: Fallback to Combo-specific audio preprocessing if daemon was unavailable
+  if (!daemonSucceeded) {
+    const scriptPath = path.join(__dirname, "scripts", "preprocess_combo.py");
+    if (fs.existsSync(scriptPath)) {
+      try {
+        await new Promise<void>((resolve) => {
+          const py = spawn("python3", [
+            scriptPath,
+            "--input", intermediatePath,
+            "--output", outputPath,
+            "--combo", combo,
+          ]);
 
-        py.on("close", (code) => {
-          // Parse and log diagnostics JSON from Python script
-          try {
-            const diagLine = pyStdout.trim().split("\n").find((l) => l.startsWith("{"));
-            if (diagLine) {
-              const diag = JSON.parse(diagLine);
-              if (diag.warnings && diag.warnings.length > 0) {
-                console.warn(`[preprocess_combo] Combo ${combo} warnings:`, diag.warnings);
-              }
-              if (diag.vad_segments !== undefined) {
-                console.log(`[preprocess_combo] Combo ${combo}: ${diag.vad_segments} VAD segments, duration=${diag.duration_s?.toFixed(2)}s`);
-              }
+          let pyStdout = "";
+          let pyStderr = "";
+          py.stdout.on("data", (d: Buffer) => { pyStdout += d.toString(); });
+          py.stderr.on("data", (d: Buffer) => {
+            const text = d.toString();
+            pyStderr += text;
+            if (text.includes("Step 1")) {
+              onProgress?.(5, "Bandpass Vocal & Normalisasi Loudness (Pydub/Scipy)...");
+            } else if (text.includes("Step 2")) {
+              onProgress?.(7, "Reduksi Noise (Spectral Gating NoiseReduce)...");
+            } else if (text.includes("Step 3") || text.includes("Silero VAD")) {
+              onProgress?.(9, "Deteksi Segmen Ucapan Aktif (Silero VAD)...");
             }
-          } catch {
-            // Ignore JSON parse errors from diagnostics
-          }
+          });
 
-          if (code === 0 && fs.existsSync(outputPath)) {
-            try { fs.unlinkSync(intermediatePath); } catch {}
-            onProgress?.(11, "Preprocessing audio selesai.");
-            resolve();
-          } else {
-            // Log error details for debugging
-            if (pyStderr) {
-              console.error(`[preprocess_combo] Combo ${combo} stderr (last 500 chars):`, pyStderr.slice(-500));
+          py.on("close", (code) => {
+            // Parse and log diagnostics JSON from Python script
+            try {
+              const diagLine = pyStdout.trim().split("\n").find((l) => l.startsWith("{"));
+              if (diagLine) {
+                const diag = JSON.parse(diagLine);
+                if (diag.warnings && diag.warnings.length > 0) {
+                  console.warn(`[preprocess_combo] Combo ${combo} warnings:`, diag.warnings);
+                }
+                if (diag.vad_segments !== undefined) {
+                  console.log(`[preprocess_combo] Combo ${combo}: ${diag.vad_segments} VAD segments, duration=${diag.duration_s?.toFixed(2)}s`);
+                }
+              }
+            } catch {
+              // Ignore JSON parse errors from diagnostics
             }
-            // Fallback to intermediate if python filter had an issue
+
+            if (code === 0 && fs.existsSync(outputPath)) {
+              try { fs.unlinkSync(intermediatePath); } catch {}
+              onProgress?.(11, "Preprocessing audio selesai.");
+              resolve();
+            } else {
+              // Log error details for debugging
+              if (pyStderr) {
+                console.error(`[preprocess_combo] Combo ${combo} stderr (last 500 chars):`, pyStderr.slice(-500));
+              }
+              // Fallback to intermediate if python filter had an issue
+              fs.copyFileSync(intermediatePath, outputPath);
+              try { fs.unlinkSync(intermediatePath); } catch {}
+              resolve();
+            }
+          });
+          py.on("error", (err: Error) => {
+            console.error(`[preprocess_combo] Failed to spawn python3: ${err.message}`);
             fs.copyFileSync(intermediatePath, outputPath);
             try { fs.unlinkSync(intermediatePath); } catch {}
             resolve();
-          }
+          });
         });
-        py.on("error", (err: Error) => {
-          console.error(`[preprocess_combo] Failed to spawn python3: ${err.message}`);
-          fs.copyFileSync(intermediatePath, outputPath);
-          try { fs.unlinkSync(intermediatePath); } catch {}
-          resolve();
-        });
-      });
-    } catch {
+      } catch {
+        fs.copyFileSync(intermediatePath, outputPath);
+      }
+    } else {
       fs.copyFileSync(intermediatePath, outputPath);
     }
-  } else {
-    fs.copyFileSync(intermediatePath, outputPath);
   }
 
   const durationS = await new Promise<number>((resolve) => {
@@ -258,7 +284,9 @@ export async function transcribeWithProgress(
       "-l", "id",
       "-t", String(Math.max(config.cpuThreads, 4)),
       "-fa",                  // Flash Attention
-      "-nth", "0.6",          // no-speech threshold
+      "-bs", "4",             // Beam Search size 4 (Meetily accuracy standard)
+      "-nth", "0.55",         // Balanced speech threshold (Meetily tuning)
+      "-sns",                 // Suppress non-speech tokens
       "-et", "2.4",           // entropy threshold
       "-lpt", "-1.0",         // logprob threshold
       "-tpi", "0.2",          // temperature increment for fallback
@@ -278,6 +306,38 @@ export async function transcribeWithProgress(
   };
 
   const runTranscriptionEngine = async (extraTemp?: number): Promise<string> => {
+    if (combo === "1") {
+      // First attempt: Persistent In-Memory Whisper Server (0ms model loading, Beam Search 4)
+      try {
+        const ping = await fetch("http://127.0.0.1:8178/", { signal: AbortSignal.timeout(600) });
+        if (ping.status < 500) {
+          onProgress?.(30, "Mentranskripsi dengan Persistent Whisper Server (Beam Search 4)...");
+          const form = new FormData();
+          const fileBuf = fs.readFileSync(audioPath);
+          form.append("file", new Blob([fileBuf]), path.basename(audioPath));
+          form.append("response_format", "verbose_json");
+          form.append("language", "id");
+          if (initialPrompt) form.append("prompt", initialPrompt);
+          if (extraTemp !== undefined) form.append("temperature", String(extraTemp));
+
+          const res = await fetch("http://127.0.0.1:8178/inference", {
+            method: "POST",
+            body: form,
+            signal: AbortSignal.timeout(180000),
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            fs.writeFileSync(outputJsonPath, JSON.stringify(data), "utf-8");
+            onProgress?.(92, "Transkripsi selesai, memvalidasi Post-ASR...");
+            return JSON.stringify(data);
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[WhisperEngine] Whisper-Server tidak merespons, beralih ke whisper-cli: ${err.message}`);
+      }
+    }
+
     if (combo === "2") {
       // Model 2: Faster-Whisper Turbo (CTranslate2)
       const scriptPath = path.join(__dirname, "scripts", "transcribe_model2.py");
@@ -332,7 +392,7 @@ export async function transcribeWithProgress(
         });
       });
     } else {
-      // Model 1: whisper-cli native C++
+      // Fallback: whisper-cli native C++ with Beam Search
       return new Promise<string>((resolve, reject) => {
         const proc = spawn(cliBinary, buildArgs(extraTemp));
         let stderr = "";
@@ -487,21 +547,31 @@ export async function transcribeWithProgress(
   const wordTsList: WordTimestamp[] = [];
   const textParts: string[] = [];
 
-  const rawTranscription = jsonContent.transcription || [];
+  const rawTranscription = jsonContent.transcription || jsonContent.segments || [];
   for (const item of rawTranscription) {
     const text = (item.text || "").trim();
     if (text) {
       textParts.push(text);
-      const startMs = item.offsets?.from || 0;
-      const endMs = item.offsets?.to || 0;
+      const startMs = item.offsets?.from !== undefined ? item.offsets.from : (item.start !== undefined ? Math.round(item.start * 1000) : 0);
+      const endMs = item.offsets?.to !== undefined ? item.offsets.to : (item.end !== undefined ? Math.round(item.end * 1000) : 0);
       segments.push({
         start: startMs / 1000,
         end: endMs / 1000,
         text,
       });
 
-      // Words if available in item tokens or words
-      if (Array.isArray(item.tokens)) {
+      // Words if available in item words or tokens
+      if (Array.isArray(item.words)) {
+        for (const w of item.words) {
+          if (w.word && w.word.trim()) {
+            wordTsList.push({
+              word: w.word.trim(),
+              start: w.start || 0,
+              end: w.end || 0,
+            });
+          }
+        }
+      } else if (Array.isArray(item.tokens)) {
         for (const tok of item.tokens) {
           if (tok.text && tok.text.trim()) {
             wordTsList.push({

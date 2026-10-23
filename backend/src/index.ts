@@ -21,6 +21,7 @@ import { calculateFileHash, getCacheKey, readCache, writeCache } from "./cache";
 import { convertWithFfmpeg, transcribeWithProgress, getWhisperModelPath, findWhisperCliBinary } from "./whisper";
 import { callAiCorrection, callAiParaphrase, isAiConfigured, testAiConnection, resolveParaphraseStyle } from "./ai";
 import { renderMarkdown } from "./markdown";
+import { startPersistentEngines, isWhisperServerHealthy, isPreprocessDaemonHealthy } from "./engine-manager";
 
 const ALLOWED_EXTENSIONS = new Set(["mp3", "wav", "ogg", "flac", "m4a", "webm", "mp4", "mpeg", "mpg", "m4v", "aac"]);
 
@@ -80,6 +81,10 @@ async function runPreflight(requireAi = false) {
   }
 
   const dbOk = await checkDbConnection();
+  const [pReady, wReady] = await Promise.all([
+    isPreprocessDaemonHealthy(),
+    isWhisperServerHealthy(),
+  ]);
 
   const checks = {
     uploads_writable: fs.existsSync(PATHS.uploadDir),
@@ -91,6 +96,8 @@ async function runPreflight(requireAi = false) {
     database: dbOk,
     drizzle_orm: dbOk,
     whisper_engine: true,
+    persistent_whisper_engine: wReady,
+    persistent_preprocessor: pReady,
     ai_config: !requireAi || isAiConfigured(),
   };
 
@@ -647,7 +654,7 @@ async function startTranscriptionWorker(
   const queuedAt = Date.now();
 
   const comboLabels: Record<string, string> = {
-    "1": "Model 1: Fast-Whisper + Silero VAD (ggml-large-v3-turbo.bin)",
+    "1": "Whisper Large-v3-Turbo (In-Memory Metal GPU • Beam Search 4)",
     "2": "Model 2: Faster-Whisper Turbo (faster-whisper-large-v3-turbo)",
   };
 
@@ -855,6 +862,11 @@ async function bootstrap() {
 
   await initDb();
   ensureKnowledgeFiles();
+
+  // Boot persistent in-memory engines (Preprocessor + Whisper Server)
+  startPersistentEngines().catch((err) => {
+    console.warn("[Bootstrap] startPersistentEngines error:", err);
+  });
 
   server.listen(config.port, "0.0.0.0", () => {
     console.log(`[Server] Berjalan pada http://0.0.0.0:${config.port}`);
