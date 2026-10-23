@@ -113,6 +113,210 @@ export async function closeDbConnections() {
 }
 
 /**
+ * Schema management helper for SQLite
+ */
+export function ensureSqliteSchema(raw: SqliteDatabase): void {
+  raw.run(`
+    CREATE TABLE IF NOT EXISTS transcripts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      filename TEXT NOT NULL,
+      final_text TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+      duration_s REAL DEFAULT NULL,
+      generation_time_s REAL DEFAULT NULL,
+      language TEXT DEFAULT 'id',
+      word_timestamps TEXT DEFAULT NULL,
+      raw_text TEXT DEFAULT NULL,
+      ai_corrected_text TEXT DEFAULT NULL,
+      ai_summary TEXT DEFAULT NULL,
+      md_path TEXT DEFAULT NULL,
+      ai_correction_status TEXT DEFAULT 'skipped',
+      directed_topics TEXT DEFAULT NULL,
+      ai_data TEXT DEFAULT NULL
+    );
+  `);
+  try { raw.run("ALTER TABLE transcripts ADD COLUMN duration_s REAL DEFAULT NULL;"); } catch {}
+  try { raw.run("ALTER TABLE transcripts ADD COLUMN generation_time_s REAL DEFAULT NULL;"); } catch {}
+  try { raw.run("ALTER TABLE transcripts ADD COLUMN language TEXT DEFAULT 'id';"); } catch {}
+  try { raw.run("ALTER TABLE transcripts ADD COLUMN word_timestamps TEXT DEFAULT NULL;"); } catch {}
+  try { raw.run("ALTER TABLE transcripts ADD COLUMN raw_text TEXT DEFAULT NULL;"); } catch {}
+  try { raw.run("ALTER TABLE transcripts ADD COLUMN ai_corrected_text TEXT DEFAULT NULL;"); } catch {}
+  try { raw.run("ALTER TABLE transcripts ADD COLUMN ai_summary TEXT DEFAULT NULL;"); } catch {}
+  try { raw.run("ALTER TABLE transcripts ADD COLUMN md_path TEXT DEFAULT NULL;"); } catch {}
+  try { raw.run("ALTER TABLE transcripts ADD COLUMN ai_correction_status TEXT DEFAULT 'skipped';"); } catch {}
+  try { raw.run("ALTER TABLE transcripts ADD COLUMN directed_topics TEXT DEFAULT NULL;"); } catch {}
+  try { raw.run("ALTER TABLE transcripts ADD COLUMN ai_data TEXT DEFAULT NULL;"); } catch {}
+
+  raw.run(`
+    CREATE TABLE IF NOT EXISTS knowledge (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      category TEXT NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      source TEXT DEFAULT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+    );
+  `);
+  try {
+    raw.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_cat_title ON knowledge (category, title);");
+  } catch {}
+}
+
+/**
+ * Schema management helper for MySQL
+ */
+export async function ensureMysqlSchema(connOrPool: any): Promise<void> {
+  await connOrPool.query(`
+    CREATE TABLE IF NOT EXISTS transcripts (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      filename VARCHAR(255) NOT NULL,
+      final_text LONGTEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      duration_s FLOAT DEFAULT NULL,
+      generation_time_s FLOAT DEFAULT NULL,
+      language VARCHAR(10) DEFAULT 'id',
+      word_timestamps JSON DEFAULT NULL,
+      raw_text LONGTEXT DEFAULT NULL,
+      ai_corrected_text LONGTEXT DEFAULT NULL,
+      ai_summary LONGTEXT DEFAULT NULL,
+      md_path VARCHAR(500) DEFAULT NULL,
+      ai_correction_status VARCHAR(50) DEFAULT 'skipped',
+      directed_topics JSON DEFAULT NULL,
+      ai_data JSON DEFAULT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  const cols = [
+    "ALTER TABLE transcripts ADD COLUMN duration_s FLOAT DEFAULT NULL",
+    "ALTER TABLE transcripts ADD COLUMN generation_time_s FLOAT DEFAULT NULL",
+    "ALTER TABLE transcripts ADD COLUMN language VARCHAR(10) DEFAULT 'id'",
+    "ALTER TABLE transcripts ADD COLUMN word_timestamps JSON DEFAULT NULL",
+    "ALTER TABLE transcripts ADD COLUMN raw_text LONGTEXT DEFAULT NULL",
+    "ALTER TABLE transcripts ADD COLUMN ai_corrected_text LONGTEXT DEFAULT NULL",
+    "ALTER TABLE transcripts ADD COLUMN ai_summary LONGTEXT DEFAULT NULL",
+    "ALTER TABLE transcripts ADD COLUMN md_path VARCHAR(500) DEFAULT NULL",
+    "ALTER TABLE transcripts ADD COLUMN ai_correction_status VARCHAR(50) DEFAULT 'skipped'",
+    "ALTER TABLE transcripts ADD COLUMN directed_topics JSON DEFAULT NULL",
+    "ALTER TABLE transcripts ADD COLUMN ai_data JSON DEFAULT NULL",
+  ];
+  for (const c of cols) {
+    try { await connOrPool.query(c); } catch {}
+  }
+
+  await connOrPool.query(`
+    CREATE TABLE IF NOT EXISTS knowledge (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      category VARCHAR(50) NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      content LONGTEXT NOT NULL,
+      source VARCHAR(255) DEFAULT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_knowledge_cat_title (category, title)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+}
+
+/**
+ * Schema management helper for PostgreSQL
+ */
+export async function ensurePgSchema(connOrPool: any): Promise<void> {
+  await connOrPool.query(`
+    CREATE TABLE IF NOT EXISTS transcripts (
+      id SERIAL PRIMARY KEY,
+      filename VARCHAR(255) NOT NULL,
+      final_text TEXT NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      duration_s REAL DEFAULT NULL,
+      generation_time_s REAL DEFAULT NULL,
+      language VARCHAR(10) DEFAULT 'id',
+      word_timestamps JSONB DEFAULT NULL,
+      raw_text TEXT DEFAULT NULL,
+      ai_corrected_text TEXT DEFAULT NULL,
+      ai_summary TEXT DEFAULT NULL,
+      md_path VARCHAR(500) DEFAULT NULL,
+      ai_correction_status VARCHAR(50) DEFAULT 'skipped',
+      directed_topics JSONB DEFAULT NULL,
+      ai_data JSONB DEFAULT NULL
+    );
+  `);
+
+  const cols = [
+    "ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS duration_s REAL DEFAULT NULL;",
+    "ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS generation_time_s REAL DEFAULT NULL;",
+    "ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS language VARCHAR(10) DEFAULT 'id';",
+    "ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS word_timestamps JSONB DEFAULT NULL;",
+    "ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS raw_text TEXT DEFAULT NULL;",
+    "ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS ai_corrected_text TEXT DEFAULT NULL;",
+    "ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS ai_summary TEXT DEFAULT NULL;",
+    "ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS md_path VARCHAR(500) DEFAULT NULL;",
+    "ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS ai_correction_status VARCHAR(50) DEFAULT 'skipped';",
+    "ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS directed_topics JSONB DEFAULT NULL;",
+    "ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS ai_data JSONB DEFAULT NULL;",
+  ];
+  for (const c of cols) {
+    try { await connOrPool.query(c); } catch {}
+  }
+
+  await connOrPool.query(`
+    CREATE TABLE IF NOT EXISTS knowledge (
+      id SERIAL PRIMARY KEY,
+      category VARCHAR(50) NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      content TEXT NOT NULL,
+      source VARCHAR(255) DEFAULT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT uq_knowledge_cat_title UNIQUE (category, title)
+    );
+  `);
+}
+
+/**
+ * Helper to seed knowledge entities from SQLite into target database if target knowledge table is empty.
+ */
+export async function seedKnowledgeFromSqlite(
+  targetConnOrPool: any,
+  targetType: "mysql" | "postgres"
+): Promise<number> {
+  try {
+    const rawSqlite = getSqliteDb();
+    const rows = rawSqlite.query("SELECT category, title, content, source FROM knowledge").all() as Array<{
+      category: string;
+      title: string;
+      content: string;
+      source: string | null;
+    }>;
+    if (!rows.length) return 0;
+
+    let inserted = 0;
+    if (targetType === "mysql") {
+      for (const item of rows) {
+        await targetConnOrPool.query(
+          `INSERT INTO knowledge (category, title, content, source)
+           VALUES (?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE content = VALUES(content);`,
+          [item.category, item.title, item.content, item.source]
+        );
+        inserted++;
+      }
+    } else if (targetType === "postgres") {
+      for (const item of rows) {
+        await targetConnOrPool.query(
+          `INSERT INTO knowledge (category, title, content, source)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (category, title) DO UPDATE SET content = EXCLUDED.content;`,
+          [item.category, item.title, item.content, item.source]
+        );
+        inserted++;
+      }
+    }
+    return inserted;
+  } catch (err) {
+    console.warn(`[Knowledge] Gagal menyalin knowledge dari SQLite ke ${targetType}:`, err);
+    return 0;
+  }
+}
+
+/**
  * Initializes database storage using Drizzle ORM.
  * Defaults to SQLite if MySQL/Postgres connection fails or if SQLite is selected.
  */
@@ -122,45 +326,12 @@ export async function initDb(): Promise<{ success: boolean; type: string; messag
   if (currentType === "sqlite") {
     try {
       const raw = getSqliteDb();
-      raw.run(`
-        CREATE TABLE IF NOT EXISTS transcripts (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          filename TEXT NOT NULL,
-          final_text TEXT NOT NULL,
-          created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-          duration_s REAL DEFAULT NULL,
-          generation_time_s REAL DEFAULT NULL,
-          language TEXT DEFAULT 'id',
-          word_timestamps TEXT DEFAULT NULL,
-          raw_text TEXT DEFAULT NULL,
-          ai_corrected_text TEXT DEFAULT NULL,
-          ai_summary TEXT DEFAULT NULL,
-          md_path TEXT DEFAULT NULL,
-          ai_correction_status TEXT DEFAULT 'skipped',
-          directed_topics TEXT DEFAULT NULL,
-          ai_data TEXT DEFAULT NULL
-        );
-      `);
-      try { raw.run("ALTER TABLE transcripts ADD COLUMN generation_time_s REAL DEFAULT NULL;"); } catch {}
-
-      raw.run(`
-        CREATE TABLE IF NOT EXISTS knowledge (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          category TEXT NOT NULL,
-          title TEXT NOT NULL,
-          content TEXT NOT NULL,
-          source TEXT DEFAULT NULL,
-          created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
-        );
-      `);
-      try {
-        raw.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_cat_title ON knowledge (category, title);");
-      } catch {}
+      ensureSqliteSchema(raw);
 
       // Warm up Drizzle ORM instance
       getDrizzleSqliteDb();
       console.log(`[Drizzle ORM] SQLite database initialized successfully (${PATHS.sqliteFile}).`);
-      return { success: true, type: "sqlite", message: "SQLite Drizzle ORM aktif." };
+      return { success: true, type: "sqlite", message: "SQLite Drizzle ORM aktif dan skema siap." };
     } catch (err: any) {
       console.error("[Drizzle ORM] Gagal inisialisasi SQLite:", err);
       return { success: false, type: "sqlite", message: err.message };
@@ -169,10 +340,23 @@ export async function initDb(): Promise<{ success: boolean; type: string; messag
 
   if (currentType === "mysql") {
     try {
+      const pool = getMysqlPool();
+      await ensureMysqlSchema(pool);
       const orm = getDrizzleMysqlDb();
       await orm.execute(sql`SELECT 1`);
-      console.log(`[Drizzle ORM] MySQL database connected successfully (${config.dbHost}:${config.dbPort}/${config.dbName}).`);
-      return { success: true, type: "mysql", message: "MySQL Drizzle ORM terhubung." };
+
+      // Seed knowledge from SQLite if target database is fresh
+      const [kRows]: any = await pool.query("SELECT COUNT(*) as count FROM knowledge");
+      const kCount = kRows && kRows[0] ? Number(kRows[0].count) : 0;
+      if (kCount === 0) {
+        const seeded = await seedKnowledgeFromSqlite(pool, "mysql");
+        if (seeded > 0) {
+          console.log(`[Knowledge] ✓ ${seeded} entitas knowledge otomatis disalin ke MySQL.`);
+        }
+      }
+
+      console.log(`[Drizzle ORM] MySQL database connected & verified successfully (${config.dbHost}:${config.dbPort}/${config.dbName}).`);
+      return { success: true, type: "mysql", message: "MySQL Drizzle ORM terhubung dan skema siap." };
     } catch (err: any) {
       console.warn(`[Drizzle ORM] MySQL gagal (${err.message}). Beralih otomatis ke SQLite lokal.`);
       config.dbType = "sqlite";
@@ -183,10 +367,23 @@ export async function initDb(): Promise<{ success: boolean; type: string; messag
 
   if (currentType === "postgres") {
     try {
+      const pool = getPgPool();
+      await ensurePgSchema(pool);
       const orm = getDrizzlePgDb();
       await orm.execute(sql`SELECT 1`);
-      console.log(`[Drizzle ORM] PostgreSQL database connected successfully (${config.dbHost}:${config.dbPort}/${config.dbName}).`);
-      return { success: true, type: "postgres", message: "PostgreSQL Drizzle ORM terhubung." };
+
+      // Seed knowledge from SQLite if target database is fresh
+      const kRes = await pool.query("SELECT COUNT(*) as count FROM knowledge");
+      const kCount = kRes.rows && kRes.rows[0] ? Number(kRes.rows[0].count) : 0;
+      if (kCount === 0) {
+        const seeded = await seedKnowledgeFromSqlite(pool, "postgres");
+        if (seeded > 0) {
+          console.log(`[Knowledge] ✓ ${seeded} entitas knowledge otomatis disalin ke PostgreSQL.`);
+        }
+      }
+
+      console.log(`[Drizzle ORM] PostgreSQL database connected & verified successfully (${config.dbHost}:${config.dbPort}/${config.dbName}).`);
+      return { success: true, type: "postgres", message: "PostgreSQL Drizzle ORM terhubung dan skema siap." };
     } catch (err: any) {
       console.warn(`[Drizzle ORM] PostgreSQL gagal (${err.message}). Beralih otomatis ke SQLite lokal.`);
       config.dbType = "sqlite";
@@ -336,29 +533,10 @@ export async function migrateDatabase(params: {
   if (dbType === "sqlite") {
     try {
       const db = getSqliteDb();
-      db.run(`
-        CREATE TABLE IF NOT EXISTS transcripts (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          filename TEXT NOT NULL,
-          final_text TEXT NOT NULL,
-          created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-          duration_s REAL DEFAULT NULL,
-          generation_time_s REAL DEFAULT NULL,
-          language TEXT DEFAULT 'id',
-          word_timestamps TEXT DEFAULT NULL,
-          raw_text TEXT DEFAULT NULL,
-          ai_corrected_text TEXT DEFAULT NULL,
-          ai_summary TEXT DEFAULT NULL,
-          md_path TEXT DEFAULT NULL,
-          ai_correction_status TEXT DEFAULT 'skipped',
-          directed_topics TEXT DEFAULT NULL,
-          ai_data TEXT DEFAULT NULL
-        );
-      `);
-      try { raw.run("ALTER TABLE transcripts ADD COLUMN generation_time_s REAL DEFAULT NULL;"); } catch {}
+      ensureSqliteSchema(db);
       return {
         success: true,
-        message: "Tabel 'transcripts' pada SQLite lokal berhasil dimigrasi (Drizzle ORM siap).",
+        message: "Tabel 'transcripts' dan 'knowledge' pada SQLite lokal berhasil dimigrasi (Drizzle ORM siap).",
       };
     } catch (err: any) {
       return { success: false, message: `Gagal migrasi SQLite: ${err.message}` };
@@ -392,58 +570,24 @@ export async function migrateDatabase(params: {
         connectTimeout: 5000,
       });
 
-      await conn.query(`
-        CREATE TABLE IF NOT EXISTS transcripts (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          filename VARCHAR(255) NOT NULL,
-          final_text LONGTEXT NOT NULL,
-          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          duration_s FLOAT DEFAULT NULL,
-          language VARCHAR(10) DEFAULT 'id',
-          word_timestamps JSON DEFAULT NULL,
-          raw_text LONGTEXT DEFAULT NULL,
-          ai_corrected_text LONGTEXT DEFAULT NULL,
-          ai_summary LONGTEXT DEFAULT NULL,
-          md_path VARCHAR(500) DEFAULT NULL,
-          ai_correction_status VARCHAR(50) DEFAULT 'skipped',
-          directed_topics JSON DEFAULT NULL,
-          ai_data JSON DEFAULT NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-      `);
+      await ensureMysqlSchema(conn);
 
-      const columns = [
-        "ALTER TABLE transcripts ADD COLUMN word_timestamps JSON DEFAULT NULL",
-        "ALTER TABLE transcripts ADD COLUMN raw_text LONGTEXT DEFAULT NULL",
-        "ALTER TABLE transcripts ADD COLUMN ai_corrected_text LONGTEXT DEFAULT NULL",
-        "ALTER TABLE transcripts ADD COLUMN ai_summary LONGTEXT DEFAULT NULL",
-        "ALTER TABLE transcripts ADD COLUMN md_path VARCHAR(500) DEFAULT NULL",
-        "ALTER TABLE transcripts ADD COLUMN ai_correction_status VARCHAR(50) DEFAULT 'skipped'",
-        "ALTER TABLE transcripts ADD COLUMN directed_topics JSON DEFAULT NULL",
-        "ALTER TABLE transcripts ADD COLUMN ai_data JSON DEFAULT NULL",
-      ];
-      for (const colSql of columns) {
-        try {
-          await conn.query(colSql);
-        } catch {}
+      // Seed knowledge from SQLite if target database is empty
+      const [kRows]: any = await conn.query("SELECT COUNT(*) as count FROM knowledge");
+      const kCount = kRows && kRows[0] ? Number(kRows[0].count) : 0;
+      let seededMsg = "";
+      if (kCount === 0) {
+        const seeded = await seedKnowledgeFromSqlite(conn, "mysql");
+        if (seeded > 0) {
+          seededMsg = ` serta ${seeded} entitas knowledge otomatis disalin`;
+        }
       }
 
-      await conn.query(`
-        CREATE TABLE IF NOT EXISTS knowledge (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          category VARCHAR(50) NOT NULL,
-          title VARCHAR(255) NOT NULL,
-          content LONGTEXT NOT NULL,
-          source VARCHAR(255) DEFAULT NULL,
-          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE KEY uq_knowledge_cat_title (category, title)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-      `);
       await conn.end();
-
       await closeDbConnections();
       return {
         success: true,
-        message: `Database '${dbName}' & tabel 'transcripts' pada MySQL (${host}:${port}) berhasil dimigrasi (Drizzle ORM siap)!`,
+        message: `Database '${dbName}', tabel 'transcripts' & 'knowledge' pada MySQL (${host}:${port}) berhasil dimigrasi${seededMsg} (Drizzle ORM siap)!`,
       };
     } catch (err: any) {
       return {
@@ -491,58 +635,24 @@ export async function migrateDatabase(params: {
       });
 
       await client.connect();
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS transcripts (
-          id SERIAL PRIMARY KEY,
-          filename VARCHAR(255) NOT NULL,
-          final_text TEXT NOT NULL,
-          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          duration_s REAL DEFAULT NULL,
-          language VARCHAR(10) DEFAULT 'id',
-          word_timestamps JSONB DEFAULT NULL,
-          raw_text TEXT DEFAULT NULL,
-          ai_corrected_text TEXT DEFAULT NULL,
-          ai_summary TEXT DEFAULT NULL,
-          md_path VARCHAR(500) DEFAULT NULL,
-          ai_correction_status VARCHAR(50) DEFAULT 'skipped',
-          directed_topics JSONB DEFAULT NULL,
-          ai_data JSONB DEFAULT NULL
-        );
-      `);
+      await ensurePgSchema(client);
 
-      const pgColumns = [
-        "ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS word_timestamps JSONB DEFAULT NULL;",
-        "ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS raw_text TEXT DEFAULT NULL;",
-        "ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS ai_corrected_text TEXT DEFAULT NULL;",
-        "ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS ai_summary TEXT DEFAULT NULL;",
-        "ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS md_path VARCHAR(500) DEFAULT NULL;",
-        "ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS ai_correction_status VARCHAR(50) DEFAULT 'skipped';",
-        "ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS directed_topics JSONB DEFAULT NULL;",
-        "ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS ai_data JSONB DEFAULT NULL;",
-      ];
-      for (const colSql of pgColumns) {
-        try {
-          await client.query(colSql);
-        } catch {}
+      // Seed knowledge from SQLite if target database is empty
+      const kRes = await client.query("SELECT COUNT(*) as count FROM knowledge");
+      const kCount = kRes.rows && kRes.rows[0] ? Number(kRes.rows[0].count) : 0;
+      let seededMsg = "";
+      if (kCount === 0) {
+        const seeded = await seedKnowledgeFromSqlite(client, "postgres");
+        if (seeded > 0) {
+          seededMsg = ` serta ${seeded} entitas knowledge otomatis disalin`;
+        }
       }
 
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS knowledge (
-          id SERIAL PRIMARY KEY,
-          category VARCHAR(50) NOT NULL,
-          title VARCHAR(255) NOT NULL,
-          content TEXT NOT NULL,
-          source VARCHAR(255) DEFAULT NULL,
-          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          CONSTRAINT uq_knowledge_cat_title UNIQUE (category, title)
-        );
-      `);
       await client.end();
-
       await closeDbConnections();
       return {
         success: true,
-        message: `Database '${dbName}' & tabel 'transcripts' pada PostgreSQL (${host}:${port}) berhasil dimigrasi (Drizzle ORM siap)!`,
+        message: `Database '${dbName}', tabel 'transcripts' & 'knowledge' pada PostgreSQL (${host}:${port}) berhasil dimigrasi${seededMsg} (Drizzle ORM siap)!`,
       };
     } catch (err: any) {
       return {
