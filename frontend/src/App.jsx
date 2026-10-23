@@ -92,8 +92,8 @@ export default function App() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [socketStatus, setSocketStatus] = useState("connecting");
-  const [resultTab, setResultTab] = useState("markdown"); // "markdown" | "ui" | "mindmap"
-  const [detailTab, setDetailTab] = useState("markdown"); // "markdown" | "ui" | "mindmap"
+  const [resultTab, setResultTab] = useState("dialog"); // "dialog" | "markdown" | "ui" | "mindmap"
+  const [detailTab, setDetailTab] = useState("dialog"); // "dialog" | "markdown" | "ui" | "mindmap"
   const [copiedMd, setCopiedMd] = useState(false);
 
   // History State
@@ -1209,54 +1209,69 @@ export default function App() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 py-4 border-b border-[#1e2330]">
                   <div className="flex items-center gap-2.5">
                     <FileText className="w-4 h-4 text-indigo-400" />
-                    <h2 className="text-sm font-semibold text-white">4 Format Output Hasil Rapat</h2>
+                    <h2 className="text-sm font-semibold text-white">Pilih Tampilan Output Dokumen</h2>
                   </div>
 
                   {/* 4 Output Tabs */}
                   <div className="flex flex-wrap gap-1 bg-[#0c0e14] p-1 rounded-xl border border-[#1e2330] text-xs">
                     <button
+                      onClick={() => setResultTab("dialog")}
+                      className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${resultTab === "dialog" ? "bg-indigo-600 text-white font-medium shadow" : "text-slate-400 hover:text-white"}`}
+                    >
+                      <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
+                      1. Transkrip Percakapan / Menit
+                    </button>
+                    <button
                       onClick={() => setResultTab("markdown")}
                       className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${resultTab === "markdown" ? "bg-indigo-600 text-white font-medium shadow" : "text-slate-400 hover:text-white"}`}
                     >
-                      <FileText className="w-3.5 h-3.5" />
-                      1. Format .MD (MoM)
+                      <FileText className="w-3.5 h-3.5 text-indigo-400" />
+                      2. Format Preview .MD (MoM)
                     </button>
                     <button
                       onClick={() => setResultTab("ui")}
                       className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${resultTab === "ui" ? "bg-indigo-600 text-white font-medium shadow" : "text-slate-400 hover:text-white"}`}
                     >
-                      <Layout className="w-3.5 h-3.5" />
-                      2. Rangkuman HTML/UI
+                      <Layout className="w-3.5 h-3.5 text-emerald-400" />
+                      3. Rangkuman HTML/UI
                     </button>
                     <button
                       onClick={() => setResultTab("mindmap")}
                       className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${resultTab === "mindmap" ? "bg-indigo-600 text-white font-medium shadow" : "text-slate-400 hover:text-white"}`}
                     >
-                      <GitBranch className="w-3.5 h-3.5" />
-                      3. Mindmap (Markmap)
-                    </button>
-                    <button
-                      onClick={() => setResultTab("dialog")}
-                      className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${resultTab === "dialog" ? "bg-indigo-600 text-white font-medium shadow" : "text-slate-400 hover:text-white"}`}
-                    >
-                      <MessageSquare className="w-3.5 h-3.5" />
-                      4. Transkrip Percakapan / Menit
+                      <GitBranch className="w-3.5 h-3.5 text-purple-400" />
+                      4. Mindmap (Markmap)
                     </button>
                   </div>
                 </div>
 
-                {/* Tab 1: Format Markdown (.md) */}
+                {/* Tab 1: Transkrip Percakapan per Menit (Dialog Terkoreksi AI) */}
+                {resultTab === "dialog" && (
+                  <div className="p-6">
+                    <DialogTranscriptView
+                      item={result}
+                      filename={result.filename || file?.name || "Rapat"}
+                      durationS={result.duration_s || progress?.elapsed_s || 0}
+                    />
+                  </div>
+                )}
+
+                {/* Tab 2: Format Preview .MD (MoM) */}
                 {resultTab === "markdown" && (
                   <div className="p-6 space-y-4">
-                    <div className="flex items-center justify-between bg-[#0c0e14] border border-[#1e2330] rounded-xl px-4 py-2.5 text-xs text-slate-400">
-                      <span>Dokumen Notulen Resmi (Minutes of Meeting) standar Markdown</span>
-                      <div className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-[#0c0e14] border border-[#1e2330] rounded-xl px-4 py-2.5 text-xs text-slate-400">
+                      <div>
+                        <span className="font-semibold text-slate-200 block">Dokumen Resmi Minutes of Meeting (MoM) Standar Markdown</span>
+                        <span className="text-[11px] text-slate-400">Yang sudah dirapikan AI dan sudah terarah arah topik serta tujuannya.</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
                         <button
                           onClick={() => copyToClipboard(result.markdown_text || result.final_text || "")}
-                          className="px-2.5 py-1 bg-[#151821] hover:bg-slate-800 border border-[#1e2330] text-slate-300 rounded-lg flex items-center gap-1"
+                          className="px-2.5 py-1 bg-[#151821] hover:bg-slate-800 border border-[#1e2330] text-slate-300 rounded-lg flex items-center gap-1 font-medium"
+                          title="Copy to clipboard format .md"
                         >
                           {copiedMd ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                          <span>{copiedMd ? "Tersalin" : "Salin MD"}</span>
+                          <span>{copiedMd ? "Tersalin!" : "Salin .MD ke Clipboard"}</span>
                         </button>
                         <button
                           onClick={() => downloadTxt(result)}
@@ -1281,7 +1296,7 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Tab 2: Rangkuman dalam bentuk HTML/UI */}
+                {/* Tab 3: Rangkuman dalam bentuk HTML/UI */}
                 {resultTab === "ui" && (
                   <div className="p-6">
                     <UiSummary
@@ -1294,23 +1309,12 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Tab 3: Mindmap Poin Diskusi (Markmap) */}
+                {/* Tab 4: Mindmap Poin Diskusi (Markmap) */}
                 {resultTab === "mindmap" && (
                   <div className="p-6">
                     <MarkmapView
                       markdown={result.markdown_text || result.final_text}
                       title={result.filename || file?.name || "Mindmap Rapat"}
-                    />
-                  </div>
-                )}
-
-                {/* Tab 4: Transkrip Percakapan per Menit (Dialog Terkoreksi AI) */}
-                {resultTab === "dialog" && (
-                  <div className="p-6">
-                    <DialogTranscriptView
-                      item={result}
-                      filename={result.filename || file?.name || "Rapat"}
-                      durationS={result.duration_s || progress?.elapsed_s || 0}
                     />
                   </div>
                 )}
@@ -1601,50 +1605,73 @@ export default function App() {
 
               <div className="flex flex-wrap gap-1 text-xs">
                 <button
+                  onClick={() => setDetailTab("dialog")}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${detailTab === "dialog" ? "bg-indigo-600 text-white font-medium shadow" : "text-slate-400 hover:text-white bg-[#151821] border border-[#1e2330]"}`}
+                >
+                  <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
+                  1. Transkrip Percakapan / Menit
+                </button>
+                <button
                   onClick={() => setDetailTab("markdown")}
                   className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${detailTab === "markdown" ? "bg-indigo-600 text-white font-medium shadow" : "text-slate-400 hover:text-white bg-[#151821] border border-[#1e2330]"}`}
                 >
-                  <FileText className="w-3.5 h-3.5" />
-                  1. Format .MD (MoM)
+                  <FileText className="w-3.5 h-3.5 text-indigo-400" />
+                  2. Format Preview .MD (MoM)
                 </button>
                 <button
                   onClick={() => setDetailTab("ui")}
                   className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${detailTab === "ui" ? "bg-indigo-600 text-white font-medium shadow" : "text-slate-400 hover:text-white bg-[#151821] border border-[#1e2330]"}`}
                 >
-                  <Layout className="w-3.5 h-3.5" />
-                  2. Rangkuman HTML/UI
+                  <Layout className="w-3.5 h-3.5 text-emerald-400" />
+                  3. Rangkuman HTML/UI
                 </button>
                 <button
                   onClick={() => setDetailTab("mindmap")}
                   className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${detailTab === "mindmap" ? "bg-indigo-600 text-white font-medium shadow" : "text-slate-400 hover:text-white bg-[#151821] border border-[#1e2330]"}`}
                 >
-                  <GitBranch className="w-3.5 h-3.5" />
-                  3. Mindmap (Markmap)
-                </button>
-                <button
-                  onClick={() => setDetailTab("dialog")}
-                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${detailTab === "dialog" ? "bg-indigo-600 text-white font-medium shadow" : "text-slate-400 hover:text-white bg-[#151821] border border-[#1e2330]"}`}
-                >
-                  <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
-                  4. Transkrip Percakapan / Menit
+                  <GitBranch className="w-3.5 h-3.5 text-purple-400" />
+                  4. Mindmap (Markmap)
                 </button>
               </div>
             </div>
 
-            {/* Tab 1: Format Markdown (.md) in Detail View */}
+            {/* Tab 1: Transkrip Percakapan per Menit in Detail View */}
+            {detailTab === "dialog" && (
+              <DialogTranscriptView
+                item={selectedItem}
+                filename={selectedItem.filename}
+                durationS={selectedItem.duration_s}
+              />
+            )}
+
+            {/* Tab 2: Format Preview .MD (MoM) in Detail View */}
             {detailTab === "markdown" && (
               <div className="bg-[#0c0e14] border border-[#1e2330] rounded-xl p-6 space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-[#1e2330]">
-                  <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    Dokumen Minutes of Meeting (MoM) Standar Markdown
-                  </h3>
-                  <button
-                    onClick={() => copyToClipboard(selectedItem.markdown_text || selectedItem.final_text || "")}
-                    className="px-2.5 py-1 bg-[#151821] hover:bg-slate-800 border border-[#1e2330] text-slate-300 rounded-lg flex items-center gap-1 text-xs"
-                  >
-                    {copiedMd ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedMd ? "Tersalin" : "Salin Markdown"}</span>
-                  </button>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#1e2330]">
+                  <div>
+                    <h3 className="text-xs font-semibold text-slate-200 uppercase tracking-wider">
+                      Dokumen Resmi Minutes of Meeting (MoM) Standar Markdown
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Yang sudah dirapikan AI dan sudah terarah arah topik serta tujuannya.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => copyToClipboard(selectedItem.markdown_text || selectedItem.final_text || "")}
+                      className="px-2.5 py-1 bg-[#151821] hover:bg-slate-800 border border-[#1e2330] text-slate-300 rounded-lg flex items-center gap-1 text-xs font-medium"
+                      title="Copy to clipboard format .md"
+                    >
+                      {copiedMd ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedMd ? "Tersalin!" : "Salin .MD ke Clipboard"}</span>
+                    </button>
+                    <button
+                      onClick={() => downloadMd(selectedItem)}
+                      className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 rounded-lg flex items-center gap-1 text-xs font-medium"
+                    >
+                      <Download className="w-3.5 h-3.5" /> Unduh .md
+                    </button>
+                  </div>
                 </div>
                 <p style={{ fontFamily: "'DM Mono', monospace" }} className="text-slate-200 text-sm leading-relaxed whitespace-pre-wrap">
                   {selectedItem.markdown_text || selectedItem.final_text}
@@ -1652,7 +1679,7 @@ export default function App() {
               </div>
             )}
 
-            {/* Tab 2: Rangkuman dalam bentuk HTML/UI in Detail View */}
+            {/* Tab 3: Rangkuman dalam bentuk HTML/UI in Detail View */}
             {detailTab === "ui" && (
               <UiSummary
                 item={selectedItem}
@@ -1663,20 +1690,11 @@ export default function App() {
               />
             )}
 
-            {/* Tab 3: Mindmap Poin Diskusi (Markmap) in Detail View */}
+            {/* Tab 4: Mindmap Poin Diskusi (Markmap) in Detail View */}
             {detailTab === "mindmap" && (
               <MarkmapView
                 markdown={selectedItem.markdown_text || selectedItem.final_text}
                 title={selectedItem.filename}
-              />
-            )}
-
-            {/* Tab 4: Transkrip Percakapan per Menit in Detail View */}
-            {detailTab === "dialog" && (
-              <DialogTranscriptView
-                item={selectedItem}
-                filename={selectedItem.filename}
-                durationS={selectedItem.duration_s}
               />
             )}
 

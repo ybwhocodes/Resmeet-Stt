@@ -183,17 +183,17 @@ ${turns.map((t) => `[${t.time}] ${t.speaker}:\n${t.text}`).join("\n\n")}
       <div className="bg-[#0c0e14] border border-[#1e2330] rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <MessageSquare className="w-4 h-4 text-indigo-400" />
+            <MessageSquare className="w-4 h-4 text-amber-400" />
             <h3 className="text-sm font-semibold text-white">
-              Transkrip Alur Percakapan Per Menit
+              1. Transkrip Percakapan / Menit
             </h3>
-            <span className="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
-              <Sparkles className="w-2.5 h-2.5 text-indigo-400" />
-              Terkoreksi AI (Objektif • Tanpa Hiperbola)
+            <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+              <Sparkles className="w-2.5 h-2.5 text-amber-400" />
+              Fitur Baru • Rapi AI
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-            Menampilkan hasil apa yang terucap setiap orang per menit secara runtut dan utuh, dengan koreksi kata yang kurang jelas/salah dengar tanpa memotong ataupun mengedit topik pembicaraan.
+            Menampilkan alur ucapan setiap orang secara urut per menit dengan timestamp waktu audio [MM:SS - MM:SS] yang sudah dirapikan AI serta cuma memperjelas konteks tidak merubah konteks obrolan.
           </p>
         </div>
 
