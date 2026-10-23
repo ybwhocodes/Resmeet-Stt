@@ -34,6 +34,13 @@ function formatDirectedTopics(topics?: any[] | null): string {
     .join("\n---\n\n");
 }
 
+function formatDialogTranscript(turns?: any[] | null): string {
+  if (!turns || !turns.length) return "";
+  return turns
+    .map((t) => `> **[${t.time}] ${t.speaker || "Pembicara"}**:\n> ${t.text}`)
+    .join("\n\n");
+}
+
 export function renderMarkdown(
   jobId: string,
   filename: string,
@@ -45,6 +52,10 @@ export function renderMarkdown(
   let mdContent = aiData?.markdown;
 
   if (!mdContent) {
+    const dialogSection = aiData?.dialog_transcript && aiData.dialog_transcript.length > 0
+      ? `\n## Transkrip Percakapan / Menit (Dialog Terkoreksi AI)\n\n${formatDialogTranscript(aiData.dialog_transcript)}\n`
+      : "";
+
     mdContent = `# Minutes of Meeting
 
 ## Informasi Rapat
@@ -64,7 +75,7 @@ ${aiData?.summary || "Tidak ada ringkasan"}
 ## Topik Terarah & Hasil Pembahasan
 
 ${formatDirectedTopics(aiData?.directed_topics)}
-
+${dialogSection}
 ## Transkrip / Catatan Pembahasan
 
 ${finalText || "Tidak ada"}

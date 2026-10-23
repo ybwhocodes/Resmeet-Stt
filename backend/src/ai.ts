@@ -11,17 +11,90 @@ export interface DirectedTopic {
   action_items?: string[];
 }
 
+export interface DialogTurn {
+  time: string; // e.g. "00:00 - 00:15"
+  speaker: string; // e.g. "Pembicara 1" or identified name
+  text: string; // accurate verbatim speech without hyperbole, corrected for unclear words
+}
+
 export interface AiCorrectionResult {
   corrected_text: string;
   markdown: string;
   summary: string;
   entities?: string[];
   directed_topics?: DirectedTopic[];
+  dialog_transcript?: DialogTurn[];
   terms?: Array<{ term: string; alias?: string[]; meaning: string }>;
   corrections?: Array<{ wrong: string; correct: string; reason: string }>;
   concepts?: Array<{ name: string; description: string }>;
   action_items?: string[];
   notes?: string[];
+}
+
+export function formatTimeRange(startS: number, endS: number): string {
+  const m1 = Math.floor(startS / 60);
+  const s1 = Math.floor(startS % 60);
+  const m2 = Math.floor(endS / 60);
+  const s2 = Math.floor(endS % 60);
+  return `${String(m1).padStart(2, "0")}:${String(s1).padStart(2, "0")} - ${String(m2).padStart(2, "0")}:${String(s2).padStart(2, "0")}`;
+}
+
+export function buildDefaultDialogTranscript(
+  segments?: Array<{ start: number; end: number; text: string }>,
+  rawText = ""
+): DialogTurn[] {
+  if (!segments || !segments.length) {
+    if (!rawText.trim()) return [];
+    return [
+      {
+        time: "00:00 - 00:30",
+        speaker: "Pembicara 1",
+        text: rawText.trim(),
+      },
+    ];
+  }
+
+  const turns: DialogTurn[] = [];
+  let currentSpeakerIdx = 1;
+  let currentTurn: { start: number; end: number; texts: string[] } | null = null;
+
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    const text = seg.text.trim();
+    if (!text) continue;
+
+    if (!currentTurn) {
+      currentTurn = { start: seg.start, end: seg.end, texts: [text] };
+      continue;
+    }
+
+    const pause = seg.start - currentTurn.end;
+    // If pause > 2.0s or turn duration > 30s, create a new turn / potential speaker alternation
+    if (pause > 2.0 || (seg.end - currentTurn.start > 30)) {
+      turns.push({
+        time: formatTimeRange(currentTurn.start, currentTurn.end),
+        speaker: `Pembicara ${currentSpeakerIdx}`,
+        text: currentTurn.texts.join(" "),
+      });
+      if (pause > 2.8) {
+        currentSpeakerIdx = currentSpeakerIdx === 1 ? 2 : 1;
+      }
+      currentTurn = { start: seg.start, end: seg.end, texts: [text] };
+    } else {
+      currentTurn.end = seg.end;
+      currentTurn.texts.push(text);
+    }
+  }
+
+  if (currentTurn && currentTurn.texts.length > 0) {
+    turns.push({
+      time: formatTimeRange(currentTurn.start, currentTurn.end),
+      speaker: `Pembicara ${currentSpeakerIdx}`,
+      text: currentTurn.texts.join(" "),
+    });
+  }
+
+  return turns;
 }
 
 export function isAiConfigured(): boolean {
@@ -254,21 +327,37 @@ export const PARAPHRASE_STYLE_PROMPTS: Record<string, string> = {
 };
 
 /**
- * Calls AI for MoM correction and goal-directed topic extraction.
+ * Calls AI for MoM correction, goal-directed topic extraction, and timestamped dialog transcript correction.
  * Integrates the Jev-ultrafast structured goal-directed topic paradigm with rich style-based paraphrasing.
  */
 export async function callAiCorrection(
   rawText: string,
   filename = "Audio Transkrip",
   durationS = 0,
-  styleInput?: string
+  styleInput?: string,
+  segments?: Array<{ start: number; end: number; text: string }>
 ): Promise<{ data: AiCorrectionResult | null; status: "completed" | "skipped" | "failed" }> {
+  const defaultTurns = buildDefaultDialogTranscript(segments, rawText);
+
   if (!config.aiEnableCorrection || !isAiConfigured()) {
-    return { data: null, status: "skipped" };
+    return {
+      data: {
+        corrected_text: rawText,
+        markdown: `# Transkrip Rapat\n\n${rawText}`,
+        summary: "Transkripsi selesai (tanpa koreksi AI).",
+        dialog_transcript: defaultTurns,
+        directed_topics: [],
+      },
+      status: "skipped",
+    };
   }
 
   const existingKnowledge = await readKnowledge(4000);
   const activeStyle = resolveParaphraseStyle(styleInput || config.aiParaphraseStyle);
+
+  const timelineText = defaultTurns.slice(0, 80)
+    .map((t) => `[${t.time}] ${t.speaker}: ${t.text}`)
+    .join("\n");
 
   const systemPrompt = `Anda adalah Sekretaris Notulis Eksekutif Senior berpengalaman 20 tahun yang bertugas menyusun Minutes of Meeting (MoM) profesional, mendalam, dan terarah (menggunakan paradigma Jev-Guided Topics).
 
@@ -279,8 +368,13 @@ TUGAS UTAMA:
 ${activeStyle.promptInstruction}
 4. Petakan pembahasan ke dalam 'directed_topics' (Topik Terarah): setiap topik memiliki sasaran (goal), pembahasan yang mendalam dan diparafrase (discussion), keputusan (decisions), dan tindak lanjut (action_items).
 5. Buat dokumen MoM lengkap berformat Markdown resmi pada atribut 'markdown' (terdiri dari Informasi Rapat, Agenda, Pembahasan mendalam per topik, Tabel Keputusan, Tabel Tindak Lanjut, dan Catatan).
-6. Ekstrak istilah teknis/domain baru ke 'terms' dan koreksi salah dengar STT ke 'corrections'.
-7. Output WAJIB JSON murni tanpa markdown fence backticks (\`\`\`json).`;
+6. Susun 'dialog_transcript' (Array of object: { "time": "MM:SS - MM:SS", "speaker": "Pembicara 1/2 atau Nama", "text": "Isi ucapan" }):
+   - Alur obrolan transkrip per menit berdasarkan alur percakapan audio.
+   - Tetapkan label pembicara ("Pembicara 1", "Pembicara 2", atau nama peserta jika teridentifikasi dari konteks pembicaraan).
+   - KOREKSI KATA YANG KURANG JELAS / SALAH DENGAR: Perbaiki typo fonetik, kata salah dengar Whisper, pengulangan kata / stutter, dan tanda baca agar jelas dan nyaman dibaca.
+   - PERINGATAN KETAT: DILARANG HIPERBOLA dan DILARANG MENGEDIT / MERINGKAS TOPIK! Jangan memotong atau membuang isi percakapan, jangan mengubah makna asli, dan jangan merangkum. Tampilkan ucapan asli apa adanya sesuai urutan menitnya, namun dengan ejaan, diksi, dan kejelasan kata yang sudah disempurnakan.
+7. Ekstrak istilah teknis/domain baru ke 'terms' dan koreksi salah dengar STT ke 'corrections'.
+8. Output WAJIB JSON murni tanpa markdown fence backticks (\`\`\`json).`;
 
   const userPrompt = `Metadata Rapat:
 - File: ${filename}
@@ -296,7 +390,10 @@ ATURAN KEDALAMAN DAN PANJANG KONTEN:
 Knowledge & Referensi Istilah:
 ${existingKnowledge || "- Belum ada knowledge tersimpan"}
 
-Transkrip Mentah Whisper:
+Alur Percakapan & Timeline Menit Audio Mentah:
+${timelineText || rawText}
+
+Transkrip Mentah Keseluruhan:
 ${rawText}
 
 Panduan Struktur Dokumen Markdown 'markdown':
@@ -328,6 +425,13 @@ Kembalikan output JSON dengan schema berikut:
       "discussion": "${activeStyle.discussionRequirement}",
       "decisions": "Keputusan / kesepakatan final ${activeStyle.key === 'eksekutif' ? '(sertakan analisis pro-kontra keputusan)' : ''}",
       "action_items": ["Tindak lanjut spesifik topik ini"]
+    }
+  ],
+  "dialog_transcript": [
+    {
+      "time": "00:00 - 00:20",
+      "speaker": "Pembicara 1",
+      "text": "Ucapan yang sudah dikoreksi kata yang kurang jelas, tanpa hiperbola dan tanpa mengedit/meringkas topik"
     }
   ],
   "markdown": "Dokumen Minutes of Meeting (MoM) final lengkap sesuai panduan struktur di atas dengan pembahasan mendalam",
@@ -369,10 +473,22 @@ Kembalikan output JSON dengan schema berikut:
     if (!Array.isArray(parsed.directed_topics) || parsed.directed_topics.length === 0) {
       parsed.directed_topics = extractTopicsFromMarkdown(parsed.markdown || parsed.corrected_text || rawText);
     }
+    if (!Array.isArray(parsed.dialog_transcript) || parsed.dialog_transcript.length === 0) {
+      parsed.dialog_transcript = defaultTurns;
+    }
     return { data: parsed, status: "completed" };
   } catch (err) {
     console.warn("[AI] AI correction failed:", err);
-    return { data: null, status: "failed" };
+    return {
+      data: {
+        corrected_text: rawText,
+        markdown: `# Transkrip Rapat\n\n${rawText}`,
+        summary: "Koreksi AI gagal atau dibatasi, menampilkan transkrip asli.",
+        dialog_transcript: defaultTurns,
+        directed_topics: [],
+      },
+      status: "failed",
+    };
   }
 }
 
@@ -434,6 +550,7 @@ export interface ParaphraseResult {
   markdown: string;
   summary: string;
   directed_topics: DirectedTopic[];
+  dialog_transcript?: DialogTurn[];
   entities?: string[];
   terms?: any[];
   action_items?: any[];
@@ -441,9 +558,13 @@ export interface ParaphraseResult {
 
 /**
  * Paraphrases text into a requested style, returning the full structured MoM output
- * so that all 3 outputs (Markdown MoM, HTML/UI Summary, Markmap) update identically to transcription results.
+ * so that all 4 outputs (Markdown MoM, HTML/UI Summary, Markmap, and Dialog Transcript) update identically.
  */
-export async function callAiParaphrase(text: string, style = "poin_singkat"): Promise<ParaphraseResult> {
+export async function callAiParaphrase(
+  text: string,
+  style = "poin_singkat",
+  existingDialogTranscript?: DialogTurn[]
+): Promise<ParaphraseResult> {
   if (!isAiConfigured()) {
     throw new Error("Konfigurasi AI belum lengkap (URL, API-Key, atau Model belum diisi).");
   }
@@ -515,6 +636,7 @@ ${text}
       markdown,
       summary,
       directed_topics,
+      dialog_transcript: existingDialogTranscript || parsed.dialog_transcript || [],
       entities: parsed.entities || [],
       terms: parsed.terms || [],
       action_items: parsed.action_items || [],
@@ -526,6 +648,7 @@ ${text}
       markdown: text,
       summary: "",
       directed_topics: extractTopicsFromMarkdown(text),
+      dialog_transcript: existingDialogTranscript || [],
     };
   }
 }

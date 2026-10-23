@@ -7,10 +7,11 @@ import {
   Settings, Eye, EyeOff, Save, Target, Check,
   ArrowLeft, ChevronRight, Sliders, Search, Layers, X,
   Layout, GitBranch, Copy, Sparkles, Server, HardDrive, Star,
-  Square, Pause, Play, Radio, MicOff, Lock, ShieldAlert
+  Square, Pause, Play, Radio, MicOff, Lock, ShieldAlert, MessageSquare
 } from "lucide-react";
 import MarkmapView from "./components/MarkmapView";
 import UiSummary from "./components/UiSummary";
+import DialogTranscriptView from "./components/DialogTranscriptView";
 import resmeetSymbol from "./assets/resmeet_symbol.svg";
 
 const isViteDev = typeof window !== "undefined" && window.location.port === "5173";
@@ -1208,10 +1209,10 @@ export default function App() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 py-4 border-b border-[#1e2330]">
                   <div className="flex items-center gap-2.5">
                     <FileText className="w-4 h-4 text-indigo-400" />
-                    <h2 className="text-sm font-semibold text-white">3 Format Output Hasil Rapat</h2>
+                    <h2 className="text-sm font-semibold text-white">4 Format Output Hasil Rapat</h2>
                   </div>
 
-                  {/* 3 Output Tabs */}
+                  {/* 4 Output Tabs */}
                   <div className="flex flex-wrap gap-1 bg-[#0c0e14] p-1 rounded-xl border border-[#1e2330] text-xs">
                     <button
                       onClick={() => setResultTab("markdown")}
@@ -1233,6 +1234,13 @@ export default function App() {
                     >
                       <GitBranch className="w-3.5 h-3.5" />
                       3. Mindmap (Markmap)
+                    </button>
+                    <button
+                      onClick={() => setResultTab("dialog")}
+                      className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${resultTab === "dialog" ? "bg-indigo-600 text-white font-medium shadow" : "text-slate-400 hover:text-white"}`}
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      4. Transkrip Percakapan / Menit
                     </button>
                   </div>
                 </div>
@@ -1292,6 +1300,17 @@ export default function App() {
                     <MarkmapView
                       markdown={result.markdown_text || result.final_text}
                       title={result.filename || file?.name || "Mindmap Rapat"}
+                    />
+                  </div>
+                )}
+
+                {/* Tab 4: Transkrip Percakapan per Menit (Dialog Terkoreksi AI) */}
+                {resultTab === "dialog" && (
+                  <div className="p-6">
+                    <DialogTranscriptView
+                      item={result}
+                      filename={result.filename || file?.name || "Rapat"}
+                      durationS={result.duration_s || progress?.elapsed_s || 0}
                     />
                   </div>
                 )}
@@ -1573,7 +1592,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* 3 Output Tabs Header in Detail View */}
+            {/* 4 Output Tabs Header in Detail View */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0c0e14] p-3 rounded-xl border border-[#1e2330]">
               <span className="text-xs font-semibold text-slate-300 flex items-center gap-2">
                 <FileText className="w-4 h-4 text-indigo-400" />
@@ -1601,6 +1620,13 @@ export default function App() {
                 >
                   <GitBranch className="w-3.5 h-3.5" />
                   3. Mindmap (Markmap)
+                </button>
+                <button
+                  onClick={() => setDetailTab("dialog")}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${detailTab === "dialog" ? "bg-indigo-600 text-white font-medium shadow" : "text-slate-400 hover:text-white bg-[#151821] border border-[#1e2330]"}`}
+                >
+                  <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
+                  4. Transkrip Percakapan / Menit
                 </button>
               </div>
             </div>
@@ -1642,6 +1668,15 @@ export default function App() {
               <MarkmapView
                 markdown={selectedItem.markdown_text || selectedItem.final_text}
                 title={selectedItem.filename}
+              />
+            )}
+
+            {/* Tab 4: Transkrip Percakapan per Menit in Detail View */}
+            {detailTab === "dialog" && (
+              <DialogTranscriptView
+                item={selectedItem}
+                filename={selectedItem.filename}
+                durationS={selectedItem.duration_s}
               />
             )}
 

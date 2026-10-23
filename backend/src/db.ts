@@ -792,6 +792,7 @@ function formatTranscriptRow(row: any) {
     word_timestamps: wordTimestamps,
     directed_topics: directedTopics,
     ai_data: aiData,
+    dialog_transcript: aiData?.dialog_transcript || [],
     markdown_text: row.ai_corrected_text || row.final_text,
     md_url: row.md_path ? `/api/transcripts/${row.id}/download-md` : null,
   };

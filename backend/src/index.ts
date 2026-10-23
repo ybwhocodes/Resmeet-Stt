@@ -20,7 +20,14 @@ import {
 import { migrateKnowledgeFilesToDb, updateKnowledge } from "./knowledge";
 import { calculateFileHash, getCacheKey, readCache, writeCache } from "./cache";
 import { convertWithFfmpeg, transcribeWithProgress, getWhisperModelPath, findWhisperCliBinary } from "./whisper";
-import { callAiCorrection, callAiParaphrase, isAiConfigured, testAiConnection, resolveParaphraseStyle } from "./ai";
+import {
+  callAiCorrection,
+  callAiParaphrase,
+  isAiConfigured,
+  testAiConnection,
+  resolveParaphraseStyle,
+  buildDefaultDialogTranscript,
+} from "./ai";
 import { renderMarkdown } from "./markdown";
 import { startPersistentEngines, isWhisperServerHealthy, isPreprocessDaemonHealthy } from "./engine-manager";
 
@@ -522,7 +529,12 @@ const server = http.createServer(async (req, res) => {
       if (!text) return sendJson({ error: "Teks kosong" }, 400);
 
       try {
-        const result = await callAiParaphrase(text, style);
+        let existingDialog: any[] = [];
+        if (id) {
+          const prevRow = await getTranscriptById(id);
+          existingDialog = prevRow?.ai_data?.dialog_transcript || prevRow?.dialog_transcript || [];
+        }
+        const result = await callAiParaphrase(text, style, existingDialog);
 
         // If id provided, update DB and markdown file if exists
         if (id) {
@@ -550,6 +562,7 @@ const server = http.createServer(async (req, res) => {
           summary: result.summary,
           ai_summary: result.summary,
           directed_topics: result.directed_topics,
+          dialog_transcript: result.dialog_transcript || existingDialog,
           ai_data: result,
           ai_correction_status: "paraphrased",
         });
@@ -705,6 +718,7 @@ async function startTranscriptionWorker(
         summary: cached.ai_summary || cached.summary || null,
         ai_summary: cached.ai_summary || cached.summary || null,
         directed_topics: cached.directed_topics || cached.ai_data?.directed_topics || [],
+        dialog_transcript: cached.dialog_transcript || cached.ai_data?.dialog_transcript || [],
         combo,
         created_at: new Date().toISOString(),
         cache_hit: true,
@@ -751,11 +765,17 @@ async function startTranscriptionWorker(
       emitJobProgress(
         jobId,
         95,
-        `Menganalisis topik terarah & parafrase AI (${styleInfo.name})...`,
+        `Menganalisis topik terarah, transkrip dialog & parafrase AI (${styleInfo.name})...`,
         Math.round(durationS)
       );
 
-      const aiRes = await callAiCorrection(whisperResult.rawText, originalFilename, durationS, paraphraseStyle);
+      const aiRes = await callAiCorrection(
+        whisperResult.rawText,
+        originalFilename,
+        durationS,
+        paraphraseStyle,
+        whisperResult.segments
+      );
       aiData = aiRes.data;
       aiStatus = aiRes.status;
 
@@ -765,6 +785,15 @@ async function startTranscriptionWorker(
         setJobStatus(jobId, "updating_knowledge");
         updateKnowledge(jobId, aiData);
       }
+    } else {
+      aiData = {
+        dialog_transcript: buildDefaultDialogTranscript(whisperResult.segments, whisperResult.rawText),
+      };
+    }
+
+    if (!aiData?.dialog_transcript || !aiData.dialog_transcript.length) {
+      if (!aiData) aiData = {};
+      aiData.dialog_transcript = buildDefaultDialogTranscript(whisperResult.segments, whisperResult.rawText);
     }
 
     // 5. Generate Markdown in memory (zero-disk)
@@ -786,6 +815,7 @@ async function startTranscriptionWorker(
       ai_correction_status: aiStatus,
       ai_data: aiData,
       directed_topics: aiData?.directed_topics || [],
+      dialog_transcript: aiData?.dialog_transcript || [],
     };
 
     if (aiStatus !== "failed") {
@@ -823,6 +853,7 @@ async function startTranscriptionWorker(
       summary: aiData?.summary || null,
       ai_summary: aiData?.summary || null,
       directed_topics: aiData?.directed_topics || [],
+      dialog_transcript: payload.dialog_transcript,
       combo,
       created_at: new Date().toISOString(),
       cache_hit: false,
