@@ -38,8 +38,6 @@ const dataDir = process.env.RESMEET_DATA_DIR
 for (const p of [
   dataDir,
   path.join(dataDir, "uploads"),
-  path.join(dataDir, "knowledge"),
-  path.join(dataDir, "transcripts_md"),
 ]) {
   try {
     if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });

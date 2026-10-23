@@ -11,9 +11,7 @@ export function calculateFileHash(filePath: string): string {
 }
 
 export function getCacheKey(fileHash: string, wordTimestamps: boolean, aiCorrection: boolean): string {
-  const fmtPath = path.join(PATHS.knowledgeDir, "format-mom.md");
-  const fmtHash = fs.existsSync(fmtPath) ? calculateFileHash(fmtPath).slice(0, 12) : "noformat";
-  return `${fileHash}:${config.whisperModel}:id:int8:word_ts=${wordTimestamps ? 1 : 0}:denoise=${config.enableDenoise ? 1 : 0}:ai=${aiCorrection ? 1 : 0}:${config.aiModelId}:fmt=${fmtHash}`;
+  return `${fileHash}:${config.whisperModel}:id:int8:word_ts=${wordTimestamps ? 1 : 0}:denoise=${config.enableDenoise ? 1 : 0}:ai=${aiCorrection ? 1 : 0}:${config.aiModelId}`;
 }
 
 export function readCache(cacheKey: string): any | null {

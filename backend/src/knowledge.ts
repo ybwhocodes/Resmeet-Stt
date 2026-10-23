@@ -1,167 +1,278 @@
 import fs from "node:fs";
 import path from "node:path";
-import { PATHS, config } from "./config";
+import { config, PATHS } from "./config";
+import {
+  saveKnowledgeItem,
+  getAllKnowledge,
+  getGlossaryTitles as dbGetGlossaryTitles,
+  countKnowledgeItems,
+} from "./db";
 
-export function ensureKnowledgeFiles(): void {
-  fs.mkdirSync(PATHS.knowledgeDir, { recursive: true });
-  fs.mkdirSync(PATHS.transcriptsMdDir, { recursive: true });
-  fs.mkdirSync(PATHS.uploadDir, { recursive: true });
-
-  const defaults: Record<string, string> = {
-    "format-mom.md": `# Minutes of Meeting
-
-## Metadata
-
-- File: {{filename}}
-- Tanggal: {{created_at}}
-- Durasi: {{duration_s}} detik
-- Model STT: {{whisper_model}}
-- Koreksi AI: {{ai_correction_status}}
-
-## Ringkasan
-
-{{summary}}
-
-## Topik Terarah & Hasil Pembahasan
-
-{{directed_topics}}
-
-## Transkrip Final
-
-{{final_transcript}}
-
-## Istilah Penting
-
-{{terms}}
-
-## Konsep Baru
-
-{{concepts}}
-
-## Koreksi Penting
-
-{{corrections}}
-
-## Action Items
-
-{{action_items}}
-
-## Catatan
-
-{{notes}}
-`,
-    "glossary.md": "# Glossary\n",
-    "corrections.md": "# Corrections\n",
-    "concepts.md": "# Concepts\n",
-    "transcript-notes.md": "# Transcript Notes\n",
-  };
-
-  for (const [name, content] of Object.entries(defaults)) {
-    const fullPath = path.join(PATHS.knowledgeDir, name);
-    if (!fs.existsSync(fullPath)) {
-      fs.writeFileSync(fullPath, content, "utf-8");
-    }
+/**
+ * Migrates existing Markdown files from backend/knowledge to the database table `knowledge`.
+ * Once imported, the folder is removed from disk.
+ */
+export async function migrateKnowledgeFilesToDb(): Promise<void> {
+  const kDir = PATHS.knowledgeDir;
+  if (!fs.existsSync(kDir)) {
+    return;
   }
-}
 
-export function readKnowledge(limit = 20000): string {
-  if (!config.aiEnableRag) return "";
-  ensureKnowledgeFiles();
+  console.log("[Knowledge] Memulai migrasi knowledge dari folder ke Database...");
 
-  const names = ["glossary.md", "corrections.md", "concepts.md", "transcript-notes.md"];
-  const chunks: string[] = [];
-
-  for (const name of names) {
-    const filePath = path.join(PATHS.knowledgeDir, name);
-    if (fs.existsSync(filePath)) {
-      try {
-        const content = fs.readFileSync(filePath, "utf-8");
-        chunks.push(`## ${name}\n${content}`);
-      } catch (err) {
-        console.warn(`[Knowledge] Gagal membaca ${name}:`, err);
+  try {
+    // 1. Glossary
+    const glossaryPath = path.join(kDir, "glossary.md");
+    if (fs.existsSync(glossaryPath)) {
+      const content = fs.readFileSync(glossaryPath, "utf-8");
+      const sections = content.split(/\n##\s+/).filter(Boolean);
+      for (let i = 1; i < sections.length; i++) {
+        const lines = sections[i].split("\n");
+        const title = lines[0].trim();
+        const body = lines.slice(1).join("\n").trim();
+        const sourceMatch = body.match(/Sumber:\s*(.+)/i);
+        const source = sourceMatch ? sourceMatch[1].trim() : null;
+        if (title && body) {
+          await saveKnowledgeItem({
+            category: "glossary",
+            title,
+            content: body,
+            source,
+          });
+        }
       }
     }
-  }
 
-  return chunks.join("\n\n").slice(0, limit);
+    // 2. Corrections
+    const correctionsPath = path.join(kDir, "corrections.md");
+    if (fs.existsSync(correctionsPath)) {
+      const content = fs.readFileSync(correctionsPath, "utf-8");
+      const sections = content.split(/\n##\s+/).filter(Boolean);
+      for (let i = 1; i < sections.length; i++) {
+        const lines = sections[i].split("\n");
+        const title = lines[0].trim();
+        const body = lines.slice(1).join("\n").trim();
+        const sourceMatch = body.match(/Sumber:\s*(.+)/i);
+        const source = sourceMatch ? sourceMatch[1].trim() : null;
+        if (title && body) {
+          await saveKnowledgeItem({
+            category: "correction",
+            title,
+            content: body,
+            source,
+          });
+        }
+      }
+    }
+
+    // 3. Concepts
+    const conceptsPath = path.join(kDir, "concepts.md");
+    if (fs.existsSync(conceptsPath)) {
+      const content = fs.readFileSync(conceptsPath, "utf-8");
+      const sections = content.split(/\n##\s+/).filter(Boolean);
+      for (let i = 1; i < sections.length; i++) {
+        const lines = sections[i].split("\n");
+        const title = lines[0].trim();
+        const body = lines.slice(1).join("\n").trim();
+        const sourceMatch = body.match(/Sumber:\s*(.+)/i);
+        const source = sourceMatch ? sourceMatch[1].trim() : null;
+        if (title && body) {
+          await saveKnowledgeItem({
+            category: "concept",
+            title,
+            content: body,
+            source,
+          });
+        }
+      }
+    }
+
+    // 4. Transcript Notes
+    const notesPath = path.join(kDir, "transcript-notes.md");
+    if (fs.existsSync(notesPath)) {
+      const content = fs.readFileSync(notesPath, "utf-8");
+      const lines = content.split("\n").filter((l) => l.trim().startsWith("-"));
+      for (const line of lines) {
+        const text = line.replace(/^-+\s*/, "").trim();
+        const sourceMatch = text.match(/_\(([^)]+)\)_$/);
+        const source = sourceMatch ? sourceMatch[1].trim() : null;
+        const cleanText = text.replace(/\s*_\([^)]+\)_$/, "").trim();
+        if (cleanText) {
+          await saveKnowledgeItem({
+            category: "note",
+            title: cleanText.slice(0, 100),
+            content: cleanText,
+            source,
+          });
+        }
+      }
+    }
+
+    // 5. format-mom.md
+    const momPath = path.join(kDir, "format-mom.md");
+    if (fs.existsSync(momPath)) {
+      const momContent = fs.readFileSync(momPath, "utf-8");
+      await saveKnowledgeItem({
+        category: "format_mom",
+        title: "format-mom.md",
+        content: momContent,
+      });
+    }
+
+    // 6. RAG.md
+    const ragPath = path.join(kDir, "RAG.md");
+    if (fs.existsSync(ragPath)) {
+      const ragContent = fs.readFileSync(ragPath, "utf-8");
+      await saveKnowledgeItem({
+        category: "rag_instructions",
+        title: "RAG.md",
+        content: ragContent,
+      });
+    }
+
+    const totalCount = await countKnowledgeItems();
+    console.log(`[Knowledge] ✓ Sukses memigrasi ${totalCount} entitas knowledge ke Database.`);
+
+    // Remove the knowledge directory from disk
+    fs.rmSync(kDir, { recursive: true, force: true });
+    console.log("[Knowledge] ✓ Folder 'backend/knowledge' pada disk telah dibersihkan.");
+  } catch (err) {
+    console.error("[Knowledge] Gagal migrasi file knowledge:", err);
+  }
 }
 
-export function getGlossaryPromptTerms(): string {
+/**
+ * Backward compatibility stub (all storage is now database-backed).
+ */
+export function ensureKnowledgeFiles(): void {
+  // Knowledge storage is now 100% in database
+}
+
+/**
+ * Reads knowledge context directly from the database for LLM RAG prompts.
+ */
+export async function readKnowledge(limit = 20000): Promise<string> {
+  if (!config.aiEnableRag) return "";
+
   try {
-    const glossaryPath = path.join(PATHS.knowledgeDir, "glossary.md");
-    if (!fs.existsSync(glossaryPath)) return "";
-    const content = fs.readFileSync(glossaryPath, "utf-8");
-    const matches = content.match(/^##\s+(.+)$/gm) || [];
-    const terms = matches.map((m) => m.replace(/^##\s+/, "").trim()).filter(Boolean);
-    return terms.slice(0, 35).join(", ");
+    const items = await getAllKnowledge(150);
+    if (!items.length) return "";
+
+    const grouped: Record<string, string[]> = {
+      glossary: [],
+      correction: [],
+      concept: [],
+      note: [],
+    };
+
+    for (const item of items) {
+      if (grouped[item.category]) {
+        grouped[item.category].push(`### ${item.title}\n${item.content}`);
+      }
+    }
+
+    const chunks: string[] = [];
+    if (grouped.glossary.length) {
+      chunks.push(`## Istilah Penting (Glossary)\n${grouped.glossary.join("\n\n")}`);
+    }
+    if (grouped.correction.length) {
+      chunks.push(`## Koreksi Salah Dengar (Corrections)\n${grouped.correction.join("\n\n")}`);
+    }
+    if (grouped.concept.length) {
+      chunks.push(`## Konsep Rapat (Concepts)\n${grouped.concept.join("\n\n")}`);
+    }
+    if (grouped.note.length) {
+      chunks.push(`## Catatan Tambahan (Notes)\n${grouped.note.join("\n\n")}`);
+    }
+
+    return chunks.join("\n\n").slice(0, limit);
+  } catch (err) {
+    console.warn("[Knowledge] Gagal membaca knowledge dari database:", err);
+    return "";
+  }
+}
+
+/**
+ * Retrieves glossary titles for Whisper domain prompts directly from database.
+ */
+export async function getGlossaryPromptTerms(): Promise<string> {
+  try {
+    const titles = await dbGetGlossaryTitles(35);
+    return titles.filter(Boolean).join(", ");
   } catch {
     return "";
   }
 }
 
-function appendUnique(filePath: string, marker: string, block: string): void {
-  let oldContent = "";
-  if (fs.existsSync(filePath)) {
-    oldContent = fs.readFileSync(filePath, "utf-8");
-  }
-  if (oldContent.toLowerCase().includes(marker.toLowerCase())) {
-    return;
-  }
-  fs.appendFileSync(filePath, `\n${block.trim()}\n`, "utf-8");
-}
-
-export function updateKnowledge(jobId: string, aiData: any): void {
+/**
+ * Updates knowledge base directly into the database.
+ */
+export async function updateKnowledge(jobId: string, aiData: any): Promise<void> {
   if (!config.aiEnableKnowledgeExtraction || !aiData) return;
-  ensureKnowledgeFiles();
 
   // 1. Glossary terms
   if (Array.isArray(aiData.terms)) {
-    const glossaryPath = path.join(PATHS.knowledgeDir, "glossary.md");
     for (const item of aiData.terms) {
       const term = (item.term || "").trim();
       if (term) {
         const aliases = Array.isArray(item.alias) ? item.alias.join(", ") : "";
         const meaning = item.meaning || "";
-        const block = `## ${term}\n\n- Alias: ${aliases}\n- Arti: ${meaning}\n- Sumber: job_id=${jobId}`;
-        appendUnique(glossaryPath, `## ${term}`, block);
+        const content = `- Alias: ${aliases}\n- Arti: ${meaning}\n- Sumber: job_id=${jobId}`;
+        await saveKnowledgeItem({
+          category: "glossary",
+          title: term,
+          content,
+          source: `job_id=${jobId}`,
+        });
       }
     }
   }
 
   // 2. Corrections
   if (Array.isArray(aiData.corrections)) {
-    const correctionsPath = path.join(PATHS.knowledgeDir, "corrections.md");
     for (const item of aiData.corrections) {
       const wrong = (item.wrong || "").trim();
       const correct = (item.correct || "").trim();
       if (wrong && correct) {
         const reason = item.reason || "";
-        const block = `## ${wrong} -> ${correct}\n\n- Salah dengar: ${wrong}\n- Koreksi: ${correct}\n- Alasan: ${reason}\n- Sumber: job_id=${jobId}`;
-        appendUnique(correctionsPath, `## ${wrong} -> ${correct}`, block);
+        const content = `- Salah dengar: ${wrong}\n- Koreksi: ${correct}\n- Alasan: ${reason}\n- Sumber: job_id=${jobId}`;
+        await saveKnowledgeItem({
+          category: "correction",
+          title: `${wrong} -> ${correct}`,
+          content,
+          source: `job_id=${jobId}`,
+        });
       }
     }
   }
 
   // 3. Concepts
   if (Array.isArray(aiData.concepts)) {
-    const conceptsPath = path.join(PATHS.knowledgeDir, "concepts.md");
     for (const item of aiData.concepts) {
       const name = (item.name || "").trim();
       if (name) {
         const desc = item.description || "";
-        const block = `## ${name}\n\n- Deskripsi: ${desc}\n- Sumber: job_id=${jobId}`;
-        appendUnique(conceptsPath, `## ${name}`, block);
+        const content = `- Deskripsi: ${desc}\n- Sumber: job_id=${jobId}`;
+        await saveKnowledgeItem({
+          category: "concept",
+          title: name,
+          content,
+          source: `job_id=${jobId}`,
+        });
       }
     }
   }
 
   // 4. Notes
   if (Array.isArray(aiData.notes)) {
-    const notesPath = path.join(PATHS.knowledgeDir, "transcript-notes.md");
     for (const note of aiData.notes) {
       if (typeof note === "string" && note.trim()) {
-        const block = `- ${note.trim()} _(job_id=${jobId})_`;
-        appendUnique(notesPath, `- ${note.trim()}`, block);
+        await saveKnowledgeItem({
+          category: "note",
+          title: note.trim().slice(0, 100),
+          content: note.trim(),
+          source: `job_id=${jobId}`,
+        });
       }
     }
   }

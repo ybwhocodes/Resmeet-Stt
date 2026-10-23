@@ -268,7 +268,7 @@ export async function transcribeWithProgress(
 
   // Import dynamic glossary terms for domain prompt injection
   const { getGlossaryPromptTerms } = await import("./knowledge");
-  const glossaryTerms = getGlossaryPromptTerms();
+  const glossaryTerms = await getGlossaryPromptTerms();
   const initialPrompt = glossaryTerms
     ? `Transkripsi rapat resmi, notulen, agenda terarah, istilah: ${glossaryTerms}.`
     : "Transkripsi rapat resmi bahasa Indonesia, notulen, agenda, keputusan, dan tindak lanjut.";
@@ -306,145 +306,88 @@ export async function transcribeWithProgress(
   };
 
   const runTranscriptionEngine = async (extraTemp?: number): Promise<string> => {
-    if (combo === "1") {
-      // First attempt: Persistent In-Memory Whisper Server (0ms model loading, Beam Search 4)
-      try {
-        const ping = await fetch("http://127.0.0.1:8178/", { signal: AbortSignal.timeout(600) });
-        if (ping.status < 500) {
-          onProgress?.(30, "Mentranskripsi dengan Persistent Whisper Server (Beam Search 4)...");
-          const form = new FormData();
-          const fileBuf = fs.readFileSync(audioPath);
-          form.append("file", new Blob([fileBuf]), path.basename(audioPath));
-          form.append("response_format", "verbose_json");
-          form.append("language", "id");
-          if (initialPrompt) form.append("prompt", initialPrompt);
-          if (extraTemp !== undefined) form.append("temperature", String(extraTemp));
+    // 1. Try Persistent In-Memory Whisper Server (0ms model loading, Beam Search 4, Metal GPU)
+    try {
+      const ping = await fetch("http://127.0.0.1:8178/", { signal: AbortSignal.timeout(600) });
+      if (ping.status < 500) {
+        onProgress?.(30, "Mentranskripsi dengan Persistent Whisper Server (Beam Search 4)...");
+        const form = new FormData();
+        const fileBuf = fs.readFileSync(audioPath);
+        form.append("file", new Blob([fileBuf]), path.basename(audioPath));
+        form.append("response_format", "verbose_json");
+        form.append("language", "id");
+        if (initialPrompt) form.append("prompt", initialPrompt);
+        if (extraTemp !== undefined) form.append("temperature", String(extraTemp));
 
-          const res = await fetch("http://127.0.0.1:8178/inference", {
-            method: "POST",
-            body: form,
-            signal: AbortSignal.timeout(180000),
-          });
+        const res = await fetch("http://127.0.0.1:8178/inference", {
+          method: "POST",
+          body: form,
+          signal: AbortSignal.timeout(180000),
+        });
 
-          if (res.ok) {
-            const data = await res.json();
-            fs.writeFileSync(outputJsonPath, JSON.stringify(data), "utf-8");
-            onProgress?.(92, "Transkripsi selesai, memvalidasi Post-ASR...");
-            return JSON.stringify(data);
+        if (res.ok) {
+          const data = await res.json();
+          fs.writeFileSync(outputJsonPath, JSON.stringify(data), "utf-8");
+          onProgress?.(92, "Transkripsi selesai, memvalidasi Post-ASR...");
+          return JSON.stringify(data);
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[WhisperEngine] Whisper-Server tidak merespons, beralih ke whisper-cli: ${err.message}`);
+    }
+
+    // 2. Fallback: whisper-cli native C++ with Beam Search
+    return new Promise<string>((resolve, reject) => {
+      const proc = spawn(cliBinary, buildArgs(extraTemp));
+      let stderr = "";
+      let lastPercent = 0;
+
+      const parseOutput = (data: Buffer) => {
+        const text = data.toString();
+        stderr += text;
+
+        const timeMatches = text.match(/\[(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})\]\s*(.*)/g);
+        if (timeMatches && timeMatches.length > 0) {
+          const lastLine = timeMatches[timeMatches.length - 1];
+          const m = lastLine.match(/\[(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})\]\s*(.*)/);
+          if (m) {
+            const hours = parseInt(m[5], 10);
+            const mins = parseInt(m[6], 10);
+            const secs = parseInt(m[7], 10);
+            const currentAudioSec = hours * 3600 + mins * 60 + secs;
+            const segText = m[9]?.trim() || "";
+
+            let pct = totalDuration > 0 ? 12 + (currentAudioSec / totalDuration) * 82 : lastPercent + 2;
+            pct = Math.min(Math.max(pct, lastPercent), 94);
+            lastPercent = pct;
+
+            onProgress?.(Math.round(pct * 10) / 10, `Mentranskripsi (${Math.round(pct)}%)`, segText);
           }
         }
-      } catch (err: any) {
-        console.warn(`[WhisperEngine] Whisper-Server tidak merespons, beralih ke whisper-cli: ${err.message}`);
-      }
-    }
 
-    if (combo === "2") {
-      // Model 2: Faster-Whisper Turbo (CTranslate2)
-      const scriptPath = path.join(__dirname, "scripts", "transcribe_model2.py");
-      const args = [
-        scriptPath,
-        "--audio", audioPath,
-        "--output", outputPrefix,
-        "--lang", "id",
-      ];
-      if (wordTimestamps) args.push("--word-timestamps");
-      if (extraTemp !== undefined) args.push("--temperature", String(extraTemp));
-
-      return new Promise<string>((resolve, reject) => {
-        const proc = spawn("python3", args);
-        let stderr = "";
-        let lastPercent = 0;
-
-        const parseOutput = (data: Buffer) => {
-          const text = data.toString();
-          stderr += text;
-
-          const timeMatches = text.match(/\[(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})\]\s*(.*)/g);
-          if (timeMatches && timeMatches.length > 0) {
-            const lastLine = timeMatches[timeMatches.length - 1];
-            const m = lastLine.match(/\[(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})\]\s*(.*)/);
-            if (m) {
-              const hours = parseInt(m[5], 10);
-              const mins = parseInt(m[6], 10);
-              const secs = parseInt(m[7], 10);
-              const currentAudioSec = hours * 3600 + mins * 60 + secs;
-              const segText = m[9]?.trim() || "";
-
-              let pct = totalDuration > 0 ? 12 + (currentAudioSec / totalDuration) * 82 : lastPercent + 2;
-              pct = Math.min(Math.max(pct, lastPercent), 94);
-              lastPercent = pct;
-
-              onProgress?.(Math.round(pct * 10) / 10, `Mentranskripsi (${Math.round(pct)}%)`, segText);
-            }
+        const progMatch = text.match(/progress\s*=\s*(\d+)%/i);
+        if (progMatch) {
+          const whisperPct = parseInt(progMatch[1], 10);
+          const pct = Math.min(12 + Math.round((whisperPct * 82) / 100), 94);
+          if (pct > lastPercent) {
+            lastPercent = pct;
+            onProgress?.(pct, `Mentranskripsi (${pct}%)`);
           }
-        };
+        }
+      };
 
-        proc.stdout.on("data", parseOutput);
-        proc.stderr.on("data", parseOutput);
+      proc.stdout.on("data", parseOutput);
+      proc.stderr.on("data", parseOutput);
 
-        proc.on("error", (err) => {
-          reject(new Error(`Gagal menjalankan Model 2 (faster-whisper): ${err.message}`));
-        });
-
-        proc.on("close", (code) => {
-          if (code === 0) resolve(stderr);
-          else reject(new Error(`Model 2 (faster-whisper) exit code ${code}: ${stderr.slice(-1000)}`));
-        });
+      proc.on("error", (err) => {
+        reject(new Error(`Gagal menjalankan whisper-cli: ${err.message}`));
       });
-    } else {
-      // Fallback: whisper-cli native C++ with Beam Search
-      return new Promise<string>((resolve, reject) => {
-        const proc = spawn(cliBinary, buildArgs(extraTemp));
-        let stderr = "";
-        let lastPercent = 0;
 
-        const parseOutput = (data: Buffer) => {
-          const text = data.toString();
-          stderr += text;
-
-          const timeMatches = text.match(/\[(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})\]\s*(.*)/g);
-          if (timeMatches && timeMatches.length > 0) {
-            const lastLine = timeMatches[timeMatches.length - 1];
-            const m = lastLine.match(/\[(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})\]\s*(.*)/);
-            if (m) {
-              const hours = parseInt(m[5], 10);
-              const mins = parseInt(m[6], 10);
-              const secs = parseInt(m[7], 10);
-              const currentAudioSec = hours * 3600 + mins * 60 + secs;
-              const segText = m[9]?.trim() || "";
-
-              let pct = totalDuration > 0 ? 12 + (currentAudioSec / totalDuration) * 82 : lastPercent + 2;
-              pct = Math.min(Math.max(pct, lastPercent), 94);
-              lastPercent = pct;
-
-              onProgress?.(Math.round(pct * 10) / 10, `Mentranskripsi (${Math.round(pct)}%)`, segText);
-            }
-          }
-
-          const progMatch = text.match(/progress\s*=\s*(\d+)%/i);
-          if (progMatch) {
-            const whisperPct = parseInt(progMatch[1], 10);
-            const pct = Math.min(12 + Math.round((whisperPct * 82) / 100), 94);
-            if (pct > lastPercent) {
-              lastPercent = pct;
-              onProgress?.(pct, `Mentranskripsi (${pct}%)`);
-            }
-          }
-        };
-
-        proc.stdout.on("data", parseOutput);
-        proc.stderr.on("data", parseOutput);
-
-        proc.on("error", (err) => {
-          reject(new Error(`Gagal menjalankan whisper-cli (Model 1): ${err.message}`));
-        });
-
-        proc.on("close", (code) => {
-          if (code === 0) resolve(stderr);
-          else reject(new Error(`whisper-cli exit code ${code}: ${stderr.slice(-1000)}`));
-        });
+      proc.on("close", (code) => {
+        if (code === 0) resolve(stderr);
+        else reject(new Error(`whisper-cli exit code ${code}: ${stderr.slice(-1000)}`));
       });
-    }
+    });
   };
 
   // Run first pass

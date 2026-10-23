@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { config, PATHS } from "./config";
-import { readKnowledge, ensureKnowledgeFiles } from "./knowledge";
+import { readKnowledge } from "./knowledge";
 
 export interface DirectedTopic {
   topic: string;
@@ -267,16 +267,7 @@ export async function callAiCorrection(
     return { data: null, status: "skipped" };
   }
 
-  ensureKnowledgeFiles();
-
-  let ragInstructions = "";
-  try {
-    ragInstructions = fs.readFileSync(path.join(PATHS.knowledgeDir, "RAG.md"), "utf-8");
-  } catch {
-    ragInstructions = "";
-  }
-
-  const existingKnowledge = readKnowledge(4000);
+  const existingKnowledge = await readKnowledge(4000);
   const activeStyle = resolveParaphraseStyle(styleInput || config.aiParaphraseStyle);
 
   const systemPrompt = `Anda adalah Sekretaris Notulis Eksekutif Senior berpengalaman 20 tahun yang bertugas menyusun Minutes of Meeting (MoM) profesional, mendalam, dan terarah (menggunakan paradigma Jev-Guided Topics).
@@ -459,7 +450,7 @@ export async function callAiParaphrase(text: string, style = "poin_singkat"): Pr
 
   let rag = "";
   try {
-    rag = fs.readFileSync(path.join(PATHS.knowledgeDir, "RAG.md"), "utf-8");
+    rag = await readKnowledge(4000);
   } catch {
     rag = "";
   }

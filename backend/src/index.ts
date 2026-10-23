@@ -15,8 +15,9 @@ import {
   deleteTranscript,
   updateTranscriptParaphrase,
   closeDbConnections,
+  countKnowledgeItems,
 } from "./db";
-import { ensureKnowledgeFiles, updateKnowledge } from "./knowledge";
+import { migrateKnowledgeFilesToDb, updateKnowledge } from "./knowledge";
 import { calculateFileHash, getCacheKey, readCache, writeCache } from "./cache";
 import { convertWithFfmpeg, transcribeWithProgress, getWhisperModelPath, findWhisperCliBinary } from "./whisper";
 import { callAiCorrection, callAiParaphrase, isAiConfigured, testAiConnection, resolveParaphraseStyle } from "./ai";
@@ -62,8 +63,6 @@ function emitJobProgress(jobId: string, percent: number, stage: string, elapsed_
 
 // Check system preflight
 async function runPreflight(requireAi = false) {
-  ensureKnowledgeFiles();
-
   let ffmpegOk = false;
   try {
     const p = Bun.spawnSync(["ffmpeg", "-version"]);
@@ -88,13 +87,11 @@ async function runPreflight(requireAi = false) {
 
   const checks = {
     uploads_writable: fs.existsSync(PATHS.uploadDir),
-    knowledge_readable: fs.existsSync(PATHS.knowledgeDir),
-    transcripts_md_writable: fs.existsSync(PATHS.transcriptsMdDir),
     ffmpeg: ffmpegOk,
-    format_mom: fs.existsSync(path.join(PATHS.knowledgeDir, "format-mom.md")),
     whisper_model: whisperModelOk,
     database: dbOk,
     drizzle_orm: dbOk,
+    knowledge_database: dbOk,
     whisper_engine: true,
     persistent_whisper_engine: wReady,
     persistent_preprocessor: pReady,
@@ -277,7 +274,7 @@ const server = http.createServer(async (req, res) => {
         ai_model: config.aiModelId,
         ai_base_url: config.aiBaseUrl,
         rag_enabled: config.aiEnableRag,
-        knowledge_ready: fs.existsSync(PATHS.knowledgeDir),
+        knowledge_ready: (await countKnowledgeItems()) > 0,
       });
     }
 
@@ -462,20 +459,21 @@ const server = http.createServer(async (req, res) => {
       return sendJson(row);
     }
 
-    // 7. Download transcript markdown by database ID
+    // 7. Download transcript markdown by database ID (streamed directly from DB)
     const transcriptMatch = pathname.match(/^\/api\/transcripts\/(\d+)\/download-md$/);
     if (transcriptMatch && req.method === "GET") {
       const id = parseInt(transcriptMatch[1], 10);
       const row = await getTranscriptById(id);
-      if (!row || !row.md_path || !fs.existsSync(row.md_path)) {
-        return sendJson({ error: "Markdown tidak ditemukan" }, 404);
+      if (!row) {
+        return sendJson({ error: "Transkrip tidak ditemukan" }, 404);
       }
-      const filename = `transcript-${row.filename || id}.md`;
+      const text = row.markdown_text || row.final_text || "";
+      const cleanBase = (row.filename || `transcript-${id}`).replace(/\.[^/.]+$/, "");
       res.writeHead(200, {
         "Content-Type": "text/markdown; charset=utf-8",
-        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Disposition": `attachment; filename="${cleanBase}.md"`,
       });
-      return fs.createReadStream(row.md_path).pipe(res);
+      return res.end(text);
     }
 
     // 8. Delete transcript by ID
@@ -498,19 +496,21 @@ const server = http.createServer(async (req, res) => {
       return sendJson({ job_id: jobId, ...status });
     }
 
-    // 9. Download job markdown
+    // 9. Download job markdown (streamed directly from DB)
     const jobMdMatch = pathname.match(/^\/api\/(?:jobs|status)\/([a-zA-Z0-9_-]+)\/download-md$/);
     if (jobMdMatch && req.method === "GET") {
       const jobId = jobMdMatch[1];
-      const mdPath = path.join(PATHS.transcriptsMdDir, `${jobId}.md`);
-      if (!fs.existsSync(mdPath)) {
+      const list = await getRecentTranscripts(15);
+      const row = list.find((r: any) => String(r.id) === jobId || r.filename?.includes(jobId)) || list[0];
+      if (!row) {
         return sendJson({ error: "Markdown tidak ditemukan" }, 404);
       }
+      const text = row.markdown_text || row.final_text || "";
       res.writeHead(200, {
         "Content-Type": "text/markdown; charset=utf-8",
         "Content-Disposition": `attachment; filename="transcript-${jobId}.md"`,
       });
-      return fs.createReadStream(mdPath).pipe(res);
+      return res.end(text);
     }
 
     // 10. AI Paraphrase
@@ -560,8 +560,6 @@ const server = http.createServer(async (req, res) => {
 
     // 11. Upload and Transcribe (supports /api/upload-and-transcribe, /api/transcribe, and /api/upload)
     if ((pathname === "/api/upload-and-transcribe" || pathname === "/api/transcribe" || pathname === "/api/upload") && req.method === "POST") {
-      ensureKnowledgeFiles();
-
       const responseWrapper = new Response(req as any, {
         headers: req.headers as any,
       });
@@ -677,7 +675,7 @@ async function startTranscriptionWorker(
 
     if (cached) {
       console.log(`[Job ${jobId}] Cache HIT!`);
-      const mdPath = outputFormat === "md"
+      const mdContent = outputFormat === "md"
         ? renderMarkdown(jobId, originalFilename, cached.duration_s, cached.final_text, cached.ai_data, cached.ai_correction_status || "skipped")
         : null;
 
@@ -690,13 +688,14 @@ async function startTranscriptionWorker(
         rawText: cached.raw_text,
         aiText: cached.ai_corrected_text,
         aiSummary: cached.ai_summary,
-        mdPath,
+        mdPath: null,
+        markdownText: mdContent || cached.markdown_text || cached.final_text,
         aiStatus: cached.ai_correction_status || "skipped",
         directedTopics: cached.directed_topics || cached.ai_data?.directed_topics,
         aiData: cached.ai_data,
       });
 
-      const mdUrl = mdPath ? `/api/jobs/${jobId}/download-md` : null;
+      const mdUrl = `/api/transcripts/${newId}/download-md`;
       io.to(jobId).emit("done", {
         job_id: jobId,
         id: newId,
@@ -768,18 +767,17 @@ async function startTranscriptionWorker(
       }
     }
 
-    // 5. Generate Markdown
-    let mdPath: string | null = null;
+    // 5. Generate Markdown in memory (zero-disk)
+    let mdContent: string | null = null;
     if (outputFormat === "md") {
       setJobStatus(jobId, "generating_markdown");
-      mdPath = renderMarkdown(jobId, originalFilename, durationS, finalText, aiData, aiStatus);
+      mdContent = renderMarkdown(jobId, originalFilename, durationS, finalText, aiData, aiStatus);
     }
-    const mdUrl = mdPath ? `/api/jobs/${jobId}/download-md` : null;
 
     // 6. Save payload and cache
     const payload = {
       final_text: finalText,
-      markdown_text: aiData?.markdown || finalText,
+      markdown_text: mdContent || aiData?.markdown || finalText,
       duration_s: Math.round(durationS * 100) / 100,
       word_timestamps: whisperResult.wordTimestamps || null,
       raw_text: whisperResult.rawText,
@@ -806,11 +804,14 @@ async function startTranscriptionWorker(
       rawText: whisperResult.rawText,
       aiText: payload.ai_corrected_text,
       aiSummary: payload.ai_summary,
-      mdPath,
+      mdPath: null,
+      markdownText: payload.markdown_text,
       aiStatus,
       directedTopics: payload.directed_topics,
       aiData: payload.ai_data,
     });
+
+    const mdUrl = `/api/transcripts/${newId}/download-md`;
 
     // 8. Emit Done event
     io.to(jobId).emit("done", {
@@ -861,7 +862,7 @@ async function bootstrap() {
   console.log("-----------------------------------------");
 
   await initDb();
-  ensureKnowledgeFiles();
+  await migrateKnowledgeFilesToDb();
 
   // Boot persistent in-memory engines (Preprocessor + Whisper Server)
   startPersistentEngines().catch((err) => {

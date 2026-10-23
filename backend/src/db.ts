@@ -142,6 +142,21 @@ export async function initDb(): Promise<{ success: boolean; type: string; messag
         );
       `);
       try { raw.run("ALTER TABLE transcripts ADD COLUMN generation_time_s REAL DEFAULT NULL;"); } catch {}
+
+      raw.run(`
+        CREATE TABLE IF NOT EXISTS knowledge (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          category TEXT NOT NULL,
+          title TEXT NOT NULL,
+          content TEXT NOT NULL,
+          source TEXT DEFAULT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        );
+      `);
+      try {
+        raw.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_cat_title ON knowledge (category, title);");
+      } catch {}
+
       // Warm up Drizzle ORM instance
       getDrizzleSqliteDb();
       console.log(`[Drizzle ORM] SQLite database initialized successfully (${PATHS.sqliteFile}).`);
@@ -411,6 +426,18 @@ export async function migrateDatabase(params: {
           await conn.query(colSql);
         } catch {}
       }
+
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS knowledge (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          category VARCHAR(50) NOT NULL,
+          title VARCHAR(255) NOT NULL,
+          content LONGTEXT NOT NULL,
+          source VARCHAR(255) DEFAULT NULL,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE KEY uq_knowledge_cat_title (category, title)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      `);
       await conn.end();
 
       await closeDbConnections();
@@ -498,6 +525,18 @@ export async function migrateDatabase(params: {
           await client.query(colSql);
         } catch {}
       }
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS knowledge (
+          id SERIAL PRIMARY KEY,
+          category VARCHAR(50) NOT NULL,
+          title VARCHAR(255) NOT NULL,
+          content TEXT NOT NULL,
+          source VARCHAR(255) DEFAULT NULL,
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT uq_knowledge_cat_title UNIQUE (category, title)
+        );
+      `);
       await client.end();
 
       await closeDbConnections();
@@ -832,4 +871,188 @@ export async function updateTranscriptParaphrase(
     console.error(`[Drizzle ORM] Gagal update paraphrase transkrip ID ${id}:`, err);
     return false;
   }
+}
+
+/**
+ * Saves or updates a knowledge item in the database.
+ */
+export async function saveKnowledgeItem(item: {
+  category: string;
+  title: string;
+  content: string;
+  source?: string | null;
+}): Promise<void> {
+  const activeType = config.dbType || "sqlite";
+  const cleanTitle = item.title.trim();
+  const cleanCategory = item.category.trim();
+
+  if (activeType === "sqlite") {
+    const raw = getSqliteDb();
+    raw.run(
+      `INSERT INTO knowledge (category, title, content, source)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(category, title) DO UPDATE SET
+         content = excluded.content,
+         source = COALESCE(excluded.source, knowledge.source);`,
+      [cleanCategory, cleanTitle, item.content, item.source || null]
+    );
+    return;
+  }
+
+  if (activeType === "mysql") {
+    const pool = getMysqlPool();
+    await pool.query(
+      `INSERT INTO knowledge (category, title, content, source)
+       VALUES (?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         content = VALUES(content),
+         source = COALESCE(VALUES(source), source);`,
+      [cleanCategory, cleanTitle, item.content, item.source || null]
+    );
+    return;
+  }
+
+  if (activeType === "postgres") {
+    const pool = getPgPool();
+    await pool.query(
+      `INSERT INTO knowledge (category, title, content, source)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (category, title) DO UPDATE SET
+         content = EXCLUDED.content,
+         source = COALESCE(EXCLUDED.source, knowledge.source);`,
+      [cleanCategory, cleanTitle, item.content, item.source || null]
+    );
+    return;
+  }
+}
+
+/**
+ * Retrieves all knowledge items from the active database.
+ */
+export async function getAllKnowledge(limit = 200): Promise<Array<{
+  id?: number;
+  category: string;
+  title: string;
+  content: string;
+  source?: string | null;
+}>> {
+  const activeType = config.dbType || "sqlite";
+
+  if (activeType === "sqlite") {
+    const orm = getDrizzleSqliteDb();
+    const rows = orm
+      .select({
+        id: schema.sqliteKnowledge.id,
+        category: schema.sqliteKnowledge.category,
+        title: schema.sqliteKnowledge.title,
+        content: schema.sqliteKnowledge.content,
+        source: schema.sqliteKnowledge.source,
+      })
+      .from(schema.sqliteKnowledge)
+      .orderBy(desc(schema.sqliteKnowledge.id))
+      .limit(limit)
+      .all();
+    return rows;
+  }
+
+  if (activeType === "mysql") {
+    const orm = getDrizzleMysqlDb();
+    const rows = await orm
+      .select({
+        id: schema.mysqlKnowledge.id,
+        category: schema.mysqlKnowledge.category,
+        title: schema.mysqlKnowledge.title,
+        content: schema.mysqlKnowledge.content,
+        source: schema.mysqlKnowledge.source,
+      })
+      .from(schema.mysqlKnowledge)
+      .orderBy(desc(schema.mysqlKnowledge.id))
+      .limit(limit);
+    return rows;
+  }
+
+  if (activeType === "postgres") {
+    const orm = getDrizzlePgDb();
+    const rows = await orm
+      .select({
+        id: schema.pgKnowledge.id,
+        category: schema.pgKnowledge.category,
+        title: schema.pgKnowledge.title,
+        content: schema.pgKnowledge.content,
+        source: schema.pgKnowledge.source,
+      })
+      .from(schema.pgKnowledge)
+      .orderBy(desc(schema.pgKnowledge.id))
+      .limit(limit);
+    return rows;
+  }
+
+  return [];
+}
+
+/**
+ * Retrieves glossary titles for Whisper domain prompts.
+ */
+export async function getGlossaryTitles(limit = 35): Promise<string[]> {
+  const activeType = config.dbType || "sqlite";
+
+  if (activeType === "sqlite") {
+    const orm = getDrizzleSqliteDb();
+    const rows = orm
+      .select({ title: schema.sqliteKnowledge.title })
+      .from(schema.sqliteKnowledge)
+      .where(eq(schema.sqliteKnowledge.category, "glossary"))
+      .limit(limit)
+      .all();
+    return rows.map((r) => r.title);
+  }
+
+  if (activeType === "mysql") {
+    const orm = getDrizzleMysqlDb();
+    const rows = await orm
+      .select({ title: schema.mysqlKnowledge.title })
+      .from(schema.mysqlKnowledge)
+      .where(eq(schema.mysqlKnowledge.category, "glossary"))
+      .limit(limit);
+    return rows.map((r) => r.title);
+  }
+
+  if (activeType === "postgres") {
+    const orm = getDrizzlePgDb();
+    const rows = await orm
+      .select({ title: schema.pgKnowledge.title })
+      .from(schema.pgKnowledge)
+      .where(eq(schema.pgKnowledge.category, "glossary"))
+      .limit(limit);
+    return rows.map((r) => r.title);
+  }
+
+  return [];
+}
+
+/**
+ * Counts total knowledge items in database.
+ */
+export async function countKnowledgeItems(): Promise<number> {
+  const activeType = config.dbType || "sqlite";
+  try {
+    if (activeType === "sqlite") {
+      const raw = getSqliteDb();
+      const row: any = raw.query("SELECT COUNT(*) as count FROM knowledge").get();
+      return row ? Number(row.count) : 0;
+    }
+    if (activeType === "mysql") {
+      const pool = getMysqlPool();
+      const [rows]: any = await pool.query("SELECT COUNT(*) as count FROM knowledge");
+      return rows && rows[0] ? Number(rows[0].count) : 0;
+    }
+    if (activeType === "postgres") {
+      const pool = getPgPool();
+      const res = await pool.query("SELECT COUNT(*) as count FROM knowledge");
+      return res.rows[0] ? Number(res.rows[0].count) : 0;
+    }
+  } catch {
+    return 0;
+  }
+  return 0;
 }

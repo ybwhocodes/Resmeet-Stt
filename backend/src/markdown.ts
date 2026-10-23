@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import { config, PATHS } from "./config";
-import { ensureKnowledgeFiles } from "./knowledge";
 import { AiCorrectionResult } from "./ai";
 
 function formatList(items?: any[] | null): string {
@@ -43,8 +42,6 @@ export function renderMarkdown(
   aiData: AiCorrectionResult | null,
   aiStatus: string
 ): string {
-  ensureKnowledgeFiles();
-
   let mdContent = aiData?.markdown;
 
   if (!mdContent) {
@@ -98,7 +95,6 @@ ${formatList(aiData?.notes)}
 `;
   }
 
-  const outputPath = path.join(PATHS.transcriptsMdDir, `${jobId}.md`);
-  fs.writeFileSync(outputPath, mdContent, "utf-8");
-  return outputPath;
+  // Return pure markdown string (no disk file creation)
+  return mdContent;
 }

@@ -66,5 +66,34 @@ export const pgTranscripts = pgTable("transcripts", {
   ai_data: jsonb("ai_data"),
 });
 
+export const sqliteKnowledge = sqliteTable("knowledge", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  category: text("category").notNull(), // "glossary", "correction", "concept", "note", "format_mom"
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  source: text("source"),
+  created_at: text("created_at").default(sql`(datetime('now', 'localtime'))`),
+});
+
+export const mysqlKnowledge = mysqlTable("knowledge", {
+  id: int("id").primaryKey().autoincrement(),
+  category: varchar("category", { length: 50 }).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  content: longtext("content").notNull(),
+  source: varchar("source", { length: 255 }),
+  created_at: datetime("created_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const pgKnowledge = pgTable("knowledge", {
+  id: serial("id").primaryKey(),
+  category: pgVarchar("category", { length: 50 }).notNull(),
+  title: pgVarchar("title", { length: 255 }).notNull(),
+  content: pgText("content").notNull(),
+  source: pgVarchar("source", { length: 255 }),
+  created_at: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
 export type TranscriptInsert = typeof sqliteTranscripts.$inferInsert;
 export type TranscriptSelect = typeof sqliteTranscripts.$inferSelect;
+export type KnowledgeInsert = typeof sqliteKnowledge.$inferInsert;
+export type KnowledgeSelect = typeof sqliteKnowledge.$inferSelect;
