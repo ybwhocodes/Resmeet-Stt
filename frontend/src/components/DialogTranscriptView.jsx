@@ -37,7 +37,7 @@ function extractDialogTurns(item) {
 
     for (let i = 0; i < item.word_timestamps.length; i++) {
       const wt = item.word_timestamps[i];
-      const word = (wt.word || "").trim();
+      const word = (wt.word || wt.text || "").trim();
       if (!word) continue;
 
       if (currentTurn.words.length === 0) {

@@ -1,64 +1,81 @@
 # ==============================================================================
-# Resmeet-STT Backend Dockerfile
-# Runtime: Bun.js + TypeScript + Whisper.cpp + Python Audio Filters
+# Resmeet-STT Rust Backend Dockerfile
+# Multi-Stage Build:
+#   Stage 1: Whisper.cpp C++ Builder (whisper-cli)
+#   Stage 2: Rust 1.85+ Builder (resmeet-backend binary)
+#   Stage 3: Debian Slim Minimal Runtime
 # ==============================================================================
-FROM oven/bun:1-debian AS base
 
-# Install system dependencies
+# ------------------------------------------------------------------------------
+# Stage 1: Build whisper-cli
+# ------------------------------------------------------------------------------
+FROM debian:trixie-slim AS whisper-builder
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
-    python3 \
-    python3-pip \
-    python3-dev \
-    git \
-    cmake \
     build-essential \
-    curl \
+    cmake \
+    git \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Build whisper.cpp binary
-WORKDIR /tmp/whisper_build
+WORKDIR /tmp/whisper
 RUN git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git . \
     && cmake -B build -DWHISPER_BUILD_EXAMPLES=ON -DGGML_NATIVE=OFF \
     && cmake --build build --config Release --target whisper-cli -j$(nproc) \
-    && cp build/bin/whisper-cli /usr/local/bin/whisper-cli \
-    && rm -rf /tmp/whisper_build
+    && cp build/bin/whisper-cli /usr/local/bin/whisper-cli || cp build/bin/main /usr/local/bin/whisper-cli
 
-# Install Python audio preprocessing packages (PEP 668 bypass)
-RUN pip3 install --no-cache-dir --break-system-packages \
-    numpy \
-    scipy \
-    soundfile \
-    noisereduce \
-    torch --extra-index-url https://download.pytorch.org/whl/cpu \
-    onnxruntime \
-    silero-vad
+# ------------------------------------------------------------------------------
+# Stage 2: Build Rust Axum Backend
+# ------------------------------------------------------------------------------
+FROM rust:latest AS rust-builder
 
-# Set workdir
+WORKDIR /usr/src/app
+
+# Pre-cache dependencies
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+RUN cargo build --release
+RUN rm -rf src
+
+# Copy real Rust source code
+COPY src ./src
+RUN touch src/main.rs && cargo build --release
+
+# ------------------------------------------------------------------------------
+# Stage 3: Minimal Production Runtime
+# ------------------------------------------------------------------------------
+FROM debian:trixie-slim AS runtime
+
+# Install runtime dependencies (FFmpeg, OpenMP, CA certificates, curl)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    ca-certificates \
+    libgomp1 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# Copy dependency files and install
-COPY package.json tsconfig.json ./
-RUN bun install
+# Copy whisper-cli from stage 1
+COPY --from=whisper-builder /usr/local/bin/whisper-cli /usr/local/bin/whisper-cli
+COPY --from=whisper-builder /tmp/whisper/build/bin/lib*.so* /usr/local/lib/
+RUN ldconfig
 
-# Copy source code
-COPY . .
+# Copy Rust backend binary from stage 2
+COPY --from=rust-builder /usr/src/app/target/release/resmeet-backend /usr/local/bin/resmeet-backend
 
-# Ensure storage directories exist
-RUN mkdir -p uploads knowledge transcripts_md models
+# Ensure required runtime storage directories exist
+RUN mkdir -p /app/models /app/uploads /app/transcripts_md /app/dist
 
-# Expose backend port
-EXPOSE 8081
+# Default runtime environment variables
+ENV PORT=8200
+ENV WHISPER_MODEL=ggml-large-v3-turbo-q5_0.bin
+ENV CPU_THREADS=4
+ENV RUST_LOG=resmeet_backend=info,tower_http=info
 
-# Default environment
-ENV PORT=8081
-ENV NODE_ENV=production
-ENV DB_HOST=mysql
-ENV DB_PORT=3306
-ENV DB_NAME=stt_db
-ENV DB_USER=root
-ENV DB_PASSWORD=password
-ENV WHISPER_MODEL=large-v3-turbo
+EXPOSE 8200
 
-CMD ["bun", "run", "src/index.ts"]
+HEALTHCHECK --interval=5s --timeout=5s --retries=5 \
+    CMD curl -f http://localhost:8200/api/health || exit 1
+
+CMD ["resmeet-backend"]

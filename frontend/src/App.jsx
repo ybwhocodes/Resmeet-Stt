@@ -1,23 +1,27 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { io } from "socket.io-client";
 import {
   Upload, FileAudio, Download, Database,
   RefreshCw, AlertCircle, FileText, CheckCircle,
-  Trash2, Mic, Zap, Brain, ShieldCheck,
+  Trash2, Mic, Zap, Brain,
   Settings, Eye, EyeOff, Save, Target, Check,
-  ArrowLeft, ChevronRight, Sliders, Search, Layers, X,
+  ArrowLeft, ChevronRight, Search, Layers, X,
   Layout, GitBranch, Copy, Sparkles, Server, HardDrive, Star,
-  Square, Pause, Play, Radio, MicOff, Lock, ShieldAlert, MessageSquare
+  Square, Pause, Play, Radio, MicOff, Lock, ShieldAlert, MessageSquare, Loader2,
+  Users, LogOut, Calendar, Filter, Share2, FileDown
 } from "lucide-react";
 import MarkmapView from "./components/MarkmapView";
-import UiSummary from "./components/UiSummary";
 import DialogTranscriptView from "./components/DialogTranscriptView";
+import TiptapDocxEditor from "./components/TiptapDocxEditor";
+import LoginView from "./components/LoginView";
+import UserManagementView from "./components/UserManagementView";
+import PreflightStatusView from "./components/PreflightStatusView";
+import UserAiModelsView from "./components/UserAiModelsView";
 import resmeetSymbol from "./assets/resmeet_symbol.svg";
 
-const isViteDev = typeof window !== "undefined" && window.location.port === "5173";
-const defaultOrigin = typeof window !== "undefined" && window.location.origin && window.location.origin !== "null" && !window.location.origin.startsWith("file:") && !isViteDev
-  ? window.location.origin
-  : "http://127.0.0.1:8200";
+const defaultOrigin = typeof window !== "undefined" && window.location.hostname
+  ? `${window.location.protocol}//${window.location.hostname}:8200`
+  : "http://localhost:8200";
 const API = import.meta.env.VITE_API_BASE_URL || `${defaultOrigin}/api`;
 const SOCKET_URL = API.replace(/\/api\/?$/, "");
 
@@ -36,18 +40,6 @@ const fmtTimer = (s) => {
   const m = Math.floor(s / 60), sec = s % 60;
   return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 };
-
-// Single Unified Default Model: Large-v3-Turbo + Persistent In-Memory Engine
-const COMBOS = [
-  {
-    id: "1",
-    name: "Whisper Large-v3-Turbo (Model Default Terpadu)",
-    tag: "Pydub/Scipy • DeepFilter-Net+ • NoiseReduce • Silero VAD • Metal GPU In-Memory Engine",
-    desc: "Engine terpadu Whisper Large-v3-Turbo yang berjalan persistent di RAM dengan akselerasi Metal GPU, Beam Search (size 4), Flash Attention, serta preprocessing suara Pydub, NoiseReduce & Silero VAD untuk akurasi dan kecepatan maksimal.",
-    badge: "⚡ In-Memory Metal GPU + Beam Search 4 (Akurasi & Kecepatan Maksimal)",
-    badgeColor: "bg-indigo-950/60 border-indigo-500/60 text-indigo-300",
-  },
-];
 
 function ProgressPanel({ progress }) {
   const { percent, stage, elapsed_s, current_text } = progress;
@@ -79,146 +71,318 @@ function ProgressPanel({ progress }) {
 }
 
 export default function App() {
-  // Navigation: "transcribe" | "history" | "detail" | "settings"
+  // Public Share MoM State (Requirement 6: tanggal-menit-UUID, No Login Required)
+  const [publicShareSlug, setPublicShareSlug] = useState(null);
+  const [publicShareData, setPublicShareData] = useState(null);
+  const [publicShareLoading, setPublicShareLoading] = useState(false);
+  const [publicShareError, setPublicShareError] = useState("");
+
+  // Auth state
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
+  const [authChecking, setAuthChecking] = useState(true);
+
+  // Navigation: "transcribe" | "history" | "detail" | "models" | "users"
   const [nav, setNav] = useState("transcribe");
+  const [showPreflightModal, setShowPreflightModal] = useState(false);
 
   // Transcribe State
   const [file, setFile] = useState(null);
   const [audioUrl, setAudioUrl] = useState(null);
   const [selectedCombo, setSelectedCombo] = useState("1");
+  const [selectedModelId, setSelectedModelId] = useState("");
   const [jobId, setJobId] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [socketStatus, setSocketStatus] = useState("connecting");
-  const [resultTab, setResultTab] = useState("dialog"); // "dialog" | "markdown" | "ui" | "mindmap"
-  const [detailTab, setDetailTab] = useState("dialog"); // "dialog" | "markdown" | "ui" | "mindmap"
-  const [copiedMd, setCopiedMd] = useState(false);
+  const [preflightStatus, setPreflightStatus] = useState("checking"); // "ready" | "not_connected" | "not_ready" | "checking"
+  const [preflightChecks, setPreflightChecks] = useState(null);
+  const [preflightLastChecked, setPreflightLastChecked] = useState(null);
 
-  // History State
+  // Output Tabs: "dialog" (Transkrip) | "mom" (Tiptap DOCX Editor) | "mindmap" (Markmap)
+  const [resultTab, setResultTab] = useState("dialog");
+  const [detailTab, setDetailTab] = useState("dialog");
+
+  // History State & Date Filter
   const [history, setHistory] = useState([]);
   const [loadingH, setLoadingH] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [historySearch, setHistorySearch] = useState("");
   const [deletingId, setDeletingId] = useState(null);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [quickDateFilter, setQuickDateFilter] = useState("all");
 
   // Settings State
   const [aiCorrection, setAiCorrection] = useState(true);
-  const [outputMd, setOutputMd] = useState(true);
-  const [aiBaseUrl, setAiBaseUrl] = useState("http://localhost:20128/v1");
-  const [aiApiKey, setAiApiKey] = useState("");
-  const [aiModelId, setAiModelId] = useState("9R-Gemini");
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [testingAi, setTestingAi] = useState(false);
-  const [testResult, setTestResult] = useState(null);
-  const [savingSettings, setSavingSettings] = useState(false);
-  const [savedSuccess, setSavedSuccess] = useState(false);
-  const [preflight, setPreflight] = useState(null);
-  const [preflightLoading, setPreflightLoading] = useState(false);
-
-  // Database Storage State
-  const [dbType, setDbType] = useState("sqlite");
-  const [activeDefaultDb, setActiveDefaultDb] = useState("sqlite");
-  const [dbHost, setDbHost] = useState("127.0.0.1");
-  const [dbPort, setDbPort] = useState(3307);
-  const [dbName, setDbName] = useState("stt_db");
-  const [dbUser, setDbUser] = useState("root");
-  const [dbPassword, setDbPassword] = useState("password");
-  const [dbTesting, setDbTesting] = useState(false);
-  const [dbTestResult, setDbTestResult] = useState(null);
-  const [dbMigrating, setDbMigrating] = useState(false);
-  const [dbMigrateResult, setDbMigrateResult] = useState(null);
-  const [settingDefaultDb, setSettingDefaultDb] = useState(false);
-  const [setDefaultResult, setSetDefaultResult] = useState(null);
-
-  // Paraphrase State
-  const [paraphrasing, setParaphrasing] = useState(false);
   const [paraphraseStyle, setParaphraseStyle] = useState("poin_singkat");
+  const [paraphrasing, setParaphrasing] = useState(false);
 
-  // Audio Input Source State: "upload" | "record"
-  const [audioSource, setAudioSource] = useState("upload");
+  // Audio Recording State
+  const [audioSource, setAudioSource] = useState("upload"); // "upload" | "record"
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
-  const [micPermission, setMicPermission] = useState("unknown"); // "unknown" | "prompt" | "granted" | "denied" | "unsupported"
-  const [checkingMic, setCheckingMic] = useState(false);
+  const [micPermission, setMicPermission] = useState("prompt");
   const [micError, setMicError] = useState("");
+  const [checkingMic, setCheckingMic] = useState(false);
+
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const timerRef = useRef(null);
   const streamRef = useRef(null);
-
   const fileRef = useRef(null);
   const socketRef = useRef(null);
 
-  // Fetch History
-  const fetchHistory = useCallback(async () => {
+  // =========================================================================
+  // 1. Check Public Share Link on Mount (No Login Required)
+  // =========================================================================
+  useEffect(() => {
+    const pathname = window.location.pathname;
+    const searchParams = new URLSearchParams(window.location.search);
+    const hash = window.location.hash;
+
+    let slug = null;
+    if (pathname.startsWith("/share/")) {
+      slug = pathname.replace("/share/", "").split("/")[0].trim();
+    } else if (searchParams.get("share")) {
+      slug = searchParams.get("share").trim();
+    } else if (hash.startsWith("#share=")) {
+      slug = hash.replace("#share=", "").trim();
+    }
+
+    if (slug) {
+      setPublicShareSlug(slug);
+      setPublicShareLoading(true);
+      fetch(`${API}/public/transcripts/share/${slug}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.filename) {
+            setPublicShareData(data);
+          } else {
+            setPublicShareError(data.error || "Dokumen MoM tidak ditemukan atau akses publik telah ditutup.");
+          }
+        })
+        .catch(() => {
+          setPublicShareError("Gagal menghubungi server publik.");
+        })
+        .finally(() => {
+          setPublicShareLoading(false);
+        });
+    }
+  }, []);
+
+  // =========================================================================
+  // 2. Auth Verification on Page Load (Remember Me Cache)
+  // =========================================================================
+  useEffect(() => {
+    const savedToken = localStorage.getItem("resmeet_auth_token") || sessionStorage.getItem("resmeet_auth_token");
+    if (!savedToken) {
+      setAuthChecking(false);
+      return;
+    }
+
+    fetch(`${API}/auth/me`, {
+      headers: { Authorization: `Bearer ${savedToken}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.username) {
+          setUser(data);
+          setToken(savedToken);
+        } else {
+          localStorage.removeItem("resmeet_auth_token");
+          sessionStorage.removeItem("resmeet_auth_token");
+          setUser(null);
+          setToken(null);
+        }
+      })
+      .catch(() => {
+        setUser(null);
+        setToken(null);
+      })
+      .finally(() => {
+        setAuthChecking(false);
+      });
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      if (token) {
+        await fetch(`${API}/auth/logout`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+    } catch {}
+
+    localStorage.removeItem("resmeet_auth_token");
+    localStorage.removeItem("resmeet_auth_user");
+    sessionStorage.removeItem("resmeet_auth_token");
+
+    setUser(null);
+    setToken(null);
+    setNav("transcribe");
+    setHistory([]);
+    setResult(null);
+    setSelectedItem(null);
+  };
+
+  // Fetch User's Registered Multi-Model Array
+  const fetchUserAiModels = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API}/user/ai-models`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok && Array.isArray(data.models)) {
+        const def = data.models.find((m) => m.is_default);
+        if (def) setSelectedModelId(def.model_id);
+        else if (data.models.length > 0) setSelectedModelId(data.models[0].model_id);
+      }
+    } catch (err) {
+      console.warn("Gagal memuat model AI user:", err);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (token) fetchUserAiModels();
+  }, [token, fetchUserAiModels]);
+
+  // Fetch History with Isolation
+  const fetchHistory = useCallback(async (start = startDate, end = endDate) => {
+    if (!token) return;
     setLoadingH(true);
     try {
-      const res = await fetch(`${API}/transcripts`);
+      let query = `${API}/transcripts?`;
+      if (start) query += `start_date=${encodeURIComponent(start)}&`;
+      if (end) query += `end_date=${encodeURIComponent(end)}&`;
+
+      const res = await fetch(query, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const data = await res.json();
-      setHistory(Array.isArray(data) ? data : []);
-    } catch {
-      setError("Gagal mengambil riwayat dari server.");
+      const rows = Array.isArray(data) ? data : (data.transcripts || []);
+      setHistory(rows.map((item) => ({
+        ...item,
+        markdown_text: item.ai_summary || item.final_text || "",
+      })));
+    } catch (err) {
+      console.error("Gagal memuat riwayat:", err);
+      setHistory([]);
     } finally {
       setLoadingH(false);
     }
-  }, []);
+  }, [token, startDate, endDate]);
 
-  // Fetch Preflight
-  const fetchPreflight = useCallback(async () => {
-    setPreflightLoading(true);
-    try {
-      const res = await fetch(`${API}/preflight?ai=${aiCorrection}`);
-      const data = await res.json();
-      setPreflight(data);
-    } catch {
-      setPreflight({ status: "failed", checks: { backend: false } });
-    } finally {
-      setPreflightLoading(false);
-    }
-  }, [aiCorrection]);
-
-  // Fetch Settings
-  const fetchSettings = useCallback(async () => {
-    try {
-      const res = await fetch(`${API}/settings`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.baseUrl) setAiBaseUrl(data.baseUrl);
-        if (data.apiKey) setAiApiKey(data.apiKey);
-        if (data.modelId) setAiModelId(data.modelId);
-        if (data.paraphraseStyle) setParaphraseStyle(data.paraphraseStyle);
-        if (data.dbType) {
-          setDbType(data.dbType);
-          setActiveDefaultDb(data.dbType);
-        }
-        if (data.dbHost) setDbHost(data.dbHost);
-        if (data.dbPort) setDbPort(data.dbPort);
-        if (data.dbName) setDbName(data.dbName);
-        if (data.dbUser) setDbUser(data.dbUser);
-        if (data.dbPassword !== undefined) setDbPassword(data.dbPassword);
-      }
-    } catch (err) {
-      console.warn("Gagal memuat pengaturan:", err);
-    }
-  }, []);
-
-  // Setup Socket.IO
   useEffect(() => {
-    const socket = io(SOCKET_URL, { transports: ["websocket"] });
-    socketRef.current = socket;
-    socket.on("connect", () => setSocketStatus("connected"));
-    socket.on("disconnect", () => setSocketStatus("disconnected"));
-    socket.on("connect_error", () => setSocketStatus("disconnected"));
-    socket.on("progress", (data) => setProgress({ percent: data.percent ?? 0, stage: data.stage ?? "", elapsed_s: data.elapsed_s ?? 0, current_text: data.current_text ?? "" }));
-    socket.on("job_status", (data) => {
-      if (data?.progress) {
-        setProgress(data.progress);
-      } else if (data?.status && data.status !== "queued" && data.status !== "processing") {
-        setProgress((p) => p ? { ...p, stage: data.status } : { percent: 0, stage: data.status, elapsed_s: 0, current_text: "" });
+    if (token) fetchHistory();
+  }, [token, fetchHistory]);
+
+  // Quick Date Filter Presets
+  const applyQuickDateFilter = (preset) => {
+    setQuickDateFilter(preset);
+    const today = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    const toYMD = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    if (preset === "all") {
+      setStartDate("");
+      setEndDate("");
+      fetchHistory("", "");
+    } else if (preset === "today") {
+      const ymd = toYMD(today);
+      setStartDate(ymd);
+      setEndDate(ymd);
+      fetchHistory(ymd, ymd);
+    } else if (preset === "7d") {
+      const past = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const start = toYMD(past);
+      const end = toYMD(today);
+      setStartDate(start);
+      setEndDate(end);
+      fetchHistory(start, end);
+    } else if (preset === "30d") {
+      const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const start = toYMD(past);
+      const end = toYMD(today);
+      setStartDate(start);
+      setEndDate(end);
+      fetchHistory(start, end);
+    }
+  };
+
+  // Preflight Check & Connection Readiness Handler (Requirement 8)
+  const checkPreflight = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/preflight`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        setPreflightStatus("not_connected");
+        return;
       }
+      const data = await res.json();
+      if (!data || !data.checks) {
+        setPreflightStatus("not_connected");
+        return;
+      }
+      setPreflightChecks(data.checks);
+      setPreflightLastChecked(new Date().toLocaleTimeString("id-ID"));
+
+      const { database, ffmpeg, whisperCli, whisperModel, uploadsWritable, aiGateway } = data.checks;
+      const allPassed =
+        database === true &&
+        ffmpeg === true &&
+        whisperCli === true &&
+        whisperModel === true &&
+        uploadsWritable === true &&
+        aiGateway === true;
+
+      setPreflightStatus(allPassed ? "ready" : "not_ready");
+    } catch {
+      setPreflightStatus("not_connected");
+    }
+  }, [token]);
+
+  useEffect(() => {
+    checkPreflight();
+    const interval = setInterval(checkPreflight, 20000);
+    const handleFocus = () => checkPreflight();
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [checkPreflight]);
+
+  // Socket.io Connection
+  useEffect(() => {
+    if (!token) return;
+    const socket = io(SOCKET_URL, {
+      transports: ["polling", "websocket"],
+      reconnectionAttempts: 5,
+    });
+    socketRef.current = socket;
+
+    socket.on("connect", () => {
+      setSocketStatus("connected");
+      checkPreflight();
+    });
+    socket.on("disconnect", () => {
+      setSocketStatus("disconnected");
+      setPreflightStatus("not_connected");
+    });
+    socket.on("progress", (data) => {
+      setProgress((prev) => ({
+        percent: data.percent ?? prev?.percent ?? 0,
+        stage: data.stage ?? prev?.stage ?? "",
+        elapsed_s: data.elapsed_s ?? prev?.elapsed_s ?? 0,
+        current_text: data.current_text !== undefined ? data.current_text : (prev?.current_text ?? ""),
+      }));
     });
     socket.on("done", (data) => {
       setProcessing(false);
@@ -226,136 +390,56 @@ export default function App() {
       setResult(data);
       fetchHistory();
     });
-    socket.on("error", (data) => {
-      setProcessing(false);
-      setProgress(null);
-      setError(data.message || "Terjadi kesalahan pada server.");
-    });
-    return () => socket.disconnect();
-  }, [fetchHistory]);
 
-  useEffect(() => { fetchHistory(); }, [fetchHistory]);
-  useEffect(() => { fetchPreflight(); }, [fetchPreflight]);
-  useEffect(() => { fetchSettings(); }, [fetchSettings]);
+    return () => {
+      socket.disconnect();
+    };
+  }, [token, checkPreflight, fetchHistory]);
 
-  const ALLOWED_AUDIO_EXTENSIONS = ["mp3", "wav", "m4a", "ogg", "flac", "webm", "aac", "mp4", "mpeg", "mpg", "m4v"];
-
-  const stopRecordingTracks = useCallback(() => {
+  // Stop media tracks
+  const stopRecordingTracks = () => {
     if (streamRef.current) {
-      try {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-      } catch {
-        // ignore
-      }
+      streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
-  }, []);
-
-  const cancelRecording = useCallback(() => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.ondataavailable = null;
-      mediaRecorderRef.current.onstop = null;
-      if (mediaRecorderRef.current.state !== "inactive") {
-        try { mediaRecorderRef.current.stop(); } catch { /* ignore */ }
-      }
-      mediaRecorderRef.current = null;
-    }
-    stopRecordingTracks();
-    audioChunksRef.current = [];
-    setIsRecording(false);
-    setIsPaused(false);
-    setRecordSeconds(0);
-  }, [stopRecordingTracks]);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      stopRecordingTracks();
-    };
-  }, [stopRecordingTracks]);
-
-  const acceptFile = (f) => {
-    if (!f) return;
-    const ext = f.name?.split(".").pop()?.toLowerCase() || "";
-    const isMimeValid =
-      f.type.startsWith("audio/") ||
-      f.type.startsWith("video/") ||
-      f.type === "video/mp4" ||
-      f.type === "video/mpeg";
-    const isExtValid = ALLOWED_AUDIO_EXTENSIONS.includes(ext);
-
-    if (!isMimeValid && !isExtValid) {
-      return setError(`Format file tidak didukung: .${ext || "unknown"}. Gunakan: ${ALLOWED_AUDIO_EXTENSIONS.join(", ")}`);
-    }
-    setFile(f);
-    setAudioUrl(URL.createObjectURL(f));
-    setResult(null);
-    setProgress(null);
-    setError("");
   };
-
-  const clearFile = () => {
-    cancelRecording();
-    setFile(null);
-    setAudioUrl(null);
-    setResult(null);
-    setProgress(null);
-    if (fileRef.current) fileRef.current.value = "";
-  };
-
-  const checkMicPermission = useCallback(async () => {
-    if (typeof navigator !== "undefined" && navigator.permissions && navigator.permissions.query) {
-      try {
-        const status = await navigator.permissions.query({ name: "microphone" });
-        setMicPermission(status.state);
-        status.onchange = () => {
-          setMicPermission(status.state);
-          if (status.state === "granted") {
-            setMicError("");
-          }
-        };
-        return status.state;
-      } catch {
-        return "unknown";
-      }
-    }
-    return "unknown";
-  }, []);
-
-  useEffect(() => {
-    checkMicPermission();
-  }, [checkMicPermission]);
 
   const proceedWithRecording = (stream) => {
     streamRef.current = stream;
-
-    let mimeType = "";
-    if (typeof MediaRecorder !== "undefined") {
-      if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) mimeType = "audio/webm;codecs=opus";
-      else if (MediaRecorder.isTypeSupported("audio/webm")) mimeType = "audio/webm";
-      else if (MediaRecorder.isTypeSupported("audio/mp4")) mimeType = "audio/mp4";
-      else if (MediaRecorder.isTypeSupported("audio/ogg")) mimeType = "audio/ogg";
-    }
-
-    const options = mimeType ? { mimeType } : undefined;
-    const mediaRecorder = new MediaRecorder(stream, options);
-    mediaRecorderRef.current = mediaRecorder;
     audioChunksRef.current = [];
 
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) {
-        audioChunksRef.current.push(e.data);
+    let actualMime = "audio/webm";
+    const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"];
+    for (const cand of candidates) {
+      if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(cand)) {
+        actualMime = cand;
+        break;
+      }
+    }
+
+    let mediaRecorder;
+    try {
+      mediaRecorder = new MediaRecorder(stream, { mimeType: actualMime });
+    } catch {
+      mediaRecorder = new MediaRecorder(stream);
+      actualMime = mediaRecorder.mimeType || "audio/webm";
+    }
+    mediaRecorderRef.current = mediaRecorder;
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        audioChunksRef.current.push(event.data);
       }
     };
 
     mediaRecorder.onstop = () => {
-      const actualMime = mediaRecorder.mimeType || mimeType || "audio/webm";
-      const ext = actualMime.includes("mp4") ? "mp4" : actualMime.includes("ogg") ? "ogg" : actualMime.includes("wav") ? "wav" : "webm";
+      const ext = actualMime.includes("mp4") ? "mp4" : actualMime.includes("ogg") ? "ogg" : "webm";
       const blob = new Blob(audioChunksRef.current, { type: actualMime });
+      if (blob.size === 0) {
+        setMicError("Rekaman kosong. Coba rekam ulang dan pastikan mikrofon aktif.");
+        stopRecordingTracks();
+        return;
+      }
       const now = new Date();
       const pad = (n) => String(n).padStart(2, "0");
       const filename = `rekaman_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.${ext}`;
@@ -364,7 +448,14 @@ export default function App() {
       stopRecordingTracks();
     };
 
-    mediaRecorder.start(250);
+    mediaRecorder.onerror = () => {
+      setMicError("Perekaman gagal. Coba rekam ulang.");
+      stopRecordingTracks();
+      setIsRecording(false);
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+
+    mediaRecorder.start();
     setRecordSeconds(0);
     setIsRecording(true);
     setIsPaused(false);
@@ -392,7 +483,6 @@ export default function App() {
       setMicPermission("granted");
       setMicError("");
       setCheckingMic(false);
-
       if (autoStart) {
         proceedWithRecording(stream);
         return true;
@@ -401,32 +491,27 @@ export default function App() {
         return true;
       }
     } catch (err) {
-      console.warn("Microphone access failed:", err);
+      stopRecordingTracks();
       setCheckingMic(false);
       if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
         setMicPermission("denied");
-        setMicError(
-          "Izin mikrofon dinonaktifkan atau diblokir di browser. Silakan izinkan akses mikrofon melalui ikon gembok / pengaturan situs pada bilah URL browser Anda."
-        );
-      } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
-        setMicPermission("not_found");
-        setMicError("Perangkat mikrofon fisik tidak ditemukan. Pastikan mikrofon telah terpasang ke komputer Anda.");
+        setMicError("Izin mikrofon ditolak oleh browser. Buka setelan browser untuk mengaktifkan mikrofon.");
       } else {
-        setMicPermission("error");
-        setMicError(`Gagal mengakses mikrofon: ${err.message || "Izin mikrofon ditolak."}`);
+        setMicError(`Gagal mengakses mikrofon: ${err.message}`);
       }
       return false;
     }
   };
 
   const startRecording = async () => {
-    setError("");
     setMicError("");
-    await requestMicAccess(true);
+    setError("");
+    const granted = await requestMicAccess(true);
+    if (!granted) return;
   };
 
   const pauseRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+    if (mediaRecorderRef.current && isRecording && !isPaused) {
       mediaRecorderRef.current.pause();
       setIsPaused(true);
       if (timerRef.current) clearInterval(timerRef.current);
@@ -434,1169 +519,1092 @@ export default function App() {
   };
 
   const resumeRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "paused") {
+    if (mediaRecorderRef.current && isRecording && isPaused) {
       mediaRecorderRef.current.resume();
       setIsPaused(false);
-      if (timerRef.current) clearInterval(timerRef.current);
-      timerRef.current = setInterval(() => {
-        setRecordSeconds((prev) => prev + 1);
-      }, 1000);
+      timerRef.current = setInterval(() => setRecordSeconds((prev) => prev + 1), 1000);
     }
   };
 
   const stopRecording = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+    if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      setIsPaused(false);
+      if (timerRef.current) clearInterval(timerRef.current);
     }
+  };
+
+  const cancelRecording = () => {
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.ondataavailable = null;
+      mediaRecorderRef.current.onstop = null;
+      try { mediaRecorderRef.current.stop(); } catch {}
+    }
+    stopRecordingTracks();
     setIsRecording(false);
     setIsPaused(false);
+    setRecordSeconds(0);
+    if (timerRef.current) clearInterval(timerRef.current);
   };
 
-  const handleSourceChange = async (newSource) => {
-    if (isRecording) {
-      cancelRecording();
+  const acceptFile = (f) => {
+    const validExts = [".mp3", ".wav", ".ogg", ".flac", ".m4a", ".webm", ".mp4", ".mpeg", ".mpg", ".m4v", ".aac"];
+    const ext = "." + f.name.split(".").pop().toLowerCase();
+    if (!validExts.includes(ext)) {
+      setError(`Format ${ext} tidak didukung. Format yang didukung: ${validExts.join(", ")}`);
+      return;
     }
-    setAudioSource(newSource);
-    clearFile();
-    setMicError("");
-
-    if (newSource === "record") {
-      const perm = await checkMicPermission();
-      if (perm === "prompt" || perm === "unknown" || perm === "denied") {
-        await requestMicAccess(false);
-      }
-    }
+    setFile(f);
+    setError("");
+    setResult(null);
+    setProgress(null);
+    setJobId(null);
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    setAudioUrl(URL.createObjectURL(f));
   };
 
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text);
-    setCopiedMd(true);
-    setTimeout(() => setCopiedMd(false), 2000);
+  const handleDrop = (e) => {
+    e.preventDefault();
+    const dropped = e.dataTransfer.files[0];
+    if (dropped) acceptFile(dropped);
   };
 
   const handleProcess = async () => {
-    if (!file || processing) return;
+    if (!file || processing || !token) return;
+    if (preflightStatus !== "ready") {
+      setError("Transkripsi tidak dapat dijalankan: Sistem belum siap atau Gateway AI belum dikonfigurasi.");
+      return;
+    }
+
     setProcessing(true);
     setError("");
     setResult(null);
-    setProgress({ percent: 1, stage: "Mengunggah file & menyiapkan audio...", elapsed_s: 0, current_text: "" });
+    setProgress({ percent: 5, stage: "Mengunggah file & validasi audio...", elapsed_s: 0, current_text: "" });
+
+    const startTime = Date.now();
+    const progressTimer = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      setProgress((prev) => {
+        let stage = "Mengunggah file audio...";
+        let pct = 5;
+        if (elapsed >= 2 && elapsed < 6) {
+          stage = "Konversi audio ke 16 kHz WAV via FFmpeg...";
+          pct = 15;
+        } else if (elapsed >= 6 && elapsed < 20) {
+          stage = "Menjalankan model Whisper AI (inferensi suara)...";
+          pct = Math.min(80, 20 + Math.floor((elapsed - 6) * 3));
+        } else if (elapsed >= 20) {
+          stage = "Laya Decision Engine: Perapian konteks dialog & pembuatan MoM...";
+          pct = Math.min(95, 65 + Math.floor(elapsed - 20));
+        }
+        return {
+          percent: prev?.percent ? Math.max(prev.percent, pct) : pct,
+          stage,
+          elapsed_s: elapsed,
+          current_text: prev?.current_text || "",
+        };
+      });
+    }, 1000);
+
     try {
       const form = new FormData();
       form.append("audioFile", file);
       form.append("combo", selectedCombo);
       form.append("ai_correction", aiCorrection ? "true" : "false");
-      form.append("output_format", outputMd ? "md" : "json");
       form.append("paraphrase_style", paraphraseStyle);
-      const res = await fetch(`${API}/upload-and-transcribe`, { method: "POST", body: form });
+      if (selectedModelId) form.append("model_id", selectedModelId);
+
+      const res = await fetch(`${API}/upload-and-transcribe`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload gagal");
-      setJobId(data.job_id);
-      socketRef.current?.emit("join_job", { job_id: data.job_id });
-      setProgress((prev) => ({
-        percent: Math.max(prev?.percent || 0, 2),
-        stage: "Memulai proses transkripsi...",
-        elapsed_s: 0,
-        current_text: "",
-      }));
+
+      if (data.success && data.id) {
+        setJobId(null);
+        setResult({
+          ...data,
+          final_text: data.finalText || "",
+          raw_text: data.rawText || "",
+          markdown_text: data.aiSummary || data.finalText || "",
+          ai_summary: data.aiSummary,
+          duration_s: data.durationS || 0,
+          created_at: data.createdAt,
+          word_timestamps: data.segments || [],
+          ai_data: {
+            dialog_transcript: data.dialogTranscript,
+          },
+          share_slug: data.shareSlug,
+        });
+        setResultTab("dialog");
+        setProgress(null);
+        setProcessing(false);
+        fetchHistory();
+      } else {
+        throw new Error("Respons transkripsi tidak lengkap.");
+      }
     } catch (e) {
       setProcessing(false);
       setProgress(null);
       setError(e.message);
-    }
-  };
-
-  const handleSaveSettings = async () => {
-    setSavingSettings(true);
-    setSavedSuccess(false);
-    try {
-      const res = await fetch(`${API}/settings`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          baseUrl: aiBaseUrl,
-          apiKey: aiApiKey,
-          modelId: aiModelId,
-          paraphraseStyle: paraphraseStyle,
-          dbType,
-          dbHost,
-          dbPort: Number(dbPort) || undefined,
-          dbName,
-          dbUser,
-          dbPassword,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Gagal menyimpan pengaturan");
-      setSavedSuccess(true);
-      setActiveDefaultDb(dbType);
-      fetchPreflight();
-      fetchHistory();
-      setTimeout(() => setSavedSuccess(false), 3000);
-    } catch (err) {
-      setError(err.message);
     } finally {
-      setSavingSettings(false);
+      clearInterval(progressTimer);
     }
   };
 
-  const handleSetDefaultDb = async (typeToSet = dbType) => {
-    setSettingDefaultDb(true);
-    setSetDefaultResult(null);
-    try {
-      const res = await fetch(`${API}/settings/set-default-db`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dbType: typeToSet,
-          dbHost,
-          dbPort: Number(dbPort) || undefined,
-          dbName,
-          dbUser,
-          dbPassword,
-        }),
-      });
-      const data = await res.json();
-      setSetDefaultResult(data);
-      if (data.success) {
-        setActiveDefaultDb(typeToSet);
-        setDbType(typeToSet);
-        fetchPreflight();
-        fetchHistory();
-        setTimeout(() => setSetDefaultResult(null), 4000);
-      }
-    } catch (err) {
-      setSetDefaultResult({ success: false, message: err.message || "Gagal mengatur database default" });
-    } finally {
-      setSettingDefaultDb(false);
-    }
-  };
-
-  const handleTestAiConnection = async () => {
-    setTestingAi(true);
-    setTestResult(null);
-    try {
-      const res = await fetch(`${API}/settings/test`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: aiBaseUrl,
-          apiKey: aiApiKey,
-          model: aiModelId,
-        }),
-      });
-      const data = await res.json();
-      setTestResult(data);
-    } catch (err) {
-      setTestResult({ success: false, message: err.message || "Gagal menghubungi server" });
-    } finally {
-      setTestingAi(false);
-    }
-  };
-
-  const handleTestDbConnection = async () => {
-    setDbTesting(true);
-    setDbTestResult(null);
-    try {
-      const res = await fetch(`${API}/settings/db-test`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dbType,
-          dbHost,
-          dbPort: Number(dbPort) || undefined,
-          dbName,
-          dbUser,
-          dbPassword,
-        }),
-      });
-      const data = await res.json();
-      setDbTestResult(data);
-    } catch (err) {
-      setDbTestResult({ success: false, message: err.message || "Gagal menguji koneksi database" });
-    } finally {
-      setDbTesting(false);
-    }
-  };
-
-  const handleMigrateDb = async () => {
-    setDbMigrating(true);
-    setDbMigrateResult(null);
-    try {
-      const res = await fetch(`${API}/settings/db-migrate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dbType,
-          dbHost,
-          dbPort: Number(dbPort) || undefined,
-          dbName,
-          dbUser,
-          dbPassword,
-        }),
-      });
-      const data = await res.json();
-      setDbMigrateResult(data);
-      if (data.success) {
-        fetchHistory();
-        fetchPreflight();
-      }
-    } catch (err) {
-      setDbMigrateResult({ success: false, message: err.message || "Gagal migrasi database" });
-    } finally {
-      setDbMigrating(false);
-    }
-  };
-
-  const downloadTxt = (item) => {
-    const text = item.markdown_text || item.final_text || "";
-    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `transkrip_${item.filename || "audio"}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const downloadMd = (item) => {
-    if (item.ai_correction_status === "paraphrased") {
-      const blob = new Blob([item.markdown_text || item.final_text || ""], { type: "text/markdown;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `transkrip_${item.filename || "audio"}.md`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      return;
-    }
-    const id = item.job_id || jobId;
-    if (item.md_url) window.open(`${SOCKET_URL}${item.md_url}`, "_blank");
-    else if (id) window.open(`${API}/jobs/${id}/download-md`, "_blank");
-  };
-
-  const paraphrase = async (targetItem, updateTargetFn) => {
-    const text = targetItem?.markdown_text || targetItem?.final_text;
-    if (!text || paraphrasing) return;
+  // AI Re-Paraphrase with Custom User Prompt (Requirement 3)
+  const handleParaphrase = async (item, customPromptText = null) => {
+    if (!item?.id || paraphrasing || !token) return;
     setParaphrasing(true);
     setError("");
+
     try {
       const res = await fetch(`${API}/paraphrase`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
-          text,
+          id: item.id,
           style: paraphraseStyle,
-          id: targetItem?.id,
+          model_id: selectedModelId || undefined,
+          custom_prompt: customPromptText || undefined,
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Parafrase gagal");
-      const next = {
-        ...targetItem,
-        final_text: data.markdown || data.text,
-        markdown_text: data.markdown || data.text,
-        ai_summary: data.summary || data.ai_summary || targetItem.ai_summary,
-        summary: data.summary || data.ai_summary || targetItem.summary,
-        directed_topics: data.directed_topics?.length > 0 ? data.directed_topics : targetItem.directed_topics,
-        ai_data: data.ai_data || data,
-        ai_correction_status: "paraphrased",
-      };
-      updateTargetFn(next);
+      if (!res.ok) throw new Error(data.error || "Gagal memparafrase.");
+
+      const updatedMom = data.aiSummary;
+      if (selectedItem && selectedItem.id === item.id) {
+        setSelectedItem((prev) => ({
+          ...prev,
+          ai_summary: updatedMom,
+          markdown_text: updatedMom,
+        }));
+      }
+      if (result && result.id === item.id) {
+        setResult((prev) => ({
+          ...prev,
+          ai_summary: updatedMom,
+          markdown_text: updatedMom,
+        }));
+      }
       fetchHistory();
-    } catch (e) {
-      setError(e.message);
+    } catch (err) {
+      setError(err.message);
     } finally {
       setParaphrasing(false);
     }
   };
 
-  const handleDeleteTranscript = async (id, e) => {
-    if (e) e.stopPropagation();
-    if (!window.confirm("Apakah Anda yakin ingin menghapus transkrip ini dari riwayat?")) {
-      return;
+  // Save MoM from Tiptap Editor directly
+  const handleSaveMom = async (item, newContent) => {
+    if (!item?.id || !token) return;
+    try {
+      const res = await fetch(`${API}/transcripts/${item.id}/mom`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ content: newContent }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal menyimpan MoM.");
+
+      if (selectedItem && selectedItem.id === item.id) {
+        setSelectedItem((prev) => ({
+          ...prev,
+          ai_summary: newContent,
+          markdown_text: newContent,
+        }));
+      }
+      if (result && result.id === item.id) {
+        setResult((prev) => ({
+          ...prev,
+          ai_summary: newContent,
+          markdown_text: newContent,
+        }));
+      }
+      fetchHistory();
+    } catch (err) {
+      console.error("Gagal simpan MoM:", err);
     }
+  };
+
+  const downloadTxt = (item) => {
+    const text = item.ai_summary || item.markdown_text || item.final_text || "";
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(item.filename || "transkripsi").replace(/\.[^/.]+$/, "")}_MoM.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDeleteTranscript = async (id, e) => {
+    e.stopPropagation();
+    if (!window.confirm("Apakah Anda yakin ingin menghapus catatan rapat ini?")) return;
     setDeletingId(id);
-    setError("");
     try {
       const res = await fetch(`${API}/transcripts/${id}`, {
         method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Gagal menghapus transkrip");
-
-      setHistory((prev) => prev.filter((item) => item.id !== id));
-      if (selectedItem?.id === id) {
-        setSelectedItem(null);
-        setNav("history");
+      if (res.ok) {
+        setHistory((prev) => prev.filter((item) => item.id !== id));
+        if (selectedItem && selectedItem.id === id) {
+          setSelectedItem(null);
+          setNav("history");
+        }
+        if (result && result.id === id) {
+          setResult(null);
+        }
       }
     } catch (err) {
-      setError(err.message);
+      console.error("Gagal menghapus:", err);
     } finally {
       setDeletingId(null);
     }
   };
 
-  const checks = preflight?.checks || {};
-  const activeItem = result;
-  const directedTopics = activeItem?.directed_topics || activeItem?.ai_data?.directed_topics;
+  const filteredHistory = useMemo(() => {
+    return history.filter((item) => {
+      if (!historySearch.trim()) return true;
+      const s = historySearch.toLowerCase();
+      return (
+        item.filename.toLowerCase().includes(s) ||
+        (item.final_text && item.final_text.toLowerCase().includes(s)) ||
+        (item.ai_summary && item.ai_summary.toLowerCase().includes(s))
+      );
+    });
+  }, [history, historySearch]);
 
-  const filteredHistory = history.filter((h) => {
-    if (!historySearch.trim()) return true;
-    const q = historySearch.toLowerCase();
+  // =========================================================================
+  // VIEW 1: PUBLIC SHARE MoM VIEW (No Login Required - Requirement 6)
+  // =========================================================================
+  if (publicShareSlug) {
     return (
-      (h.filename && h.filename.toLowerCase().includes(q)) ||
-      (h.final_text && h.final_text.toLowerCase().includes(q)) ||
-      (h.ai_summary && h.ai_summary.toLowerCase().includes(q))
-    );
-  });
+      <div style={{ fontFamily: "'Sora', 'DM Sans', sans-serif" }} className="min-h-screen bg-[#0c0e14] text-slate-100 p-4 md:p-8">
+        <div className="max-w-5xl mx-auto space-y-6">
+          {/* Public Header */}
+          <header className="bg-gradient-to-r from-[#141722]/95 via-[#11131c]/95 to-[#0d0f16]/95 border border-[#1e2330] rounded-2xl p-4 md:px-6 md:py-4 shadow-xl flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#27272a] to-[#18181b] border border-purple-500/30 flex items-center justify-center p-1.5 shadow-md shadow-purple-950/40 shrink-0">
+                <img src={resmeetSymbol} alt="Resmeet Symbol" className="w-full h-full object-contain" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-bold text-white tracking-tight">
+                    Res<span className="text-purple-400">meet</span>
+                  </span>
+                  <span className="text-[10px] uppercase tracking-wider font-semibold bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 px-2 py-0.5 rounded-full">
+                    Public MoM Share
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Pratinjau publik dokumen Minutes of Meeting (MoM) resmi korporat
+                </p>
+              </div>
+            </div>
 
-  return (
-    <div style={{ fontFamily: "'Sora', 'DM Sans', sans-serif" }} className="min-h-screen bg-[#0c0e14] text-slate-100 p-4 md:p-8">
-      <div className="max-w-6xl mx-auto space-y-6">
-        {/* Navigation Bar */}
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-[#151821] via-[#12141c] to-[#0f1118] border border-[#1e2330] rounded-2xl px-6 py-4 shadow-xl">
-          <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#27272a] to-[#18181b] border border-purple-500/30 flex items-center justify-center p-1.5 shadow-lg shadow-purple-950/40">
-              <img
-                src={resmeetSymbol}
-                alt="Resmeet Symbol"
-                className="w-full h-full object-contain"
+            <a
+              href="/"
+              className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0c0e14] border border-[#1e2330]"
+            >
+              <span>Buka Aplikasi</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </a>
+          </header>
+
+          {publicShareLoading ? (
+            <div className="bg-[#151821] border border-[#1e2330] rounded-2xl p-16 text-center space-y-3">
+              <Loader2 className="w-8 h-8 text-indigo-400 animate-spin mx-auto" />
+              <p className="text-sm text-slate-300 font-medium">Memuat dokumen publik MoM...</p>
+              <p className="text-xs text-slate-500 font-mono">Kode slug: {publicShareSlug}</p>
+            </div>
+          ) : publicShareError ? (
+            <div className="bg-[#151821] border border-rose-500/30 rounded-2xl p-12 text-center space-y-3">
+              <AlertCircle className="w-10 h-10 text-rose-400 mx-auto" />
+              <h3 className="text-base font-bold text-white">Akses Dokumen Tidak Tersedia</h3>
+              <p className="text-xs text-slate-400 max-w-md mx-auto">{publicShareError}</p>
+            </div>
+          ) : publicShareData ? (
+            <div className="space-y-4">
+              <TiptapDocxEditor
+                content={publicShareData.aiSummary || publicShareData.finalText || ""}
+                filename={publicShareData.filename}
+                isReadOnly={true}
               />
             </div>
-            <div>
-              <h1 className="text-xl font-extrabold text-white tracking-tight flex items-center gap-2">
-                <span>Res<span className="text-purple-400">meet</span></span>
-                <span className="text-[10px] bg-purple-500/15 border border-purple-500/30 text-purple-300 px-2.5 py-0.5 rounded-full font-mono font-medium">
-                  Bun + Whisper.cpp
-                </span>
-              </h1>
-              <p className="text-xs text-slate-400 mt-0.5 font-medium tracking-wide">
-                Speech-to-Text Intelligence • Notulen MoM & Continuous RAG
-              </p>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // VIEW 2: AUTH LOGIN REQUIRED
+  // =========================================================================
+  if (authChecking) {
+    return (
+      <div className="min-h-screen bg-[#0c0e14] flex items-center justify-center text-slate-400">
+        <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+      </div>
+    );
+  }
+
+  if (!user || !token) {
+    return (
+      <LoginView
+        onLoginSuccess={(u, t) => {
+          setUser(u);
+          setToken(t);
+        }}
+        apiBaseUrl={SOCKET_URL}
+      />
+    );
+  }
+
+  const isSuperadmin = user.role === "superadmin";
+
+  return (
+    <div style={{ fontFamily: "'Sora', 'DM Sans', sans-serif" }} className="min-h-screen bg-[#0c0e14] text-slate-100 p-4 md:p-6 lg:p-8 pb-24 md:pb-8">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Navigation Bar Header (Requirement 12: Only Transkrip, Riwayat, Model AI, and User for admin) */}
+        <header className="bg-gradient-to-r from-[#141722]/95 via-[#11131c]/95 to-[#0d0f16]/95 backdrop-blur-xl border border-[#1e2330] rounded-2xl p-3 md:px-5 md:py-3.5 shadow-2xl shadow-black/40">
+          <div className="flex items-center justify-between gap-4">
+
+            {/* 1. Left: Brand Identity & Live Preflight Status Badge */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#27272a] to-[#18181b] border border-purple-500/30 flex items-center justify-center p-1.5 shadow-md shadow-purple-950/40 shrink-0">
+                <img src={resmeetSymbol} alt="Resmeet Symbol" className="w-full h-full object-contain" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-bold text-white tracking-tight">
+                    Res<span className="text-purple-400">meet</span>
+                  </span>
+                  <span className="text-[10px] uppercase tracking-wider font-semibold bg-purple-500/15 border border-purple-500/30 text-purple-300 px-2 py-0.5 rounded-full">
+                    STT Enterprise
+                  </span>
+                </div>
+
+                {/* Preflight Live Indicator (Requirement 8) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isSuperadmin) setShowPreflightModal(true);
+                  }}
+                  className={`flex items-center gap-1.5 text-[11px] font-medium mt-0.5 transition-all text-left ${
+                    isSuperadmin ? "cursor-pointer hover:underline" : "cursor-default"
+                  }`}
+                  title={
+                    isSuperadmin
+                      ? `Preflight Check: Database, FFmpeg, Whisper, dan Gateway AI • Klik untuk audit detail`
+                      : `Status Kesiapan Sistem`
+                  }
+                >
+                  {preflightStatus === "ready" && (
+                    <>
+                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400/50 shrink-0" />
+                      <span className="text-emerald-400 font-semibold tracking-wide">Ready</span>
+                      <span className="text-slate-600">•</span>
+                      <span className="text-slate-300">Sistem Siap</span>
+                    </>
+                  )}
+                  {preflightStatus === "not_connected" && (
+                    <>
+                      <span className="inline-block w-2 h-2 rounded-full bg-rose-500 animate-pulse shadow-sm shadow-rose-500/50 shrink-0" />
+                      <span className="text-rose-400 font-semibold tracking-wide">Not Connected</span>
+                      <span className="text-slate-600">•</span>
+                      <span className="text-rose-300/80">Terputus</span>
+                    </>
+                  )}
+                  {preflightStatus === "not_ready" && (
+                    <>
+                      <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-pulse shadow-sm shadow-amber-400/50 shrink-0" />
+                      <span className="text-amber-400 font-semibold tracking-wide">Not Ready</span>
+                      <span className="text-slate-600">•</span>
+                      <span className="text-amber-300/80">
+                        {preflightChecks && !preflightChecks.aiGateway ? "Gateway AI Diperlukan" : "Perlu Perhatian"}
+                      </span>
+                    </>
+                  )}
+                  {preflightStatus === "checking" && (
+                    <>
+                      <span className="inline-block w-2 h-2 rounded-full bg-amber-400/60 animate-ping shrink-0" />
+                      <span className="text-slate-400 font-medium">Checking Connection...</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Nav Tabs */}
-            <nav className="flex bg-[#0c0e14] p-1 rounded-xl border border-[#1e2330] text-xs">
-              <button
-                onClick={() => setNav("transcribe")}
-                className={`px-3.5 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 ${nav === "transcribe" ? "bg-indigo-600 text-white shadow" : "text-slate-400 hover:text-white"}`}
-              >
-                <Mic className="w-3.5 h-3.5" />
-                Transkripsi
-              </button>
-              <button
-                onClick={() => setNav("history")}
-                className={`px-3.5 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 ${nav === "history" || nav === "detail" ? "bg-indigo-600 text-white shadow" : "text-slate-400 hover:text-white"}`}
-              >
-                <Database className="w-3.5 h-3.5" />
-                Riwayat ({history.length})
-              </button>
-              <button
-                onClick={() => setNav("settings")}
-                className={`px-3.5 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 ${nav === "settings" ? "bg-indigo-600 text-white shadow" : "text-slate-400 hover:text-white"}`}
-              >
-                <Settings className="w-3.5 h-3.5" />
-                Pengaturan
-              </button>
-            </nav>
+            {/* 2. Desktop Navigation Menu (Requirement 12: Exactly Transkrip, Riwayat, Model AI, and User for admin) */}
+            <div className="hidden md:flex items-center gap-3">
+              <nav className="flex items-center gap-1 bg-[#090b10] p-1 rounded-xl border border-[#1e2330]">
+                {/* 1. Transkrip */}
+                <button
+                  type="button"
+                  onClick={() => setNav("transcribe")}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                    nav === "transcribe"
+                      ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-950/40 font-semibold"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-[#141722]"
+                  }`}
+                >
+                  <Mic className="w-3.5 h-3.5" />
+                  <span>Transkrip</span>
+                </button>
 
-            <div className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-xl border ${socketStatus === "connected" ? "bg-emerald-950/40 border-emerald-700/40 text-emerald-400" : "bg-red-950/40 border-red-700/40 text-red-400"}`}>
-              Socket {socketStatus}
+                {/* 2. Riwayat */}
+                <button
+                  type="button"
+                  onClick={() => setNav("history")}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                    nav === "history" || nav === "detail"
+                      ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-950/40 font-semibold"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-[#141722]"
+                  }`}
+                >
+                  <Database className="w-3.5 h-3.5" />
+                  <span>Riwayat</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold leading-none ${
+                    nav === "history" || nav === "detail"
+                      ? "bg-white/20 text-white"
+                      : "bg-[#181d28] text-slate-400"
+                  }`}>
+                    {history.length}
+                  </span>
+                </button>
+
+                {/* 3. Model AI */}
+                <button
+                  type="button"
+                  onClick={() => setNav("models")}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                    nav === "models"
+                      ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-950/40 font-semibold"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-[#141722]"
+                  }`}
+                >
+                  <Brain className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Model AI</span>
+                </button>
+
+                {/* 4. User (Superadmin Only) */}
+                {isSuperadmin && (
+                  <button
+                    type="button"
+                    onClick={() => setNav("users")}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                      nav === "users"
+                        ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-950/40 font-semibold"
+                        : "text-slate-400 hover:text-slate-200 hover:bg-[#141722]"
+                    }`}
+                  >
+                    <Users className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>User</span>
+                  </button>
+                )}
+              </nav>
+
+              {/* User Pill & Logout */}
+              <div className="flex items-center gap-2 bg-[#090b10] px-3 py-1.5 rounded-xl border border-[#1e2330]">
+                <div className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-[11px] ${
+                  isSuperadmin
+                    ? "bg-purple-500/20 text-purple-300 border border-purple-500/40"
+                    : "bg-blue-500/20 text-blue-300 border border-blue-500/40"
+                }`}>
+                  {user.username.charAt(0).toUpperCase()}
+                </div>
+                <span className="text-xs text-slate-300 font-semibold">@{user.username}</span>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all ml-1 cursor-pointer"
+                  title="Keluar dari sistem"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Mobile Header Profile Action */}
+            <div className="flex md:hidden items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center justify-center text-xs font-bold">
+                {user.username.charAt(0).toUpperCase()}
+              </div>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="p-1.5 text-slate-400 hover:text-rose-400 bg-[#090b10] rounded-lg border border-[#1e2330]"
+                title="Keluar"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
         </header>
 
-        {/* Global Error Banner */}
-        {error && (
-          <div className="flex items-start justify-between gap-3 bg-red-950/50 border border-red-800/50 text-red-300 px-4 py-3 rounded-xl text-sm">
-            <div className="flex items-start gap-2.5">
-              <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-              <span>{error}</span>
-            </div>
-            <button onClick={() => setError("")} className="text-red-400 hover:text-red-200">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
         {/* ========================================================================= */}
-        {/* PAGE 1: TRANSKRIPSI (MAIN RUNNING VIEW)                                  */}
+        {/* PAGE 1: TRANSKRIPSI AUDIO & PEMBUATAN MoM                                */}
         {/* ========================================================================= */}
         {nav === "transcribe" && (
           <div className="space-y-6">
-            {/* Step 1: Default Model & Audio Pipeline */}
-            <div className="bg-[#151821] border border-[#1e2330] rounded-2xl p-6 space-y-4">
-              <div className="flex items-center justify-between">
+            {/* Input Card */}
+            <div className="bg-[#151821] border border-[#1e2330] rounded-2xl p-6 space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1e2330] pb-4">
                 <div>
-                  <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-indigo-400" />
-                    Engine Model Transkripsi Default (Telah Ditetapkan)
+                  <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                    <FileAudio className="w-5 h-5 text-indigo-400" />
+                    Sumber Input Audio
                   </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Pipeline Suara: <span className="text-slate-400">Pydub/Scipy (Loudness &amp; dBFS)</span> → <span className="text-slate-400">DeepFilter-Net+ (80Hz-7.5kHz)</span> → <span className="text-slate-400">NoiseReduce (Spectral Gating)</span> → <span className="text-slate-400">Silero VAD</span> → Validasi Anti-Loop
-                  </p>
-                </div>
-                <span className="text-xs text-emerald-400 font-medium bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20 flex items-center gap-1.5">
-                  <Check className="w-3.5 h-3.5" />
-                  Model Default Aktif
-                </span>
-              </div>
-
-              <div className="p-4 rounded-xl border bg-indigo-600/5 border-indigo-500/30">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-slate-100">{COMBOS[0].name}</h3>
-                    <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full border bg-indigo-950/60 border-indigo-500/60 text-indigo-300">
-                      ⚡ In-Memory Metal GPU • Beam Search 4
-                    </span>
-                  </div>
-                  <span className="text-xs text-slate-400 font-mono">0ms Cold Start • Flash Attention</span>
-                </div>
-                <p className="text-xs text-slate-400 leading-relaxed">{COMBOS[0].desc}</p>
-                <div className="mt-3 pt-3 border-t border-[#1e2330] flex flex-wrap gap-2 text-[11px] text-slate-400">
-                  <span className="bg-[#0c0e14] px-2.5 py-1 rounded border border-[#1e2330]">🎯 Beam Search (Size 4)</span>
-                  <span className="bg-[#0c0e14] px-2.5 py-1 rounded border border-[#1e2330]">🛡️ Balanced Threshold (0.55)</span>
-                  <span className="bg-[#0c0e14] px-2.5 py-1 rounded border border-[#1e2330]">🔇 Anti-Hallucination Token Filtering</span>
-                  <span className="bg-[#0c0e14] px-2.5 py-1 rounded border border-[#1e2330]">⚡ Apple Metal GPU / SIMD C++</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Step 2: Audio Source (Upload or Direct Browser Record) */}
-            <div className="bg-[#151821] border border-[#1e2330] rounded-2xl p-6 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-                    {audioSource === "upload" ? (
-                      <Upload className="w-4 h-4 text-indigo-400" />
-                    ) : (
-                      <Mic className="w-4 h-4 text-rose-400 animate-pulse" />
-                    )}
-                    Sumber Audio Rapat
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Pilih metode input: unggah berkas audio/video atau rekam langsung percakapan dari browser
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Unggah file rekaman rapat atau gunakan perekaman mikrofon langsung berstandar 16 kHz.
                   </p>
                 </div>
 
-                {/* Dropdown Selector */}
-                <div className="flex items-center gap-2">
-                  <label className="text-xs text-slate-400 font-medium">Sumber Audio:</label>
-                  <select
-                    value={audioSource}
-                    disabled={isRecording || processing}
-                    onChange={(e) => handleSourceChange(e.target.value)}
-                    className="bg-[#0c0e14] border border-[#1e2330] text-slate-200 text-xs rounded-xl px-3 py-2 font-medium focus:outline-none focus:border-indigo-500 transition-all cursor-pointer disabled:opacity-50"
+                {/* Audio Source Switcher */}
+                <div className="flex items-center gap-1 bg-[#0c0e14] p-1 rounded-xl border border-[#1e2330]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAudioSource("upload");
+                      if (isRecording) cancelRecording();
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
+                      audioSource === "upload"
+                        ? "bg-indigo-600 text-white font-semibold shadow"
+                        : "text-slate-400 hover:text-white"
+                    }`}
                   >
-                    <option value="upload">📁 Unggah File Audio</option>
-                    <option value="record">🎙️ Rekam Langsung dari Browser</option>
-                  </select>
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Upload File</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAudioSource("record");
+                      setFile(null);
+                      if (audioUrl) URL.revokeObjectURL(audioUrl);
+                      setAudioUrl(null);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
+                      audioSource === "record"
+                        ? "bg-indigo-600 text-white font-semibold shadow"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    <Mic className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Rekam Suara</span>
+                  </button>
                 </div>
               </div>
 
-              {/* Mode 1: Unggah File Audio */}
+              {/* Source Mode: Upload */}
               {audioSource === "upload" && (
-                !file ? (
-                  <div
-                    onClick={() => fileRef.current?.click()}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => { e.preventDefault(); e.dataTransfer.files[0] && acceptFile(e.dataTransfer.files[0]); }}
-                    className="border-2 border-dashed border-[#1e2330] hover:border-indigo-500/50 rounded-xl p-10 flex flex-col items-center justify-center gap-3 cursor-pointer transition-all group"
-                  >
-                    <div className="w-14 h-14 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center group-hover:bg-indigo-600/20 transition-all">
-                      <FileAudio className="w-7 h-7 text-indigo-400" />
-                    </div>
-                    <p className="text-slate-400 text-sm">
-                      <span className="text-indigo-400 font-medium">Klik untuk memilih file</span> atau seret audio ke sini
-                    </p>
-                    <p className="text-slate-500 text-xs font-mono">Format didukung: MP3, WAV, M4A, MP4, MPEG, OGG, FLAC, AAC, WEBM</p>
-                    <input
-                      ref={fileRef}
-                      type="file"
-                      accept="audio/*,video/mp4,video/mpeg,.mp3,.wav,.m4a,.ogg,.flac,.webm,.aac,.mp4,.mpeg,.mpg,.m4v"
-                      className="hidden"
-                      onChange={(e) => e.target.files[0] && acceptFile(e.target.files[0])}
-                    />
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between bg-[#0c0e14] border border-[#1e2330] rounded-xl px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <FileAudio className="w-4 h-4 text-indigo-400" />
-                        <div>
-                          <p className="text-sm font-medium text-slate-200 truncate max-w-[280px] md:max-w-md">{file.name}</p>
-                          <p className="text-xs text-slate-500">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
-                        </div>
+                <div
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handleDrop}
+                  onClick={() => fileRef.current?.click()}
+                  className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${
+                    file
+                      ? "border-indigo-500/50 bg-indigo-500/5"
+                      : "border-[#1e2330] hover:border-indigo-500/40 bg-[#0c0e14]/50"
+                  }`}
+                >
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="audio/*,video/*"
+                    onChange={(e) => {
+                      if (e.target.files?.[0]) acceptFile(e.target.files[0]);
+                    }}
+                    className="hidden"
+                  />
+                  {file ? (
+                    <div className="space-y-3">
+                      <div className="w-12 h-12 rounded-xl bg-indigo-500/20 text-indigo-400 mx-auto flex items-center justify-center">
+                        <CheckCircle className="w-6 h-6" />
                       </div>
-                      {!processing && (
-                        <button onClick={clearFile} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-950/30 rounded-lg">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
+                      <div>
+                        <p className="font-semibold text-white text-sm">{file.name}</p>
+                        <p className="text-xs text-slate-400 font-mono mt-0.5">
+                          {(file.size / (1024 * 1024)).toFixed(2)} MB • Klik atau seret berkas lain untuk mengganti
+                        </p>
+                      </div>
                     </div>
-                    {audioUrl && <audio src={audioUrl} controls className="w-full h-9 rounded-lg accent-indigo-500" />}
-                    <button
-                      onClick={handleProcess}
-                      disabled={processing}
-                      className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white py-3.5 rounded-xl font-semibold text-sm transition-all shadow-lg shadow-indigo-600/20"
-                    >
-                      {processing ? (
-                        <><RefreshCw className="w-4 h-4 animate-spin" /> Memproses Transkripsi ({COMBOS.find((c) => c.id === selectedCombo)?.badge})...</>
-                      ) : (
-                        <><Zap className="w-4 h-4" /> Mulai Transkripsi dengan Model #{selectedCombo}</>
-                      )}
-                    </button>
-                  </div>
-                )
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="w-12 h-12 rounded-xl bg-[#151821] text-slate-400 mx-auto flex items-center justify-center border border-[#1e2330]">
+                        <Upload className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-slate-200">
+                          Seret &amp; lepas file audio ke sini, atau klik untuk memilih
+                        </p>
+                        <p className="text-[11px] text-slate-500 mt-1">
+                          Mendukung WAV, MP3, M4A, FLAC, OGG, WebM, MP4 (hingga 1 GB)
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
 
-              {/* Mode 2: Rekam Langsung dari Browser */}
+              {/* Source Mode: Live Recording */}
               {audioSource === "record" && (
-                <div className="space-y-4">
-                  {!file && !isRecording && (
-                    micPermission === "denied" || micError ? (
-                      <div className="border border-rose-500/40 bg-gradient-to-b from-rose-950/30 to-[#0c0e14] rounded-2xl p-6 md:p-8 space-y-5 text-center shadow-lg shadow-rose-950/20">
-                        <div className="w-16 h-16 rounded-2xl bg-rose-600/20 border border-rose-500/30 flex items-center justify-center mx-auto text-rose-400">
-                          <MicOff className="w-8 h-8" />
-                        </div>
-                        <div className="space-y-1.5">
-                          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-500/20 border border-rose-500/30 text-rose-300">
-                            <ShieldAlert className="w-3.5 h-3.5" /> Izin Akses Mikrofon Dinonaktifkan
-                          </div>
-                          <h3 className="text-base font-bold text-white">Browser Memblokir Akses Mikrofon</h3>
-                          <p className="text-xs text-rose-200/80 max-w-md mx-auto leading-relaxed">
-                            {micError || "Izin mikrofon sebelumnya dinonaktifkan di browser ini. Untuk merekam audio rapat secara langsung, silakan izinkan kembali akses mikrofon."}
-                          </p>
-                        </div>
+                <div className="bg-[#0c0e14] border border-[#1e2330] rounded-2xl p-6 text-center space-y-4">
+                  <div className="flex items-center justify-center gap-3">
+                    <span className="font-mono text-2xl font-bold text-white tracking-widest">
+                      {fmtTimer(recordSeconds)}
+                    </span>
+                    {isRecording && !isPaused && (
+                      <span className="w-3 h-3 rounded-full bg-rose-500 animate-ping" />
+                    )}
+                  </div>
 
-                        {/* Panduan Langkah demi Langkah */}
-                        <div className="bg-[#0c0e14]/90 border border-rose-900/40 rounded-xl p-4 text-left max-w-lg mx-auto space-y-2.5 text-xs text-slate-300">
-                          <p className="font-semibold text-rose-300 flex items-center gap-2">
-                            <Lock className="w-3.5 h-3.5 text-rose-400" /> Cara Mengaktifkan Izin di Browser:
-                          </p>
-                          <ol className="list-decimal list-inside space-y-1.5 text-slate-400 pl-1">
-                            <li>Klik ikon <strong>Gembok / Setelan Situs</strong> di sebelah kiri URL pada bilah alamat browser (address bar).</li>
-                            <li>Ubah status izin <strong>Mikrofon (Microphone)</strong> dari <em>Blokir</em> ke <strong>Izinkan (Allow)</strong>.</li>
-                            <li>Setelah diizinkan, klik tombol <strong>"Minta Akses Ulang ke Browser"</strong> di bawah ini.</li>
-                          </ol>
-                        </div>
-
-                        {/* Tombol Tindakan */}
-                        <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
-                          <button
-                            onClick={() => requestMicAccess(false)}
-                            disabled={checkingMic}
-                            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold text-xs shadow-lg shadow-rose-600/30 transition-all cursor-pointer"
-                          >
-                            <RefreshCw className={`w-3.5 h-3.5 ${checkingMic ? "animate-spin" : ""}`} />
-                            {checkingMic ? "Memeriksa Akses..." : "Minta Akses Ulang ke Browser"}
-                          </button>
-                          <button
-                            onClick={() => handleSourceChange("upload")}
-                            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#1e2330] hover:bg-[#282f40] text-slate-300 font-medium text-xs border border-slate-700 transition-all"
-                          >
-                            <Upload className="w-3.5 h-3.5 text-slate-400" /> Beralih ke Unggah File
-                          </button>
-                        </div>
-                      </div>
+                  <div className="flex flex-wrap items-center justify-center gap-3">
+                    {!isRecording ? (
+                      <button
+                        type="button"
+                        onClick={startRecording}
+                        disabled={checkingMic}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-rose-600/30 transition-all cursor-pointer"
+                      >
+                        <Mic className="w-4 h-4" />
+                        <span>Mulai Merekam</span>
+                      </button>
                     ) : (
-                      <div className="border border-[#1e2330] bg-[#0c0e14] rounded-xl p-8 flex flex-col items-center justify-center gap-4 text-center">
-                        <button
-                          onClick={startRecording}
-                          disabled={processing || checkingMic}
-                          className="w-20 h-20 rounded-full bg-gradient-to-tr from-rose-600 to-red-500 hover:from-rose-500 hover:to-red-400 text-white flex items-center justify-center shadow-lg shadow-rose-600/30 hover:scale-105 transition-all group cursor-pointer disabled:opacity-50"
-                        >
-                          <Mic className={`w-8 h-8 group-hover:scale-110 transition-transform ${checkingMic ? "animate-pulse" : ""}`} />
-                        </button>
-                        <div>
-                          <h3 className="text-sm font-semibold text-slate-200">Mulai Perekaman Audio Rapat</h3>
-                          <p className="text-xs text-slate-500 mt-1 max-w-sm">
-                            Klik tombol di atas untuk mulai merekam percakapan rapat secara langsung dari mikrofon browser.
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap items-center justify-center gap-2">
-                          {micPermission === "granted" ? (
-                            <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-mono bg-emerald-950/40 px-3 py-1 rounded-full border border-emerald-700/40">
-                              <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> Akses Mikrofon Diizinkan
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => requestMicAccess(false)}
-                              disabled={checkingMic}
-                              className="flex items-center gap-1.5 text-[11px] text-indigo-300 hover:text-white font-mono bg-indigo-950/40 hover:bg-indigo-900/50 px-3 py-1 rounded-full border border-indigo-700/40 transition-all cursor-pointer"
-                            >
-                              <Radio className="w-3.5 h-3.5 text-rose-400" />
-                              {checkingMic ? "Memeriksa Izin..." : "Cek / Minta Izin Mikrofon"}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  )}
-
-                  {isRecording && (
-                    <div className="border border-rose-500/40 bg-gradient-to-b from-rose-950/20 to-[#0c0e14] rounded-xl p-6 space-y-6">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <span className={`w-3 h-3 rounded-full ${isPaused ? "bg-amber-400" : "bg-rose-500 animate-ping"}`} />
-                          <span className={`text-xs font-semibold uppercase tracking-wider ${isPaused ? "text-amber-400" : "text-rose-400"}`}>
-                            {isPaused ? "Perekaman Dijeda" : "Sedang Merekam Suara..."}
-                          </span>
-                        </div>
-                        <div className="font-mono text-2xl font-bold text-white tracking-widest tabular-nums bg-[#151821] px-4 py-1.5 rounded-xl border border-[#1e2330]">
-                          {fmtTimer(recordSeconds)}
-                        </div>
-                      </div>
-
-                      {/* Animated Wave Indicator */}
-                      <div className="flex items-center justify-center gap-1.5 h-12">
-                        {[40, 75, 55, 90, 65, 80, 45, 95, 60, 85, 50, 70, 90, 40, 60].map((h, i) => (
-                          <span
-                            key={i}
-                            className={`w-1.5 rounded-full transition-all duration-300 ${
-                              isPaused
-                                ? "bg-slate-700 h-2"
-                                : "bg-rose-500 animate-pulse"
-                            }`}
-                            style={{
-                              height: isPaused ? "8px" : `${Math.max(12, Math.round(h * (0.5 + ((i % 5) * 0.1))))}px`,
-                              animationDelay: `${(i * 0.1).toFixed(1)}s`,
-                            }}
-                          />
-                        ))}
-                      </div>
-
-                      {/* Control Buttons */}
-                      <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                      <>
                         {isPaused ? (
                           <button
+                            type="button"
                             onClick={resumeRecording}
-                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-medium text-xs shadow-lg shadow-amber-600/20 transition-all"
+                            className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-medium cursor-pointer"
                           >
-                            <Play className="w-4 h-4 fill-current" /> Lanjutkan (Resume)
+                            <Play className="w-3.5 h-3.5" />
+                            <span>Lanjutkan</span>
                           </button>
                         ) : (
                           <button
+                            type="button"
                             onClick={pauseRecording}
-                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1e2330] hover:bg-[#282f40] text-slate-200 font-medium text-xs border border-slate-700 transition-all"
+                            className="flex items-center gap-1.5 px-4 py-2 bg-[#1a1f2e] border border-[#2e374d] text-slate-200 rounded-xl text-xs font-medium cursor-pointer"
                           >
-                            <Pause className="w-4 h-4" /> Jeda (Pause)
+                            <Pause className="w-3.5 h-3.5" />
+                            <span>Jeda</span>
                           </button>
                         )}
-
                         <button
+                          type="button"
                           onClick={stopRecording}
-                          className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs shadow-lg shadow-rose-600/30 transition-all"
+                          className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold shadow-md cursor-pointer"
                         >
-                          <Square className="w-4 h-4 fill-current" /> Selesai Merekam
+                          <Square className="w-3.5 h-3.5" />
+                          <span>Selesai &amp; Gunakan Audio</span>
                         </button>
-
                         <button
+                          type="button"
                           onClick={cancelRecording}
-                          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-transparent hover:bg-red-950/40 text-slate-400 hover:text-red-400 text-xs transition-all"
+                          className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-medium cursor-pointer"
                         >
-                          <X className="w-4 h-4" /> Batalkan
+                          <X className="w-3.5 h-3.5" />
+                          <span>Batal</span>
                         </button>
-                      </div>
-                    </div>
-                  )}
+                      </>
+                    )}
+                  </div>
 
-                  {/* Recorded File Ready for Preview & Transcription */}
-                  {!isRecording && file && (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between bg-[#0c0e14] border border-emerald-500/30 rounded-xl px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                            <CheckCircle className="w-4 h-4 text-emerald-400" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-slate-200 truncate max-w-[280px] md:max-w-md">{file.name}</p>
-                            <p className="text-xs text-slate-500 font-mono">
-                              {(file.size / 1024 / 1024).toFixed(2)} MB • Durasi rekaman: {fmtTimer(recordSeconds)}
-                            </p>
-                          </div>
-                        </div>
-                        {!processing && (
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={clearFile}
-                              title="Rekam Ulang"
-                              className="px-2.5 py-1 text-xs text-slate-400 hover:text-slate-200 hover:bg-[#1e2330] rounded-lg border border-[#1e2330] transition-all flex items-center gap-1"
-                            >
-                              <RefreshCw className="w-3 h-3" /> Rekam Ulang
-                            </button>
-                            <button onClick={clearFile} title="Hapus" className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-950/30 rounded-lg">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                      {audioUrl && <audio src={audioUrl} controls className="w-full h-9 rounded-lg accent-indigo-500" />}
-                      <button
-                        onClick={handleProcess}
-                        disabled={processing}
-                        className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white py-3.5 rounded-xl font-semibold text-sm transition-all shadow-lg shadow-indigo-600/20"
-                      >
-                        {processing ? (
-                          <><RefreshCw className="w-4 h-4 animate-spin" /> Memproses Transkripsi ({COMBOS.find((c) => c.id === selectedCombo)?.badge})...</>
-                        ) : (
-                          <><Zap className="w-4 h-4" /> Mulai Transkripsi Rekaman dengan Model #{selectedCombo}</>
-                        )}
-                      </button>
-                    </div>
+                  {micError && (
+                    <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-xl p-2.5 max-w-md mx-auto">
+                      {micError}
+                    </p>
                   )}
+                </div>
+              )}
+
+              {/* Preflight Gate Warning if Not Ready (Requirement 8) */}
+              {preflightStatus !== "ready" && (
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3.5 flex items-start gap-3 text-xs text-amber-300 animate-in fade-in duration-300">
+                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-bold text-white">Transkripsi Belum Dapat Dimulai (Sistem Belum Siap)</p>
+                    <p className="text-amber-200/90 leading-relaxed text-[11px]">
+                      {preflightChecks && !preflightChecks.aiGateway ? (
+                        <>
+                          Koneksi Gateway AI wajib dikonfigurasi sebelum menjalankan transkripsi.
+                          Buka tab <button type="button" onClick={() => setNav("models")} className="underline font-bold text-amber-100 hover:text-white">Model AI</button> untuk mengisi Base URL dan API Key.
+                        </>
+                      ) : (
+                        "Komponen sistem (Whisper CLI, model, atau PostgreSQL) sedang belum siap. Periksa status sistem di navbar."
+                      )}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Bar: Mulai Transkripsi */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+                <div className="text-xs text-slate-400 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-purple-400" />
+                  <span>
+                    Pemrosesan otomatis menyusun giliran dialog [MM:SS] dan ringkasan MoM DOCX.
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleProcess}
+                  disabled={!file || processing || preflightStatus !== "ready"}
+                  className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-semibold shadow-xl shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {processing ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Zap className="w-4 h-4" />
+                  )}
+                  <span>{processing ? "Memproses Audio & MoM..." : "Mulai Transkripsi Audio"}</span>
+                </button>
+              </div>
+
+              {error && (
+                <div className="bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs px-4 py-3 rounded-xl flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <span>{error}</span>
                 </div>
               )}
             </div>
 
             {/* Progress Panel */}
             {processing && progress && (
-              <div className="bg-[#151821] border border-indigo-500/30 rounded-2xl p-6 space-y-4">
-                <h2 className="text-sm font-semibold text-indigo-300 flex items-center gap-2">
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  Progress Transkripsi & Analisis Topik
-                </h2>
+              <div className="bg-[#151821] border border-[#1e2330] rounded-2xl p-6">
                 <ProgressPanel progress={progress} />
               </div>
             )}
 
-            {/* Done Banner */}
-            {!processing && progress?.percent === 100 && (
-              <div className="bg-[#151821] border border-emerald-500/30 rounded-2xl p-5 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                    <CheckCircle className="w-5 h-5 text-emerald-400" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-emerald-300">Transkripsi & Topik Terarah Selesai</h3>
-                    <p className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
-                      <span>Audio durasi: {fmtDur(progress.elapsed_s)}</span>
-                      {result?.generation_time_s != null && (
-                        <span className="inline-flex items-center gap-1 text-amber-300 font-mono text-[11px] bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                          <Zap className="w-3 h-3 text-amber-400" />
-                          Generate: {result.generation_time_s}s
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                </div>
-                {result && (
-                  <div className="flex gap-2">
-                    <button onClick={() => downloadTxt(result)} className="text-xs text-slate-300 hover:text-white bg-[#0c0e14] border border-[#1e2330] px-3 py-1.5 rounded-lg flex items-center gap-1">
-                      <Download className="w-3.5 h-3.5" /> .txt
-                    </button>
-                    <button onClick={() => downloadMd(result)} className="text-xs text-indigo-300 hover:text-white bg-indigo-600/20 border border-indigo-500/30 px-3 py-1.5 rounded-lg flex items-center gap-1">
-                      <Download className="w-3.5 h-3.5" /> .md
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Results Display */}
+            {/* Transcribe Result View (Requirements 2, 3, 4, 5) */}
             {result && (
-              <div className="bg-[#151821] border border-[#1e2330] rounded-2xl overflow-hidden space-y-0">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 py-4 border-b border-[#1e2330]">
-                  <div className="flex items-center gap-2.5">
+              <div className="space-y-4">
+                {/* 3 Output Tabs Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#151821] border border-[#1e2330] p-3 rounded-2xl">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-white px-2">
                     <FileText className="w-4 h-4 text-indigo-400" />
-                    <h2 className="text-sm font-semibold text-white">Pilih Tampilan Output Dokumen</h2>
+                    <span>Hasil Pemrosesan Transkripsi:</span>
                   </div>
 
-                  {/* 4 Output Tabs */}
                   <div className="flex flex-wrap gap-1 bg-[#0c0e14] p-1 rounded-xl border border-[#1e2330] text-xs">
                     <button
+                      type="button"
                       onClick={() => setResultTab("dialog")}
-                      className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${resultTab === "dialog" ? "bg-indigo-600 text-white font-medium shadow" : "text-slate-400 hover:text-white"}`}
+                      className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                        resultTab === "dialog"
+                          ? "bg-indigo-600 text-white font-semibold shadow"
+                          : "text-slate-400 hover:text-white"
+                      }`}
                     >
                       <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
-                      1. Transkrip Percakapan / Menit
+                      <span>1. Transkrip Percakapan / Menit</span>
                     </button>
+
                     <button
-                      onClick={() => setResultTab("markdown")}
-                      className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${resultTab === "markdown" ? "bg-indigo-600 text-white font-medium shadow" : "text-slate-400 hover:text-white"}`}
+                      type="button"
+                      onClick={() => setResultTab("mom")}
+                      className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                        resultTab === "mom"
+                          ? "bg-indigo-600 text-white font-semibold shadow"
+                          : "text-slate-400 hover:text-white"
+                      }`}
                     >
                       <FileText className="w-3.5 h-3.5 text-indigo-400" />
-                      2. Format Preview .MD (MoM)
+                      <span>2. Editor Dokumen MoM (DOCX)</span>
                     </button>
+
                     <button
-                      onClick={() => setResultTab("ui")}
-                      className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${resultTab === "ui" ? "bg-indigo-600 text-white font-medium shadow" : "text-slate-400 hover:text-white"}`}
-                    >
-                      <Layout className="w-3.5 h-3.5 text-emerald-400" />
-                      3. Rangkuman HTML/UI
-                    </button>
-                    <button
+                      type="button"
                       onClick={() => setResultTab("mindmap")}
-                      className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${resultTab === "mindmap" ? "bg-indigo-600 text-white font-medium shadow" : "text-slate-400 hover:text-white"}`}
+                      className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                        resultTab === "mindmap"
+                          ? "bg-indigo-600 text-white font-semibold shadow"
+                          : "text-slate-400 hover:text-white"
+                      }`}
                     >
                       <GitBranch className="w-3.5 h-3.5 text-purple-400" />
-                      4. Mindmap (Markmap)
+                      <span>3. Mindmap Visual (Markmap)</span>
                     </button>
                   </div>
                 </div>
 
-                {/* Tab 1: Transkrip Percakapan per Menit (Dialog Terkoreksi AI) */}
+                {/* Tab 1: Dialog Transcript */}
                 {resultTab === "dialog" && (
-                  <div className="p-6">
-                    <DialogTranscriptView
-                      item={result}
-                      filename={result.filename || file?.name || "Rapat"}
-                      durationS={result.duration_s || progress?.elapsed_s || 0}
-                    />
-                  </div>
+                  <DialogTranscriptView
+                    item={result}
+                    filename={result.filename || file?.name || "Rapat"}
+                    durationS={result.duration_s || 0}
+                  />
                 )}
 
-                {/* Tab 2: Format Preview .MD (MoM) */}
-                {resultTab === "markdown" && (
-                  <div className="p-6 space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-[#0c0e14] border border-[#1e2330] rounded-xl px-4 py-2.5 text-xs text-slate-400">
-                      <div>
-                        <span className="font-semibold text-slate-200 block">Dokumen Resmi Minutes of Meeting (MoM) Standar Markdown</span>
-                        <span className="text-[11px] text-slate-400">Yang sudah dirapikan AI dan sudah terarah arah topik serta tujuannya.</span>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          onClick={() => copyToClipboard(result.markdown_text || result.final_text || "")}
-                          className="px-2.5 py-1 bg-[#151821] hover:bg-slate-800 border border-[#1e2330] text-slate-300 rounded-lg flex items-center gap-1 font-medium"
-                          title="Copy to clipboard format .md"
-                        >
-                          {copiedMd ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                          <span>{copiedMd ? "Tersalin!" : "Salin .MD ke Clipboard"}</span>
-                        </button>
-                        <button
-                          onClick={() => downloadTxt(result)}
-                          className="px-2.5 py-1 bg-[#151821] hover:bg-slate-800 border border-[#1e2330] text-slate-300 rounded-lg flex items-center gap-1"
-                        >
-                          <Download className="w-3.5 h-3.5" /> .txt
-                        </button>
-                        <button
-                          onClick={() => downloadMd(result)}
-                          className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 rounded-lg flex items-center gap-1 font-medium"
-                        >
-                          <Download className="w-3.5 h-3.5" /> Unduh .md
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="bg-[#0c0e14] border border-[#1e2330] rounded-xl p-6">
-                      <p style={{ fontFamily: "'DM Mono', monospace" }} className="text-slate-200 text-sm leading-relaxed whitespace-pre-wrap">
-                        {result.markdown_text || result.final_text}
-                      </p>
-                    </div>
-                  </div>
+                {/* Tab 2: Tiptap DOCX Editor */}
+                {resultTab === "mom" && (
+                  <TiptapDocxEditor
+                    content={result.ai_summary || result.markdown_text || result.final_text || ""}
+                    filename={result.filename || file?.name || "Rapat"}
+                    itemId={result.id}
+                    shareSlug={result.share_slug}
+                    apiBaseUrl={SOCKET_URL}
+                    token={token}
+                    onSave={(newContent) => handleSaveMom(result, newContent)}
+                    onParaphraseCustom={(promptText) => handleParaphrase(result, promptText)}
+                    paraphrasing={paraphrasing}
+                  />
                 )}
 
-                {/* Tab 3: Rangkuman dalam bentuk HTML/UI */}
-                {resultTab === "ui" && (
-                  <div className="p-6">
-                    <UiSummary
-                      item={result}
-                      filename={result.filename || file?.name || "Rapat"}
-                      durationS={result.duration_s || progress?.elapsed_s || 0}
-                      createdAt={new Date().toISOString()}
-                      directedTopics={result.directed_topics || directedTopics}
-                    />
-                  </div>
-                )}
-
-                {/* Tab 4: Mindmap Poin Diskusi (Markmap) */}
+                {/* Tab 3: Markmap */}
                 {resultTab === "mindmap" && (
-                  <div className="p-6">
-                    <MarkmapView
-                      markdown={result.markdown_text || result.final_text}
-                      title={result.filename || file?.name || "Mindmap Rapat"}
-                    />
-                  </div>
+                  <MarkmapView
+                    markdown={result.ai_summary || result.markdown_text || result.final_text}
+                    title={result.filename || file?.name || "Pohon Topik Rapat"}
+                  />
                 )}
-
-                {/* Enhanced Paraphrase Toolbar with Style Selector */}
-                <div className="px-6 py-4 bg-[#0d1017] border-t border-[#1e2330] space-y-2.5">
-                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                    <span className="text-[11px] text-slate-400 font-semibold mr-1 flex items-center gap-1">
-                      <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                      Tipe Parafrase:
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setParaphraseStyle("poin_singkat")}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] transition-all ${paraphraseStyle === "poin_singkat" ? "bg-indigo-600 text-white font-medium shadow" : "bg-[#151821] text-slate-400 hover:text-white border border-[#1e2330]"}`}
-                    >
-                      Poin-poin Penting
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setParaphraseStyle("detail_deskriptif")}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] transition-all ${paraphraseStyle === "detail_deskriptif" ? "bg-indigo-600 text-white font-medium shadow" : "bg-[#151821] text-slate-400 hover:text-white border border-[#1e2330]"}`}
-                    >
-                      Detail &amp; Deskriptif
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setParaphraseStyle("eksekutif")}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] transition-all ${paraphraseStyle === "eksekutif" ? "bg-indigo-600 text-white font-medium shadow" : "bg-[#151821] text-slate-400 hover:text-white border border-[#1e2330]"}`}
-                    >
-                      Ringkasan Eksekutif
-                    </button>
-                  </div>
-
-                  <div className="text-[11px] text-slate-400 bg-[#12151e] border border-[#1e2330] rounded-lg px-3 py-1.5 flex items-center gap-2">
-                    {paraphraseStyle === "poin_singkat" && (
-                      <span>📌 <strong>Poin-poin Penting:</strong> Min. 2 paragraf per poin, to the point, padat, cepat dipindai, berkonteks terarah.</span>
-                    )}
-                    {paraphraseStyle === "detail_deskriptif" && (
-                      <span>📖 <strong>Detail &amp; Deskriptif:</strong> Min. 4 paragraf panjang per poin, latar belakang, argumen peserta, rincian aksi &amp; insight mendalam.</span>
-                    )}
-                    {paraphraseStyle === "eksekutif" && (
-                      <span>💼 <strong>Ringkasan Eksekutif:</strong> Min. 2 paragraf per poin format strategis manajemen + analisis pro &amp; kontra keputusan.</span>
-                    )}
-                    {!["poin_singkat", "detail_deskriptif", "eksekutif"].includes(paraphraseStyle) && (
-                      <span>✨ <strong>Kustom:</strong> Parafrase sesuai instruksi prompt khusus pengguna.</span>
-                    )}
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <input
-                      value={paraphraseStyle}
-                      onChange={(e) => setParaphraseStyle(e.target.value)}
-                      className="flex-1 bg-[#151821] border border-[#1e2330] text-slate-200 px-3 py-2 rounded-xl text-xs outline-none focus:border-indigo-500/50 font-mono"
-                      placeholder="Gaya parafrase AI..."
-                    />
-                    <button
-                      onClick={() => paraphrase(result, setResult)}
-                      disabled={paraphrasing}
-                      className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-5 py-2 rounded-xl text-xs font-medium shadow-lg shadow-indigo-600/20 transition-all"
-                    >
-                      <Brain className="w-3.5 h-3.5" />
-                      {paraphrasing ? "Memparafrase..." : "Parafrase Ulang AI"}
-                    </button>
-                  </div>
-                </div>
               </div>
             )}
           </div>
         )}
 
         {/* ========================================================================= */}
-        {/* PAGE 2: RIWAYAT (DEDICATED MULTI-COLUMN HISTORY PAGE)                     */}
+        {/* PAGE 2: RIWAYAT TRANSKRIPSI                                               */}
         {/* ========================================================================= */}
         {nav === "history" && (
-          <div className="bg-[#151821] border border-[#1e2330] rounded-2xl overflow-hidden space-y-4 p-6">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-[#1e2330] pb-4">
-              <div>
-                <h2 className="text-base font-bold text-white flex items-center gap-2">
-                  <Database className="w-5 h-5 text-indigo-400" />
-                  Riwayat Notulen & Transkripsi
-                </h2>
-                <p className="text-xs text-slate-400 mt-0.5">Daftar rekaman rapat dan notulen yang tersimpan di database</p>
-              </div>
-
-              <div className="flex items-center gap-2 w-full md:w-auto">
-                <div className="relative flex-1 md:w-64">
-                  <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={historySearch}
-                    onChange={(e) => setHistorySearch(e.target.value)}
-                    placeholder="Cari nama file / isi..."
-                    className="w-full bg-[#0c0e14] border border-[#1e2330] rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 outline-none focus:border-indigo-500/50"
-                  />
+          <div className="space-y-6">
+            <div className="bg-[#151821] border border-[#1e2330] rounded-2xl p-6 space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#1e2330] pb-4">
+                <div>
+                  <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                    <Database className="w-5 h-5 text-indigo-400" />
+                    Riwayat Pemrosesan Data Transkripsi
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
+                      {isSuperadmin ? "Akses Superadmin" : `Akun: @${user.username}`}
+                    </span>
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {isSuperadmin
+                      ? "Menampilkan seluruh riwayat transkripsi terpusat (PostgreSQL UUID v7)."
+                      : "Menampilkan riwayat transkripsi milik akun Anda secara terisolasi."}
+                  </p>
                 </div>
+
                 <button
-                  onClick={fetchHistory}
+                  type="button"
+                  onClick={() => fetchHistory()}
                   disabled={loadingH}
-                  className="p-2 bg-[#0c0e14] border border-[#1e2330] hover:border-indigo-500/50 text-slate-400 hover:text-white rounded-xl transition-all"
+                  className="p-2 bg-[#0c0e14] hover:bg-[#1a1f2e] border border-[#1e2330] text-slate-400 hover:text-white rounded-xl transition-all cursor-pointer self-start sm:self-auto"
+                  title="Perbarui riwayat"
                 >
                   <RefreshCw className={`w-4 h-4 ${loadingH ? "animate-spin" : ""}`} />
                 </button>
               </div>
-            </div>
 
-            {/* Multi-Column History Table */}
-            {loadingH ? (
-              <div className="py-20 text-center text-slate-500 text-sm">
-                <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-400" />
-                Memuat riwayat transkrip...
+              {/* Date Filter & Search */}
+              <div className="bg-[#0c0e14] border border-[#1e2330] rounded-xl p-4 space-y-3">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                    <span className="text-slate-400 font-semibold mr-1 flex items-center gap-1">
+                      <Filter className="w-3.5 h-3.5 text-indigo-400" />
+                      Filter Tanggal:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => applyQuickDateFilter("all")}
+                      className={`px-3 py-1 rounded-lg transition-all ${quickDateFilter === "all" ? "bg-indigo-600 text-white font-medium shadow" : "bg-[#151821] text-slate-400 hover:text-white border border-[#1e2330]"}`}
+                    >
+                      Semua
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyQuickDateFilter("today")}
+                      className={`px-3 py-1 rounded-lg transition-all ${quickDateFilter === "today" ? "bg-indigo-600 text-white font-medium shadow" : "bg-[#151821] text-slate-400 hover:text-white border border-[#1e2330]"}`}
+                    >
+                      Hari Ini
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyQuickDateFilter("7d")}
+                      className={`px-3 py-1 rounded-lg transition-all ${quickDateFilter === "7d" ? "bg-indigo-600 text-white font-medium shadow" : "bg-[#151821] text-slate-400 hover:text-white border border-[#1e2330]"}`}
+                    >
+                      7 Hari
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyQuickDateFilter("30d")}
+                      className={`px-3 py-1 rounded-lg transition-all ${quickDateFilter === "30d" ? "bg-indigo-600 text-white font-medium shadow" : "bg-[#151821] text-slate-400 hover:text-white border border-[#1e2330]"}`}
+                    >
+                      30 Hari
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <div className="flex items-center gap-1.5 bg-[#151821] border border-[#1e2330] rounded-lg px-2.5 py-1">
+                      <span className="text-[11px] text-slate-500">Mulai:</span>
+                      <input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => {
+                          setStartDate(e.target.value);
+                          setQuickDateFilter("custom");
+                          fetchHistory(e.target.value, endDate);
+                        }}
+                        className="bg-transparent text-slate-200 outline-none text-xs cursor-pointer"
+                      />
+                    </div>
+                    <span className="text-slate-600">s/d</span>
+                    <div className="flex items-center gap-1.5 bg-[#151821] border border-[#1e2330] rounded-lg px-2.5 py-1">
+                      <span className="text-[11px] text-slate-500">Sampai:</span>
+                      <input
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => {
+                          setEndDate(e.target.value);
+                          setQuickDateFilter("custom");
+                          fetchHistory(startDate, e.target.value);
+                        }}
+                        className="bg-transparent text-slate-200 outline-none text-xs cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="text"
+                    value={historySearch}
+                    onChange={(e) => setHistorySearch(e.target.value)}
+                    placeholder="Cari berdasarkan nama berkas atau isi ringkasan MoM..."
+                    className="w-full bg-[#151821] border border-[#1e2330] rounded-xl pl-10 pr-4 py-2 text-xs text-slate-200 outline-none focus:border-indigo-500/50"
+                  />
+                </div>
               </div>
-            ) : filteredHistory.length === 0 ? (
-              <div className="py-20 text-center text-slate-500 text-sm">
-                Belum ada data riwayat transkripsi.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-[#0c0e14] text-slate-400 uppercase text-[10px] tracking-wider border-b border-[#1e2330]">
+
+              {/* Table */}
+              <div className="overflow-x-auto rounded-xl border border-[#1e2330] bg-[#0c0e14]">
+                <table className="w-full text-xs text-left border-collapse">
+                  <thead className="bg-[#12151e] text-slate-400 font-semibold uppercase text-[10px] tracking-wider border-b border-[#1e2330]">
                     <tr>
-                      <th className="py-3 px-4">File Audio / ID</th>
-                      <th className="py-3 px-4">Tanggal</th>
-                      <th className="py-3 px-4">Durasi Audio</th>
-                      <th className="py-3 px-4">Lama Generate</th>
-                      <th className="py-3 px-4">Status AI</th>
-                      <th className="py-3 px-4">Ringkasan Pembahasan</th>
-                      <th className="py-3 px-4 text-right">Aksi</th>
+                      <th className="px-4 py-3">Berkas Audio</th>
+                      <th className="px-4 py-3">Tanggal Waktu</th>
+                      <th className="px-4 py-3">Durasi</th>
+                      <th className="px-4 py-3">Status Notulen</th>
+                      <th className="px-4 py-3 text-right">Aksi</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#1e2330]">
+                  <tbody className="divide-y divide-[#1e2330] text-slate-300">
                     {filteredHistory.map((item) => (
                       <tr
                         key={item.id}
-                        onClick={() => { setSelectedItem(item); setNav("detail"); }}
-                        className="hover:bg-indigo-600/5 cursor-pointer transition-colors group"
+                        onClick={() => {
+                          setSelectedItem(item);
+                          setNav("detail");
+                        }}
+                        className="hover:bg-indigo-500/5 transition-colors cursor-pointer"
                       >
-                        <td className="py-3 px-4 font-medium text-slate-200">
+                        <td className="px-4 py-3.5 font-medium">
                           <div className="flex items-center gap-2.5">
-                            <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center flex-shrink-0">
-                              <FileAudio className="w-3.5 h-3.5 text-indigo-400" />
-                            </div>
-                            <span className="truncate max-w-[200px]" title={item.filename}>
+                            <FileAudio className="w-4 h-4 text-indigo-400 shrink-0" />
+                            <span className="text-white hover:text-indigo-300 font-semibold truncate max-w-xs">
                               {item.filename}
                             </span>
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-slate-400 whitespace-nowrap">
+
+                        <td className="px-4 py-3.5 text-slate-400 text-[11px] font-mono">
                           {fmt(item.created_at)}
                         </td>
-                        <td className="py-3 px-4 text-indigo-300 font-mono whitespace-nowrap">
+
+                        <td className="px-4 py-3.5 font-mono text-[11px] text-slate-400">
                           {fmtDur(item.duration_s)}
                         </td>
-                        <td className="py-3 px-4 whitespace-nowrap">
-                          <span className="inline-flex items-center gap-1 font-mono text-[11px] text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
-                            <Zap className="w-3 h-3 text-amber-400" />
-                            {item.generation_time_s != null ? `${item.generation_time_s}s` : "-"}
+
+                        <td className="px-4 py-3.5">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${
+                            item.ai_correction_status === "completed" || item.ai_correction_status === "paraphrased"
+                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                              : "bg-slate-800 text-slate-400 border border-slate-700"
+                          }`}>
+                            {item.ai_correction_status === "paraphrased" ? "Diparafrase AI" : item.ai_correction_status}
                           </span>
                         </td>
-                        <td className="py-3 px-4">
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${item.ai_correction_status === "completed" ? "bg-emerald-950/40 border-emerald-700/40 text-emerald-400" : "bg-slate-800/40 border-slate-700/40 text-slate-400"}`}>
-                            {item.ai_correction_status || "skipped"}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-slate-400 max-w-[300px]">
-                          <p className="line-clamp-2 leading-relaxed text-[11px]">
-                            {item.ai_summary || item.final_text}
-                          </p>
-                        </td>
-                        <td className="py-3 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+
+                        <td className="px-4 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1.5">
                             <button
+                              type="button"
                               onClick={() => { setSelectedItem(item); setNav("detail"); }}
-                              className="p-1.5 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 rounded-lg text-xs flex items-center gap-1"
+                              className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 rounded-lg border border-indigo-500/30 text-[11px] font-medium transition-all"
                             >
-                              <span>Detail</span>
-                              <ChevronRight className="w-3.5 h-3.5" />
+                              Buka MoM
                             </button>
-                            {item.md_url && (
-                              <button
-                                onClick={() => downloadMd(item)}
-                                className="p-1.5 bg-[#0c0e14] hover:bg-[#1a1f2e] border border-[#1e2330] text-slate-400 hover:text-white rounded-lg"
-                                title="Unduh .md"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                              </button>
-                            )}
                             <button
+                              type="button"
                               onClick={(e) => handleDeleteTranscript(item.id, e)}
                               disabled={deletingId === item.id}
-                              className="p-1.5 bg-[#0c0e14] hover:bg-red-950/40 border border-[#1e2330] hover:border-red-700/50 text-slate-400 hover:text-red-400 rounded-lg transition-colors disabled:opacity-50"
-                              title="Hapus riwayat"
+                              className="p-1.5 bg-[#151821] hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 border border-[#1e2330] rounded-lg transition-all"
+                              title="Hapus Transkrip"
                             >
-                              {deletingId === item.id ? (
-                                <RefreshCw className="w-3.5 h-3.5 animate-spin text-red-400" />
-                              ) : (
-                                <Trash2 className="w-3.5 h-3.5" />
-                              )}
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </td>
                       </tr>
                     ))}
+                    {filteredHistory.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="py-12 text-center text-slate-500 text-xs">
+                          {loadingH ? "Memuat riwayat transkripsi..." : "Belum ada rekaman transkripsi pada filter ini."}
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
-            )}
+            </div>
           </div>
         )}
 
         {/* ========================================================================= */}
-        {/* PAGE 3: DETAIL VIEW (OPENED FROM HISTORY ROW CLICK)                       */}
+        {/* PAGE 3: DETAIL NOTULEN MoM (DOCX EDITOR & MINDMAP)                        */}
         {/* ========================================================================= */}
         {nav === "detail" && selectedItem && (
-          <div className="bg-[#151821] border border-[#1e2330] rounded-2xl overflow-hidden space-y-5 p-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#1e2330] pb-4">
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
               <button
+                type="button"
                 onClick={() => setNav("history")}
-                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white bg-[#0c0e14] border border-[#1e2330] px-3 py-1.5 rounded-lg transition-all"
+                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white bg-[#151821] border border-[#1e2330] px-3.5 py-2 rounded-xl transition-all cursor-pointer"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
-                Kembali ke Daftar Riwayat
+                <span>Kembali ke Riwayat</span>
               </button>
+
               <div className="flex items-center gap-2">
                 <button
+                  type="button"
                   onClick={() => downloadTxt(selectedItem)}
-                  className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white bg-[#0c0e14] border border-[#1e2330] px-3 py-1.5 rounded-lg"
+                  className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white bg-[#151821] border border-[#1e2330] px-3 py-1.5 rounded-lg cursor-pointer"
                 >
-                  <Download className="w-3.5 h-3.5" /> Unduh .txt
-                </button>
-                {selectedItem.md_url && (
-                  <button
-                    onClick={() => downloadMd(selectedItem)}
-                    className="flex items-center gap-1.5 text-xs text-indigo-300 hover:text-white bg-indigo-600/20 border border-indigo-500/30 px-3 py-1.5 rounded-lg"
-                  >
-                    <Download className="w-3.5 h-3.5" /> Unduh .md
-                  </button>
-                )}
-                <button
-                  onClick={() => handleDeleteTranscript(selectedItem.id)}
-                  disabled={deletingId === selectedItem.id}
-                  className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-200 bg-red-950/20 hover:bg-red-950/50 border border-red-900/40 hover:border-red-700/60 px-3 py-1.5 rounded-lg transition-all disabled:opacity-50"
-                  title="Hapus transkrip ini"
-                >
-                  {deletingId === selectedItem.id ? (
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Trash2 className="w-3.5 h-3.5" />
-                  )}
-                  <span>Hapus</span>
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Unduh .txt</span>
                 </button>
               </div>
             </div>
 
-            {/* Metadata Bar */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 bg-[#0c0e14] border border-[#1e2330] rounded-xl p-4 text-xs">
-              <div>
-                <span className="text-slate-500 block text-[10px] uppercase tracking-wider">File Audio</span>
-                <span className="font-medium text-slate-200 truncate block mt-0.5">{selectedItem.filename}</span>
-              </div>
-              <div>
-                <span className="text-slate-500 block text-[10px] uppercase tracking-wider">Tanggal Transkripsi</span>
-                <span className="font-medium text-slate-200 block mt-0.5">{fmt(selectedItem.created_at)}</span>
-              </div>
-              <div>
-                <span className="text-slate-500 block text-[10px] uppercase tracking-wider">Durasi Audio</span>
-                <span className="font-medium text-indigo-300 block mt-0.5">{fmtDur(selectedItem.duration_s)}</span>
-              </div>
-              <div>
-                <span className="text-slate-500 block text-[10px] uppercase tracking-wider">Lama Generate</span>
-                <span className="font-medium text-amber-300 flex items-center gap-1 mt-0.5 font-mono">
-                  <Zap className="w-3 h-3 text-amber-400" />
-                  {selectedItem.generation_time_s != null ? `${selectedItem.generation_time_s}s` : "-"}
-                </span>
-              </div>
-              <div>
-                <span className="text-slate-500 block text-[10px] uppercase tracking-wider">Koreksi AI</span>
-                <span className="font-medium text-emerald-400 block mt-0.5">{selectedItem.ai_correction_status || "skipped"}</span>
-              </div>
-            </div>
-
-            {/* 4 Output Tabs Header in Detail View */}
+            {/* 3 Output Tabs (Requirements 3, 4, 5) */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0c0e14] p-3 rounded-xl border border-[#1e2330]">
               <span className="text-xs font-semibold text-slate-300 flex items-center gap-2">
                 <FileText className="w-4 h-4 text-indigo-400" />
@@ -1605,37 +1613,47 @@ export default function App() {
 
               <div className="flex flex-wrap gap-1 text-xs">
                 <button
+                  type="button"
                   onClick={() => setDetailTab("dialog")}
-                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${detailTab === "dialog" ? "bg-indigo-600 text-white font-medium shadow" : "text-slate-400 hover:text-white bg-[#151821] border border-[#1e2330]"}`}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                    detailTab === "dialog"
+                      ? "bg-indigo-600 text-white font-medium shadow"
+                      : "text-slate-400 hover:text-white bg-[#151821] border border-[#1e2330]"
+                  }`}
                 >
                   <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
-                  1. Transkrip Percakapan / Menit
+                  <span>1. Transkrip Percakapan / Menit</span>
                 </button>
+
                 <button
-                  onClick={() => setDetailTab("markdown")}
-                  className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${detailTab === "markdown" ? "bg-indigo-600 text-white font-medium shadow" : "text-slate-400 hover:text-white bg-[#151821] border border-[#1e2330]"}`}
+                  type="button"
+                  onClick={() => setDetailTab("mom")}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                    detailTab === "mom"
+                      ? "bg-indigo-600 text-white font-medium shadow"
+                      : "text-slate-400 hover:text-white bg-[#151821] border border-[#1e2330]"
+                  }`}
                 >
                   <FileText className="w-3.5 h-3.5 text-indigo-400" />
-                  2. Format Preview .MD (MoM)
+                  <span>2. Editor Dokumen MoM (DOCX)</span>
                 </button>
+
                 <button
-                  onClick={() => setDetailTab("ui")}
-                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${detailTab === "ui" ? "bg-indigo-600 text-white font-medium shadow" : "text-slate-400 hover:text-white bg-[#151821] border border-[#1e2330]"}`}
-                >
-                  <Layout className="w-3.5 h-3.5 text-emerald-400" />
-                  3. Rangkuman HTML/UI
-                </button>
-                <button
+                  type="button"
                   onClick={() => setDetailTab("mindmap")}
-                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${detailTab === "mindmap" ? "bg-indigo-600 text-white font-medium shadow" : "text-slate-400 hover:text-white bg-[#151821] border border-[#1e2330]"}`}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                    detailTab === "mindmap"
+                      ? "bg-indigo-600 text-white font-medium shadow"
+                      : "text-slate-400 hover:text-white bg-[#151821] border border-[#1e2330]"
+                  }`}
                 >
                   <GitBranch className="w-3.5 h-3.5 text-purple-400" />
-                  4. Mindmap (Markmap)
+                  <span>3. Mindmap Visual (Markmap)</span>
                 </button>
               </div>
             </div>
 
-            {/* Tab 1: Transkrip Percakapan per Menit in Detail View */}
+            {/* Tab 1: Dialog Transcript */}
             {detailTab === "dialog" && (
               <DialogTranscriptView
                 item={selectedItem}
@@ -1644,732 +1662,165 @@ export default function App() {
               />
             )}
 
-            {/* Tab 2: Format Preview .MD (MoM) in Detail View */}
-            {detailTab === "markdown" && (
-              <div className="bg-[#0c0e14] border border-[#1e2330] rounded-xl p-6 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#1e2330]">
-                  <div>
-                    <h3 className="text-xs font-semibold text-slate-200 uppercase tracking-wider">
-                      Dokumen Resmi Minutes of Meeting (MoM) Standar Markdown
-                    </h3>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      Yang sudah dirapikan AI dan sudah terarah arah topik serta tujuannya.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => copyToClipboard(selectedItem.markdown_text || selectedItem.final_text || "")}
-                      className="px-2.5 py-1 bg-[#151821] hover:bg-slate-800 border border-[#1e2330] text-slate-300 rounded-lg flex items-center gap-1 text-xs font-medium"
-                      title="Copy to clipboard format .md"
-                    >
-                      {copiedMd ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copiedMd ? "Tersalin!" : "Salin .MD ke Clipboard"}</span>
-                    </button>
-                    <button
-                      onClick={() => downloadMd(selectedItem)}
-                      className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 rounded-lg flex items-center gap-1 text-xs font-medium"
-                    >
-                      <Download className="w-3.5 h-3.5" /> Unduh .md
-                    </button>
-                  </div>
-                </div>
-                <p style={{ fontFamily: "'DM Mono', monospace" }} className="text-slate-200 text-sm leading-relaxed whitespace-pre-wrap">
-                  {selectedItem.markdown_text || selectedItem.final_text}
-                </p>
-              </div>
-            )}
-
-            {/* Tab 3: Rangkuman dalam bentuk HTML/UI in Detail View */}
-            {detailTab === "ui" && (
-              <UiSummary
-                item={selectedItem}
+            {/* Tab 2: Tiptap DOCX Editor */}
+            {detailTab === "mom" && (
+              <TiptapDocxEditor
+                content={selectedItem.ai_summary || selectedItem.markdown_text || selectedItem.final_text || ""}
                 filename={selectedItem.filename}
-                durationS={selectedItem.duration_s}
-                createdAt={selectedItem.created_at}
-                directedTopics={selectedItem.directed_topics || selectedItem.ai_data?.directed_topics}
+                itemId={selectedItem.id}
+                shareSlug={selectedItem.share_slug}
+                isPublic={selectedItem.is_public}
+                apiBaseUrl={SOCKET_URL}
+                token={token}
+                onSave={(newContent) => handleSaveMom(selectedItem, newContent)}
+                onParaphraseCustom={(promptText) => handleParaphrase(selectedItem, promptText)}
+                paraphrasing={paraphrasing}
               />
             )}
 
-            {/* Tab 4: Mindmap Poin Diskusi (Markmap) in Detail View */}
+            {/* Tab 3: Markmap Visual */}
             {detailTab === "mindmap" && (
               <MarkmapView
-                markdown={selectedItem.markdown_text || selectedItem.final_text}
+                markdown={selectedItem.ai_summary || selectedItem.markdown_text || selectedItem.final_text}
                 title={selectedItem.filename}
               />
             )}
-
-            {/* Paraphrase toolbar in Detail view */}
-            <div className="bg-[#0d1017] border border-[#1e2330] rounded-xl p-4 space-y-2.5">
-              <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                <span className="text-[11px] text-slate-400 font-semibold mr-1 flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                  Tipe Parafrase:
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setParaphraseStyle("poin_singkat")}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] transition-all ${paraphraseStyle === "poin_singkat" ? "bg-indigo-600 text-white font-medium shadow" : "bg-[#151821] text-slate-400 hover:text-white border border-[#1e2330]"}`}
-                >
-                  Poin-poin Penting
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setParaphraseStyle("detail_deskriptif")}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] transition-all ${paraphraseStyle === "detail_deskriptif" ? "bg-indigo-600 text-white font-medium shadow" : "bg-[#151821] text-slate-400 hover:text-white border border-[#1e2330]"}`}
-                >
-                  Detail &amp; Deskriptif
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setParaphraseStyle("eksekutif")}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] transition-all ${paraphraseStyle === "eksekutif" ? "bg-indigo-600 text-white font-medium shadow" : "bg-[#151821] text-slate-400 hover:text-white border border-[#1e2330]"}`}
-                >
-                  Ringkasan Eksekutif
-                </button>
-              </div>
-
-              <div className="text-[11px] text-slate-400 bg-[#12151e] border border-[#1e2330] rounded-lg px-3 py-1.5 flex items-center gap-2">
-                {paraphraseStyle === "poin_singkat" && (
-                  <span>📌 <strong>Poin-poin Penting:</strong> Min. 2 paragraf per poin, to the point, padat, cepat dipindai, berkonteks terarah.</span>
-                )}
-                {paraphraseStyle === "detail_deskriptif" && (
-                  <span>📖 <strong>Detail &amp; Deskriptif:</strong> Min. 4 paragraf panjang per poin, latar belakang, argumen peserta, rincian aksi &amp; insight mendalam.</span>
-                )}
-                {paraphraseStyle === "eksekutif" && (
-                  <span>💼 <strong>Ringkasan Eksekutif:</strong> Min. 2 paragraf per poin format strategis manajemen + analisis pro &amp; kontra keputusan.</span>
-                )}
-                {!["poin_singkat", "detail_deskriptif", "eksekutif"].includes(paraphraseStyle) && (
-                  <span>✨ <strong>Kustom:</strong> Parafrase sesuai instruksi prompt khusus pengguna.</span>
-                )}
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-2">
-                <input
-                  value={paraphraseStyle}
-                  onChange={(e) => setParaphraseStyle(e.target.value)}
-                  className="flex-1 bg-[#151821] border border-[#1e2330] text-slate-200 px-3.5 py-2 rounded-xl text-xs outline-none focus:border-indigo-500/50 font-mono"
-                  placeholder="Gaya parafrase AI..."
-                />
-                <button
-                  onClick={() => paraphrase(selectedItem, setSelectedItem)}
-                  disabled={paraphrasing}
-                  className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-5 py-2 rounded-xl text-xs font-medium shadow-lg shadow-indigo-600/20 transition-all"
-                >
-                  <Brain className="w-3.5 h-3.5" />
-                  {paraphrasing ? "Memparafrase..." : "Parafrase Ulang AI"}
-                </button>
-              </div>
-            </div>
           </div>
         )}
 
         {/* ========================================================================= */}
-        {/* PAGE 4: PENGATURAN (DEDICATED SETTINGS PAGE: AI, AUDIO, PREFLIGHT)       */}
+        {/* PAGE 4: USER AI MODELS & GATEWAY (LAYA DECISION ENGINE CONSOLIDATED)      */}
         {/* ========================================================================= */}
-        {nav === "settings" && (
-          <div className="space-y-6">
-            {/* Section 1: AI Model Settings */}
-            <div className="bg-[#151821] border border-[#1e2330] rounded-2xl p-6 space-y-5">
-              <div className="flex items-center justify-between border-b border-[#1e2330] pb-4">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center">
-                    <Brain className="w-4 h-4 text-indigo-400" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-semibold text-white">Pengaturan Model AI (Jev Guided Topics)</h2>
-                    <p className="text-xs text-slate-400">Konfigurasi endpoint, API-Key, dan model LLM untuk analisis topik terarah</p>
-                  </div>
-                </div>
-              </div>
+        {nav === "models" && (
+          <UserAiModelsView
+            token={token}
+            user={user}
+            apiBaseUrl={SOCKET_URL}
+            selectedModelId={selectedModelId}
+            setSelectedModelId={setSelectedModelId}
+            paraphraseStyle={paraphraseStyle}
+            setParaphraseStyle={setParaphraseStyle}
+            aiCorrection={aiCorrection}
+            setAiCorrection={setAiCorrection}
+          />
+        )}
 
-              {/* Koreksi & Topik AI Checkbox */}
-              <label className="flex items-center justify-between bg-[#0c0e14] border border-[#1e2330] rounded-xl px-4 py-3 text-sm text-slate-300 cursor-pointer">
-                <div className="flex items-center gap-2.5">
-                  <Brain className="w-4 h-4 text-indigo-400" />
-                  <div>
-                    <span className="font-medium text-slate-200">Koreksi & Topik AI (Jev Guided)</span>
-                    <p className="text-[11px] text-slate-500">Ekstrak topik terarah, keputusan, action items, dan istilah baru</p>
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={aiCorrection}
-                  onChange={(e) => setAiCorrection(e.target.checked)}
-                  className="w-4 h-4 accent-indigo-500 rounded"
-                />
-              </label>
+        {/* ========================================================================= */}
+        {/* PAGE 5: USER MANAGEMENT (SUPERADMIN ONLY)                                */}
+        {/* ========================================================================= */}
+        {nav === "users" && isSuperadmin && (
+          <UserManagementView
+            token={token}
+            currentUserId={user.id}
+            apiBaseUrl={SOCKET_URL}
+          />
+        )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* URL Base */}
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                    AI Base URL (Endpoint API)
-                  </label>
-                  <input
-                    type="text"
-                    value={aiBaseUrl}
-                    onChange={(e) => setAiBaseUrl(e.target.value)}
-                    placeholder="http://localhost:20128/v1 atau https://api.openai.com/v1"
-                    className="w-full bg-[#0c0e14] border border-[#1e2330] focus:border-indigo-500/50 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 outline-none font-mono"
-                  />
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Mendukung proxy lokal (port 20128), OpenRouter, DeepSeek, OpenAI, Ollama, atau vLLM.
-                  </p>
-                </div>
-
-                {/* API Key */}
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                    API-Key
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showApiKey ? "text" : "password"}
-                      value={aiApiKey}
-                      onChange={(e) => setAiApiKey(e.target.value)}
-                      placeholder="sk-..."
-                      className="w-full bg-[#0c0e14] border border-[#1e2330] focus:border-indigo-500/50 rounded-xl px-3.5 py-2.5 pr-10 text-xs text-slate-200 outline-none font-mono"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowApiKey(!showApiKey)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                    >
-                      {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Model ID */}
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                    Nama / ID Model
-                  </label>
-                  <input
-                    type="text"
-                    value={aiModelId}
-                    onChange={(e) => setAiModelId(e.target.value)}
-                    placeholder="9R-Gemini, oc/jev-1.13-free, deepseek-chat, gpt-4o"
-                    className="w-full bg-[#0c0e14] border border-[#1e2330] focus:border-indigo-500/50 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 outline-none font-mono"
-                  />
-                </div>
-
-                {/* Gaya / Format Parafrase AI */}
-                <div className="md:col-span-2 pt-2">
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                    Tipe Parafrase AI Default
-                  </label>
-                  <p className="text-[11px] text-slate-500 mb-2.5">
-                    Pilih tingkat kedalaman dan format parafrase notulen yang diinginkan
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div
-                      onClick={() => setParaphraseStyle("poin_singkat")}
-                      className={`p-3.5 rounded-xl border cursor-pointer transition-all ${paraphraseStyle === "poin_singkat" ? "bg-indigo-600/15 border-indigo-500 text-indigo-200 ring-1 ring-indigo-500" : "bg-[#0c0e14] border-[#1e2330] text-slate-400 hover:border-slate-700"}`}
-                    >
-                      <div className="font-semibold text-xs text-white mb-1 flex items-center justify-between">
-                        <span>Poin-poin Penting</span>
-                        {paraphraseStyle === "poin_singkat" && <Check className="w-3.5 h-3.5 text-indigo-400" />}
-                      </div>
-                      <p className="text-[11px] text-slate-400 leading-relaxed">
-                        Deskripsi singkat (minimal 2 paragraf), to the point, padat, dan cepat dipindai pembaca (minimal 2 paragraf per poin dan ada penjelasan konteks yang terarah).
-                      </p>
-                    </div>
-
-                    <div
-                      onClick={() => setParaphraseStyle("detail_deskriptif")}
-                      className={`p-3.5 rounded-xl border cursor-pointer transition-all ${paraphraseStyle === "detail_deskriptif" ? "bg-indigo-600/15 border-indigo-500 text-indigo-200 ring-1 ring-indigo-500" : "bg-[#0c0e14] border-[#1e2330] text-slate-400 hover:border-slate-700"}`}
-                    >
-                      <div className="font-semibold text-xs text-white mb-1 flex items-center justify-between">
-                        <span>Detail &amp; Deskriptif</span>
-                        {paraphraseStyle === "detail_deskriptif" && <Check className="w-3.5 h-3.5 text-indigo-400" />}
-                      </div>
-                      <p className="text-[11px] text-slate-400 leading-relaxed">
-                        Penjelasan komprehensif latar belakang, argumen peserta, dan rincian aksi penjelasannya lengkap dengan konteks dengan minimalnya 4 paragraf panjang dan penuh pengetahuan dari hasil meeting dan juga tambahkan insight dan jelaskan juga yang deskriptif agar pembaca mengetahui meskipun tidak ikut meeting.
-                      </p>
-                    </div>
-
-                    <div
-                      onClick={() => setParaphraseStyle("eksekutif")}
-                      className={`p-3.5 rounded-xl border cursor-pointer transition-all ${paraphraseStyle === "eksekutif" ? "bg-indigo-600/15 border-indigo-500 text-indigo-200 ring-1 ring-indigo-500" : "bg-[#0c0e14] border-[#1e2330] text-slate-400 hover:border-slate-700"}`}
-                    >
-                      <div className="font-semibold text-xs text-white mb-1 flex items-center justify-between">
-                        <span>Ringkasan Eksekutif</span>
-                        {paraphraseStyle === "eksekutif" && <Check className="w-3.5 h-3.5 text-indigo-400" />}
-                      </div>
-                      <p className="text-[11px] text-slate-400 leading-relaxed">
-                        Deskripsi singkat (minimal 2 paragraf), to the point, padat, dan cepat dipindai pembaca (minimal 2 paragraf per poin dan ada penjelasan konteks yang terarah) akan tetapi format strategis tingkat manajemen untuk pengambil keputusan dengan konteks dan pro kontranya setiap keputusannya.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Test Result Feedback */}
-              {testResult && (
-                <div className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${testResult.success ? "bg-emerald-950/40 border-emerald-700/40 text-emerald-300" : "bg-red-950/40 border-red-700/40 text-red-300"}`}>
-                  {testResult.success ? <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />}
-                  <div>
-                    <p className="font-medium">{testResult.message}</p>
-                    {testResult.latencyMs && <p className="text-[10px] text-slate-400 mt-0.5">Latency: {testResult.latencyMs}ms</p>}
-                  </div>
-                </div>
-              )}
-
-              <div className="flex items-center justify-between pt-2">
+        {/* ========================================================================= */}
+        {/* SUPERADMIN PREFLIGHT INSPECTION MODAL (Requirement 8)                    */}
+        {/* ========================================================================= */}
+        {showPreflightModal && isSuperadmin && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-[#151821] border border-[#1e2330] rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-[#1e2330] pb-3">
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Server className="w-5 h-5 text-indigo-400" />
+                  Inspeksi Status Sistem &amp; Preflight Check
+                </h3>
                 <button
                   type="button"
-                  onClick={handleTestAiConnection}
-                  disabled={testingAi}
-                  className="flex items-center gap-1.5 text-xs text-indigo-300 hover:text-white bg-[#0c0e14] border border-indigo-500/30 hover:border-indigo-400 px-4 py-2 rounded-xl transition-all disabled:opacity-50"
+                  onClick={() => setShowPreflightModal(false)}
+                  className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-[#1e2330]"
                 >
-                  {testingAi ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-                  <span>{testingAi ? "Menguji Koneksi..." : "Uji Koneksi AI"}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleSaveSettings}
-                  disabled={savingSettings}
-                  className="flex items-center gap-1.5 text-xs text-white bg-indigo-600 hover:bg-indigo-500 px-5 py-2 rounded-xl font-medium transition-all shadow-lg shadow-indigo-600/30 disabled:opacity-50"
-                >
-                  {savedSuccess ? (
-                    <><Check className="w-3.5 h-3.5" /> Pengaturan Tersimpan!</>
-                  ) : savingSettings ? (
-                    <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Menyimpan...</>
-                  ) : (
-                    <><Save className="w-3.5 h-3.5" /> Simpan Pengaturan</>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Section 2: Database Storage (SQLite, MySQL, PostgreSQL) */}
-            <div className="bg-[#151821] border border-[#1e2330] rounded-2xl p-6 space-y-5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1e2330] pb-4">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center">
-                    <Database className="w-4 h-4 text-indigo-400" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-semibold text-white">Penyimpanan Database</h2>
-                    <p className="text-xs text-slate-400">Pilih mesin database (SQLite otomatis mandiri, MySQL, atau PostgreSQL)</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-950/70 text-emerald-400 border border-emerald-700/50 shadow-sm">
-                    <HardDrive className="w-3.5 h-3.5" />
-                    <span>Default Aktif: <strong className="uppercase tracking-wider">{activeDefaultDb}</strong></span>
-                  </div>
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono bg-indigo-950/60 text-indigo-300 border border-indigo-700/40">
-                    <Server className="w-3 h-3" />
-                    <span>Port: 8200</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* DB Type Selection Cards */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-medium text-slate-300">
-                    Pilih Tipe Driver Database:
-                  </label>
-                  <span className="text-[11px] text-slate-400">
-                    Penyimpanan default saat ini: <strong className="text-indigo-300 uppercase">{activeDefaultDb}</strong>
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {/* SQLite Option */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDbType("sqlite");
-                      setDbTestResult(null);
-                      setDbMigrateResult(null);
-                    }}
-                    className={`p-3.5 rounded-xl border text-left transition-all ${
-                      dbType === "sqlite"
-                        ? "bg-indigo-600/15 border-indigo-500 text-indigo-200 ring-1 ring-indigo-500 shadow-md"
-                        : "bg-[#0c0e14] border-[#1e2330] text-slate-400 hover:border-slate-700"
-                    }`}
-                  >
-                    <div className="font-semibold text-xs text-white flex items-center justify-between mb-1.5">
-                      <span className="flex items-center gap-1.5">
-                        <HardDrive className="w-3.5 h-3.5 text-emerald-400" />
-                        SQLite (Mandiri)
-                      </span>
-                      <div className="flex items-center gap-1">
-                        {activeDefaultDb === "sqlite" ? (
-                          <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-medium flex items-center gap-0.5">
-                            <Check className="w-3 h-3 text-emerald-400" /> Default Aktif
-                          </span>
-                        ) : (
-                          <span className="text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-1.5 py-0.5 rounded-full">
-                            Tersedia
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Mandiri tanpa server. File <code className="text-emerald-300 text-[10px]">resmeet.sqlite</code> otomatis dibuat tanpa instalasi tambahan.
-                    </p>
-                  </button>
-
-                  {/* MySQL Option */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDbType("mysql");
-                      if (dbPort === 5432) setDbPort(3307);
-                      setDbTestResult(null);
-                      setDbMigrateResult(null);
-                    }}
-                    className={`p-3.5 rounded-xl border text-left transition-all ${
-                      dbType === "mysql"
-                        ? "bg-indigo-600/15 border-indigo-500 text-indigo-200 ring-1 ring-indigo-500 shadow-md"
-                        : "bg-[#0c0e14] border-[#1e2330] text-slate-400 hover:border-slate-700"
-                    }`}
-                  >
-                    <div className="font-semibold text-xs text-white flex items-center justify-between mb-1.5">
-                      <span className="flex items-center gap-1.5">
-                        <Database className="w-3.5 h-3.5 text-blue-400" />
-                        MySQL Server
-                      </span>
-                      <div className="flex items-center gap-1">
-                        {activeDefaultDb === "mysql" ? (
-                          <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-medium flex items-center gap-0.5">
-                            <Check className="w-3 h-3 text-emerald-400" /> Default Aktif
-                          </span>
-                        ) : (
-                          <span className="text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-1.5 py-0.5 rounded-full">
-                            Tersedia
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Koneksi ke MySQL / MariaDB server lokal atau cloud dengan fitur migrasi tabel in-app.
-                    </p>
-                  </button>
-
-                  {/* PostgreSQL Option */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDbType("postgres");
-                      if (dbPort === 3307 || dbPort === 3306) setDbPort(5432);
-                      if (dbUser === "root") setDbUser("postgres");
-                      setDbTestResult(null);
-                      setDbMigrateResult(null);
-                    }}
-                    className={`p-3.5 rounded-xl border text-left transition-all ${
-                      dbType === "postgres"
-                        ? "bg-indigo-600/15 border-indigo-500 text-indigo-200 ring-1 ring-indigo-500 shadow-md"
-                        : "bg-[#0c0e14] border-[#1e2330] text-slate-400 hover:border-slate-700"
-                    }`}
-                  >
-                    <div className="font-semibold text-xs text-white flex items-center justify-between mb-1.5">
-                      <span className="flex items-center gap-1.5">
-                        <Server className="w-3.5 h-3.5 text-sky-400" />
-                        PostgreSQL Server
-                      </span>
-                      <div className="flex items-center gap-1">
-                        {activeDefaultDb === "postgres" ? (
-                          <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-medium flex items-center gap-0.5">
-                            <Check className="w-3 h-3 text-emerald-400" /> Default Aktif
-                          </span>
-                        ) : (
-                          <span className="text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-1.5 py-0.5 rounded-full">
-                            Tersedia
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Database relasional enterprise PostgreSQL dengan skema tabel dan kolom JSON native.
-                    </p>
-                  </button>
-                </div>
-              </div>
-
-              {/* Set Default Feedback Alert */}
-              {setDefaultResult && (
-                <div className={`p-3.5 rounded-xl border text-xs flex items-start gap-2.5 shadow-lg ${setDefaultResult.success ? "bg-emerald-950/70 border-emerald-600/70 text-emerald-200" : "bg-red-950/70 border-red-600/70 text-red-200"}`}>
-                  {setDefaultResult.success ? <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0 text-emerald-400" /> : <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0 text-red-400" />}
-                  <div className="flex-1">
-                    <p className="font-semibold">{setDefaultResult.success ? "Driver Default Berhasil Diperbarui!" : "Gagal Mengatur Driver Default"}</p>
-                    <p className="text-[11px] mt-0.5 opacity-90">{setDefaultResult.message}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Conditional view: SQLite Info vs MySQL/Postgres Form */}
-              {dbType === "sqlite" ? (
-                <div className="bg-emerald-950/20 border border-emerald-700/40 rounded-xl p-4 space-y-4">
-                  <div className="flex items-start gap-3 text-xs text-emerald-200">
-                    <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
-                    <div className="space-y-1">
-                      <p className="font-semibold text-emerald-300">SQLite (Zero Configuration - Mandiri)</p>
-                      <p className="text-emerald-400/90 leading-relaxed text-[11px]">
-                        Aplikasi menggunakan file database lokal (<code className="bg-emerald-950/60 px-1.5 py-0.5 rounded text-emerald-200">backend/resmeet.sqlite</code>). 
-                        Tabel <code className="bg-emerald-950/60 px-1.5 py-0.5 rounded text-emerald-200">transcripts</code> langsung dibuat secara otomatis saat backend berjalan. Tidak memerlukan server database eksternal ataupun tombol migrasi manual.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="pt-3 border-t border-emerald-800/40 flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className={`inline-block w-2.5 h-2.5 rounded-full ${activeDefaultDb === "sqlite" ? "bg-emerald-400 shadow-sm shadow-emerald-400" : "bg-slate-600"}`}></span>
-                      <span className="text-slate-300 text-[11px]">
-                        {activeDefaultDb === "sqlite" ? (
-                          <strong className="text-emerald-300">SQLite saat ini adalah driver default sistem yang aktif.</strong>
-                        ) : (
-                          <span className="text-slate-400">Driver default saat ini adalah: <strong className="text-indigo-300 uppercase">{activeDefaultDb}</strong>.</span>
-                        )}
-                      </span>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleSetDefaultDb("sqlite")}
-                      disabled={settingDefaultDb || activeDefaultDb === "sqlite"}
-                      className={`flex items-center gap-1.5 text-xs px-4 py-2 rounded-xl font-medium transition-all ${
-                        activeDefaultDb === "sqlite"
-                          ? "bg-emerald-900/40 border border-emerald-700/60 text-emerald-300 cursor-default"
-                          : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30 cursor-pointer"
-                      }`}
-                    >
-                      {settingDefaultDb ? (
-                        <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Mengatur Default...</>
-                      ) : activeDefaultDb === "sqlite" ? (
-                        <><Check className="w-3.5 h-3.5 text-emerald-400" /> Default Aktif</>
-                      ) : (
-                        <><Star className="w-3.5 h-3.5" /> Set Default SQLite</>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-[#0c0e14] border border-[#1e2330] rounded-xl p-4 space-y-4">
-                  <div className="flex items-center justify-between border-b border-[#1e2330] pb-2.5">
-                    <span className="text-xs font-semibold text-slate-200">
-                      Parameter Koneksi {dbType.toUpperCase()}:
-                    </span>
-                    <span className="text-[11px] text-slate-400">
-                      Default Port: {dbType === "postgres" ? "5432" : "3307 / 3306"}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <label className="block text-slate-400 mb-1">Host Database</label>
-                      <input
-                        type="text"
-                        value={dbHost}
-                        onChange={(e) => setDbHost(e.target.value)}
-                        placeholder="127.0.0.1"
-                        className="w-full bg-[#151821] border border-[#1e2330] rounded-lg px-3 py-2 text-slate-200 outline-none focus:border-indigo-500/50"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-slate-400 mb-1">Port Database</label>
-                      <input
-                        type="number"
-                        value={dbPort}
-                        onChange={(e) => setDbPort(Number(e.target.value))}
-                        placeholder={dbType === "postgres" ? "5432" : "3307"}
-                        className="w-full bg-[#151821] border border-[#1e2330] rounded-lg px-3 py-2 text-slate-200 outline-none focus:border-indigo-500/50"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-slate-400 mb-1">Nama Database</label>
-                      <input
-                        type="text"
-                        value={dbName}
-                        onChange={(e) => setDbName(e.target.value)}
-                        placeholder="stt_db"
-                        className="w-full bg-[#151821] border border-[#1e2330] rounded-lg px-3 py-2 text-slate-200 outline-none focus:border-indigo-500/50"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-slate-400 mb-1">Username</label>
-                      <input
-                        type="text"
-                        value={dbUser}
-                        onChange={(e) => setDbUser(e.target.value)}
-                        placeholder={dbType === "postgres" ? "postgres" : "root"}
-                        className="w-full bg-[#151821] border border-[#1e2330] rounded-lg px-3 py-2 text-slate-200 outline-none focus:border-indigo-500/50"
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-slate-400 mb-1">Password</label>
-                      <input
-                        type="password"
-                        value={dbPassword}
-                        onChange={(e) => setDbPassword(e.target.value)}
-                        placeholder="Password database"
-                        className="w-full bg-[#151821] border border-[#1e2330] rounded-lg px-3 py-2 text-slate-200 outline-none focus:border-indigo-500/50"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Test & Migration Feedback */}
-                  {dbTestResult && (
-                    <div className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${dbTestResult.success ? "bg-emerald-950/40 border-emerald-700/40 text-emerald-300" : "bg-red-950/40 border-red-700/40 text-red-300"}`}>
-                      {dbTestResult.success ? <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />}
-                      <div>
-                        <p className="font-medium">{dbTestResult.message}</p>
-                        {dbTestResult.latencyMs && <p className="text-[10px] text-slate-400 mt-0.5">Latency: {dbTestResult.latencyMs}ms</p>}
-                      </div>
-                    </div>
-                  )}
-
-                  {dbMigrateResult && (
-                    <div className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${dbMigrateResult.success ? "bg-emerald-950/40 border-emerald-700/40 text-emerald-300" : "bg-red-950/40 border-red-700/40 text-red-300"}`}>
-                      {dbMigrateResult.success ? <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />}
-                      <div>
-                        <p className="font-medium">{dbMigrateResult.message}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Buttons for Test Connection, Migrate, and Set Default */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[#1e2330]">
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleTestDbConnection}
-                        disabled={dbTesting}
-                        className="flex items-center gap-1.5 text-xs text-indigo-300 hover:text-white bg-[#151821] border border-indigo-500/30 hover:border-indigo-400 px-4 py-2 rounded-xl transition-all disabled:opacity-50"
-                      >
-                        {dbTesting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-                        <span>{dbTesting ? "Menguji Koneksi..." : `Uji Koneksi ${dbType.toUpperCase()}`}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleMigrateDb}
-                        disabled={dbMigrating}
-                        className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white bg-[#151821] border border-slate-700 hover:border-slate-500 px-4 py-2 rounded-xl font-medium transition-all disabled:opacity-50"
-                      >
-                        {dbMigrating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Database className="w-3.5 h-3.5 text-indigo-400" />}
-                        <span>{dbMigrating ? "Memigrasi..." : "Migrate Database"}</span>
-                      </button>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleSetDefaultDb(dbType)}
-                      disabled={settingDefaultDb}
-                      className={`flex items-center gap-1.5 text-xs px-5 py-2 rounded-xl font-medium transition-all shadow-lg ${
-                        activeDefaultDb === dbType
-                          ? "bg-emerald-950/60 border border-emerald-600/50 text-emerald-300 shadow-emerald-900/20"
-                          : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/30 cursor-pointer"
-                      }`}
-                    >
-                      {settingDefaultDb ? (
-                        <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Menyimpan Default...</>
-                      ) : activeDefaultDb === dbType ? (
-                        <><Check className="w-3.5 h-3.5 text-emerald-400" /> {dbType.toUpperCase()} Adalah Default Aktif</>
-                      ) : (
-                        <><Star className="w-3.5 h-3.5" /> Set {dbType.toUpperCase()} Sebagai Default</>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Section 3: Output Audio & Format Settings */}
-            <div className="bg-[#151821] border border-[#1e2330] rounded-2xl p-6 space-y-4">
-              <div className="flex items-center gap-2.5 border-b border-[#1e2330] pb-4">
-                <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center">
-                  <Sliders className="w-4 h-4 text-indigo-400" />
-                </div>
-                <div>
-                  <h2 className="text-sm font-semibold text-white">Pengaturan Output Audio & Format</h2>
-                  <p className="text-xs text-slate-400">Format dokumen akhir dan parameter pipeline audio</p>
-                </div>
-              </div>
-
-              {/* Output Markdown Checkbox */}
-              <label className="flex items-center justify-between bg-[#0c0e14] border border-[#1e2330] rounded-xl px-4 py-3 text-sm text-slate-300 cursor-pointer">
-                <div className="flex items-center gap-2.5">
-                  <FileText className="w-4 h-4 text-indigo-400" />
-                  <div>
-                    <span className="font-medium text-slate-200">Output Markdown</span>
-                    <p className="text-[11px] text-slate-500">Simpan dokumen hasil notulen akhir dalam format .md (Minutes of Meeting)</p>
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={outputMd}
-                  onChange={(e) => setOutputMd(e.target.checked)}
-                  className="w-4 h-4 accent-indigo-500 rounded"
-                />
-              </label>
-
-              {/* Default Model Selection */}
-              <div className="bg-[#0c0e14] border border-[#1e2330] rounded-xl p-4 space-y-2">
-                <label className="block text-xs font-medium text-slate-300">
-                  Model Engine Default
-                </label>
-                <select
-                  value={selectedCombo}
-                  onChange={(e) => setSelectedCombo(e.target.value)}
-                  className="w-full bg-[#151821] border border-[#1e2330] focus:border-indigo-500/50 rounded-xl px-3.5 py-2 text-xs text-slate-200 outline-none font-sans"
-                >
-                  <option value="1">Model 1: Fast-Whisper + Silero VAD (ggml-large-v3-turbo.bin / Native C++)</option>
-                  <option value="2">Model 2: Faster-Whisper Turbo (faster-whisper-large-v3-turbo / CTranslate2)</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Section 3: Status Sistem & Preflight Checklist */}
-            <div className="bg-[#151821] border border-[#1e2330] rounded-2xl p-6 space-y-4">
-              <div className="flex items-center justify-between border-b border-[#1e2330] pb-4">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center">
-                    <ShieldCheck className="w-4 h-4 text-indigo-400" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-semibold text-white">Status Sistem &amp; Kesiapan (Preflight Check)</h2>
-                    <p className="text-xs text-slate-400">Verifikasi kesiapan modul backend, engine STT, database, dan AI</p>
-                  </div>
-                </div>
-
-                <button
-                  onClick={fetchPreflight}
-                  disabled={preflightLoading}
-                  className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white bg-[#0c0e14] border border-[#1e2330] px-3 py-1.5 rounded-lg transition-all"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${preflightLoading ? "animate-spin" : ""}`} />
-                  Periksa Ulang
+                  <X className="w-5 h-5" />
                 </button>
               </div>
 
-              {/* Exact Preflight Grid requested by User */}
-              <div className="bg-[#0c0e14] border border-[#1e2330] rounded-xl p-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                {Object.entries(checks).map(([key, value]) => (
-                  <div key={key} className="flex items-center justify-between p-2.5 bg-[#151821] rounded-lg border border-[#1e2330]">
-                    <span className="font-mono text-slate-400 text-[11px] truncate">{key}</span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${value ? "bg-emerald-950/60 text-emerald-400 border border-emerald-700/50" : "bg-red-950/60 text-red-400 border border-red-700/50"}`}>
-                      {String(value)}
-                    </span>
-                  </div>
-                ))}
-              </div>
+              <PreflightStatusView
+                token={token}
+                apiBaseUrl={SOCKET_URL}
+                onRefresh={checkPreflight}
+                onBack={() => setShowPreflightModal(false)}
+              />
             </div>
           </div>
         )}
 
-        <footer className="text-center text-xs text-slate-500 py-4 flex items-center justify-center gap-2">
-          <img src={resmeetSymbol} alt="Resmeet" className="w-4 h-4 opacity-70" />
-          <span>Resmeet · Bun.js + Whisper.cpp + DeepFilter/Silero-VAD + Jev Directed Topics</span>
+        {/* Footer */}
+        <footer className="text-center text-xs text-slate-500 py-6 border-t border-[#1e2330]/50">
+          <p>
+            Resmeet STT Enterprise • Laya Decision Engine • PostgreSQL Native • Tiptap DOCX Standard
+          </p>
         </footer>
       </div>
+
+      {/* ========================================================================= */}
+      {/* MOBILE APP BOTTOM-MENU-BAR (Requirement 13)                               */}
+      {/* ========================================================================= */}
+      <nav className="fixed bottom-0 inset-x-0 z-40 md:hidden bg-[#0d0f16]/95 backdrop-blur-xl border-t border-[#1e2330] px-3 py-2 flex items-center justify-around shadow-2xl">
+        {/* 1. Transkrip */}
+        <button
+          type="button"
+          onClick={() => setNav("transcribe")}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+            nav === "transcribe"
+              ? "text-indigo-400 font-bold"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <Mic className="w-5 h-5" />
+          <span className="text-[10px]">Transkrip</span>
+        </button>
+
+        {/* 2. Riwayat */}
+        <button
+          type="button"
+          onClick={() => setNav("history")}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all relative cursor-pointer ${
+            nav === "history" || nav === "detail"
+              ? "text-indigo-400 font-bold"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <Database className="w-5 h-5" />
+          <span className="text-[10px]">Riwayat</span>
+          {history.length > 0 && (
+            <span className="absolute top-0 right-2 w-4 h-4 bg-indigo-600 text-white rounded-full text-[9px] flex items-center justify-center font-bold">
+              {history.length > 99 ? "99+" : history.length}
+            </span>
+          )}
+        </button>
+
+        {/* 3. Model AI */}
+        <button
+          type="button"
+          onClick={() => setNav("models")}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+            nav === "models"
+              ? "text-indigo-400 font-bold"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <Brain className="w-5 h-5 text-purple-400" />
+          <span className="text-[10px]">Model AI</span>
+        </button>
+
+        {/* 4. User (Admin only) */}
+        {isSuperadmin && (
+          <button
+            type="button"
+            onClick={() => setNav("users")}
+            className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+              nav === "users"
+                ? "text-indigo-400 font-bold"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Users className="w-5 h-5 text-emerald-400" />
+            <span className="text-[10px]">User</span>
+          </button>
+        )}
+      </nav>
     </div>
   );
 }

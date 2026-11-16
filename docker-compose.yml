@@ -1,81 +1,87 @@
-version: "3.8"
-
 services:
   # ----------------------------------------------------------------------------
-  # 1. MySQL Database Service
+  # 1. PostgreSQL Database Service (Default)
   # ----------------------------------------------------------------------------
-  mysql:
-    image: mysql:8.0
-    container_name: resmeet_mysql
+  postgres:
+    image: postgres:16-alpine
+    container_name: resmeet_postgres
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: password
-      MYSQL_DATABASE: stt_db
+      POSTGRES_DB: stt_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
     ports:
-      - "3307:3306"
+      - "5432:5432"
     volumes:
-      - mysql_data:/var/lib/mysql
-      - ./backend/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d stt_db"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   # ----------------------------------------------------------------------------
-  # 2. Resmeet-STT Backend (Bun.js + Whisper.cpp + Python Audio Filters)
+  # 2. Resmeet-STT Backend (Rust Axum + Whisper.cpp + Tokio)
   # ----------------------------------------------------------------------------
   backend:
+    image: resmeet-stt-backend
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: resmeet_backend
     restart: unless-stopped
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
     ports:
       - "8200:8200"
     environment:
-      NODE_ENV: production
+      RUST_LOG: resmeet_backend=info,tower_http=info
       PORT: 8200
-      DB_TYPE: sqlite
-      DB_HOST: mysql
-      DB_PORT: 3306
+      APP_CONFIG_DIR: /app/config
+      DB_HOST: postgres
+      DB_PORT: 5432
       DB_NAME: stt_db
-      DB_USER: root
+      DB_USER: postgres
       DB_PASSWORD: password
-      WHISPER_MODEL: large-v3-turbo
+      DATABASE_URL: postgres://postgres:password@postgres:5432/stt_db
+      DB_SETUP_HOST: postgres
+      WHISPER_MODEL: ggml-large-v3-turbo-q5_0.bin
+      MODEL_DIR: /app/models
       CPU_THREADS: 4
-      AI_BASE_URL: http://host.docker.internal:20128/v1
-      AI_API_KEY: sk-ff353870199354cb-rvq507-8ef93405
-      AI_MODEL_ID: 9R-Gemini
     volumes:
-      - ./backend/uploads:/app/uploads
-      - ./backend/models:/app/models
-      - ./backend/knowledge:/app/knowledge
-      - ./backend/transcripts_md:/app/transcripts_md
-      - ./backend/settings.json:/app/settings.json
-      - ./backend/resmeet.sqlite:/app/resmeet.sqlite
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - backend_models:/app/models
+      - backend_uploads:/app/uploads
+      - backend_transcripts_md:/app/transcripts_md
+      - backend_config:/app/config
 
   # ----------------------------------------------------------------------------
-  # 3. Resmeet-STT Frontend (React + Vite + Markmap + UI Dashboard)
+  # 3. Resmeet-STT Frontend (React 19 + Vite + Tailwind CSS + Nginx)
   # ----------------------------------------------------------------------------
   frontend:
+    image: resmeet-stt-frontend
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: resmeet_frontend
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
       - "5173:5173"
     environment:
       VITE_API_BASE_URL: http://localhost:8200/api
 
 volumes:
-  mysql_data:
-    name: resmeet_mysql_data
+  postgres_data:
+    name: resmeet_postgres_data
+  backend_models:
+    name: resmeet_backend_models
+    external: true
+  backend_uploads:
+    name: resmeet_backend_uploads
+  backend_transcripts_md:
+    name: resmeet_backend_transcripts_md
+  backend_config:
+    name: resmeet_backend_config

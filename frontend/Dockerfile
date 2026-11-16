@@ -17,16 +17,12 @@ FROM nginx:alpine
 
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Custom nginx config to support React client-side routing & docs
-RUN echo 'server { \
-    listen 5173; \
-    server_name localhost; \
-    location / { \
-        root /usr/share/nginx/html; \
-        index index.html index.htm; \
-        try_files $uri $uri/ /index.html; \
-    } \
-}' > /etc/nginx/conf.d/default.conf
+# Ensure all static files have global read permissions for nginx worker user
+RUN chmod -R a+rX /usr/share/nginx/html
+
+# Custom nginx config: React client-side routing, svg assets, cache headers
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+RUN chmod a+r /etc/nginx/conf.d/default.conf
 
 EXPOSE 5173
 

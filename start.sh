@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Resmeet-STT: Unified 1-Click Startup Script (Manual / Native Runner)
-# Menjalankan Database, Backend Bun.js, dan Frontend Vite secara bersamaan.
+# Resmeet-STT: Web-Base Startup Script
+# Modes:
+#   1. Default (Docker Mode): Runs PostgreSQL, Rust Axum Backend, & React Frontend in Docker
+#   2. Local Mode (--local): Runs PostgreSQL in Docker + Local Rust Backend + Vite Frontend
 # ==============================================================================
 
-set -e
+set -euo pipefail
 
 # Warna Terminal
 CYAN='\033[0;36m'
@@ -18,94 +20,68 @@ BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
 
 echo -e "${CYAN}==============================================================================${NC}"
-echo -e "${CYAN}             RESMEET-STT: SISTEM NOTULEN & TRANSKRIPSI RAPAT                 ${NC}"
-echo -e "${CYAN}   Bun.js • Whisper.cpp • Silero-VAD • Jev-Guided Topics • Markmap Mindmap    ${NC}"
+echo -e "${CYAN}            RESMEET-STT: SISTEM TRANSKRIPSI & NOTULEN RAPAT WEB               ${NC}"
+echo -e "${CYAN}        Rust (Axum + Tokio) • React 19 • PostgreSQL • Whisper.cpp • Docker    ${NC}"
 echo -e "${CYAN}==============================================================================${NC}"
 
-# 1. Cek Dependensi Dasar
-echo -e "\n${YELLOW}[1/4] Memeriksa dependensi sistem...${NC}"
+# Cek apakah mode local diminta
+if [ "${1:-}" == "--local" ] || [ "${1:-}" == "--native" ]; then
+  echo -e "\n${YELLOW}=== MODE: LOCAL / NATIVE EXECUTION ===${NC}"
 
-command -v bun >/dev/null 2>&1 || {
-  echo -e "${RED}Error: Bun.js tidak ditemukan! Silakan install: curl -fsSL https://bun.sh/install | bash${NC}"
-  exit 1
-}
+  # 1. Pastikan PostgreSQL aktif
+  echo -e "${YELLOW}[1/3] Menjalankan database PostgreSQL via Docker...${NC}"
+  (cd "$ROOT_DIR" && docker compose up -d postgres)
 
-command -v ffmpeg >/dev/null 2>&1 || {
-  echo -e "${RED}Error: FFmpeg tidak ditemukan! Silakan install via brew: brew install ffmpeg${NC}"
-  exit 1
-}
+  # Tunggu PostgreSQL siap
+  sleep 2
 
-command -v node >/dev/null 2>&1 || {
-  echo -e "${RED}Error: Node.js tidak ditemukan!${NC}"
-  exit 1
-}
+  # 2. Build / Check Rust Backend
+  echo -e "${YELLOW}[2/3] Memeriksa Rust Backend...${NC}"
+  export COPYFILE_DISABLE=1
+  export CARGO_TARGET_DIR="/tmp/resmeet-backend-target"
 
-echo -e "${GREEN}✓ Bun.js, Node.js, dan FFmpeg terverifikasi.${NC}"
+  BACKEND_PID=""
+  FRONTEND_PID=""
+  cleanup() {
+    echo -e "\n${YELLOW}Menghentikan background process...${NC}"
+    kill "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null || true
+    wait "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null || true
+    echo -e "${GREEN}✓ Selesai.${NC}"
+    exit 0
+  }
+  trap cleanup SIGINT SIGTERM EXIT
 
-# 2. Cek Driver Database (Default SQLite, Opsional MySQL / PostgreSQL)
-echo -e "\n${YELLOW}[2/4] Memeriksa driver database...${NC}"
-if nc -z 127.0.0.1 3307 2>/dev/null; then
-  echo -e "${GREEN}✓ MySQL terdeteksi aktif pada port 3307.${NC}"
-elif [ -f "$BACKEND_DIR/resmeet.sqlite" ] || [ ! -f "$BACKEND_DIR/settings.json" ]; then
-  echo -e "${GREEN}✓ Menggunakan SQLite lokal mandiri (Zero-Setup: backend/resmeet.sqlite).${NC}"
-elif command -v docker >/dev/null 2>&1; then
-  echo -e "${YELLOW}Port 3307 belum aktif. Menjalankan container MySQL via Docker jika diperlukan...${NC}"
-  if docker ps -a --format '{{.Names}}' | grep -Eq "^(mysql_db|resmeet_mysql)$"; then
-    CONTAINER_NAME=$(docker ps -a --format '{{.Names}}' | grep -E "^(mysql_db|resmeet_mysql)$" | head -n 1)
-    docker start "$CONTAINER_NAME" >/dev/null 2>&1 || true
-    echo -e "${GREEN}✓ Container $CONTAINER_NAME dijalankan.${NC}"
-  fi
+  # Jalankan Rust backend
+  echo -e "${GREEN}Menjalankan Rust backend (http://127.0.0.1:8200)...${NC}"
+  (cd "$BACKEND_DIR" && cargo run) &
+  BACKEND_PID=$!
+
+  sleep 2
+
+  # 3. Jalankan Vite Frontend
+  echo -e "${GREEN}Menjalankan React Frontend (http://localhost:5173)...${NC}"
+  (cd "$FRONTEND_DIR" && npm run dev -- --host) &
+  FRONTEND_PID=$!
+
+  wait
+
 else
-  echo -e "${GREEN}✓ Default SQLite aktif secara otomatis. Pengaturan MySQL/Postgres dapat diatur di UI Pengaturan.${NC}"
+  echo -e "\n${YELLOW}=== MODE: FULL DOCKER COMPOSE (RECOMMENDED) ===${NC}"
+  echo -e "${GREEN}Membangun dan menjalankan container: PostgreSQL, Rust Backend, Frontend...${NC}"
+
+  if ! command -v docker >/dev/null 2>&1; then
+    echo -e "${RED}Error: Docker tidak ditemukan di sistem!${NC}"
+    echo -e "${YELLOW}Gunakan './start.sh --local' jika ingin menjalankan secara native.${NC}"
+    exit 1
+  fi
+
+  cd "$ROOT_DIR"
+  tar --exclude='._*' --exclude='target' --exclude='models' --exclude='uploads' \
+    --exclude='transcripts_md' --exclude='src_ts' --exclude='*.db' \
+    --exclude='*.sqlite' --exclude='.env' --exclude='.db_secret.key' \
+    --exclude='database.json' --exclude='database.json.tmp' --exclude='ai-encryption.key' \
+    -C "$BACKEND_DIR" -cf - . | docker build -t resmeet-stt-backend -
+  tar --exclude='._*' --exclude='node_modules' --exclude='dist' \
+    -C "$FRONTEND_DIR" -cf - . | docker build -t resmeet-stt-frontend -
+  docker compose up --no-build "$@"
 fi
-
-# 3. Pastikan Dependensi Frontend & Backend Terinstall
-echo -e "\n${YELLOW}[3/4] Menyiapkan dependensi package...${NC}"
-if [ ! -d "$BACKEND_DIR/node_modules" ]; then
-  echo "Menginstall dependensi backend..."
-  (cd "$BACKEND_DIR" && bun install)
-fi
-
-if [ ! -d "$FRONTEND_DIR/node_modules" ]; then
-  echo "Menginstall dependensi frontend..."
-  (cd "$FRONTEND_DIR" && npm install)
-fi
-echo -e "${GREEN}✓ Dependensi package siap.${NC}"
-
-# 4. Jalankan Backend & Frontend
-echo -e "\n${YELLOW}[4/4] Menjalankan Backend & Frontend...${NC}"
-
-# Trap untuk membersihkan background proses saat script dihentikan (CTRL+C)
-cleanup() {
-  echo -e "\n${YELLOW}Menghentikan seluruh layanan Resmeet-STT...${NC}"
-  kill "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null || true
-  wait "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null || true
-  echo -e "${GREEN}✓ Layanan dihentikan dengan aman. Sampai jumpa!${NC}"
-  exit 0
-}
-trap cleanup SIGINT SIGTERM EXIT
-
-# Start Bun Backend
-(cd "$BACKEND_DIR" && bun run src/index.ts) &
-BACKEND_PID=$!
-
-# Tunggu backend siap
-sleep 1.5
-
-# Start Vite Frontend
-(cd "$FRONTEND_DIR" && npm run dev -- --host) &
-FRONTEND_PID=$!
-
-echo -e "\n${GREEN}==============================================================================${NC}"
-echo -e "${GREEN}                      RESMEET-STT BERHASIL DIJALANKAN!                        ${NC}"
-echo -e "${GREEN}==============================================================================${NC}"
-echo -e "  🌐 Aplikasi Web Frontend : ${CYAN}http://localhost:5173${NC}"
-echo -e "  🚀 Backend API & Socket  : ${CYAN}http://localhost:8200${NC}"
-echo -e "  📖 Dokumentasi Interaktif: ${CYAN}http://localhost:5173/docs/index.html${NC}"
-echo -e "                             ${CYAN}(atau buka file docs/index.html)${NC}"
-echo -e "------------------------------------------------------------------------------"
-echo -e "  Tekan ${RED}[CTRL + C]${NC} di terminal ini untuk menghentikan seluruh layanan."
-echo -e "==============================================================================\n"
-
-# Menahan proses agar tetap hidup
-wait

@@ -74,3 +74,11 @@ frontend/logs/
 
 # Task scratch
 task.md
+backend/.db_secret.key
+backend/database.json
+backend/database.json.tmp
+backend/ai-encryption.key
+backend/transcripts.db
+backend/src_ts/
+**/._*
+target/

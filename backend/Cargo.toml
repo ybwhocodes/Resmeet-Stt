@@ -1,0 +1,49 @@
+[package]
+name = "resmeet-backend"
+version = "1.0.0"
+description = "Resmeet-STT: Enterprise Meeting Notetaker & Speech-to-Text (High-Performance Rust Backend)"
+authors = ["Resmeet Engineering Team"]
+edition = "2021"
+
+[dependencies]
+# Web & Networking
+axum = { version = "0.8", features = ["multipart", "ws"] }
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
+socketioxide = { version = "0.16", features = ["tracing"] }
+async-trait = "0.1"
+
+# Database (PostgreSQL via SQLx)
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio",
+    "tls-rustls",
+    "postgres",
+    "chrono",
+    "json",
+    "uuid",
+    "macros"
+] }
+
+# Serialization & Models
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
+
+# Security, Hashing & Cryptography
+sha2 = "0.10"
+hmac = "0.12"
+pbkdf2 = { version = "0.12", default-features = false }
+hex = "0.4"
+rand = "0.8"
+aes-gcm = "0.10.3"
+
+# HTTP Client (AI / LLM API calls)
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+
+# Environment & Logging
+dotenvy = "0.15"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+futures-util = "0.3"
+regex = "1"
