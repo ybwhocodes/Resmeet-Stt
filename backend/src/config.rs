@@ -26,14 +26,42 @@ impl AppConfig {
             .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()).map(|path|path.join("whisper-server")))
             .find(|path|path.is_file())
     }
+    fn scan_gpu_name(&self) -> Option<String> {
+        let script = self.faster_worker.parent()?.join("detect_gpu.py");
+        if !script.is_file() {
+            return None;
+        }
+        let python = if self.faster_python.is_file() {
+            self.faster_python.as_os_str()
+        } else {
+            std::ffi::OsStr::new("python3")
+        };
+        let out = std::process::Command::new(python).arg(&script).output().ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        let name = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if name.is_empty() { None } else { Some(name) }
+    }
     pub fn gpu_info(&self) -> GpuInfo {
         let render = std::fs::read_dir("/dev/dri").ok().and_then(|entries| entries.flatten()
             .find(|entry| entry.file_name().to_string_lossy().starts_with("renderD")));
         let detected = render.is_some();
-        let name = render.and_then(|entry| {
-            let vendor = std::fs::read_to_string(std::path::Path::new("/sys/class/drm").join(entry.file_name()).join("device/vendor")).ok()?;
-            Some(match vendor.trim() { "0x1002" => "AMD · Vulkan", "0x8086" => "Intel · Vulkan", "0x10de" => "NVIDIA · Vulkan", _ => "GPU · Vulkan" }.to_string())
-        }).unwrap_or_else(|| "GPU · Vulkan".into());
+        let name = if detected {
+            self.scan_gpu_name().or_else(|| {
+                render.and_then(|entry| {
+                    let vendor = std::fs::read_to_string(std::path::Path::new("/sys/class/drm").join(entry.file_name()).join("device/vendor")).ok()?;
+                    Some(match vendor.trim() {
+                        "0x1002" => "AMD GPU",
+                        "0x8086" => "Intel GPU",
+                        "0x10de" => "NVIDIA GPU",
+                        _ => "GPU",
+                    }.to_string())
+                })
+            }).unwrap_or_else(|| "GPU".into())
+        } else {
+            "GPU Tidak Terdeteksi".into()
+        };
         let has_vulkan_lib = std::path::Path::new("/usr/local/lib/libggml-vulkan.so").is_file()
             || std::path::Path::new("/usr/local/lib/libggml-vulkan.so.1").is_file();
         GpuInfo { detected, available: detected && has_vulkan_lib && self.model_path().is_file() && self.native_server().is_some(), name }

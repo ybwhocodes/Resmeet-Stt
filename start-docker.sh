@@ -291,7 +291,8 @@ for key, label, hint in labels:
     if not ok:
         print(f"         -> Rekomendasi: {hint}")
 
-gpu_text = "\033[0;32mAktif (Vulkan)\033[0m" if gpu_ok else "\033[1;33mTidak aktif (Mode CPU)\033[0m"
+gpu_name = data.get("gpuName") or "GPU"
+gpu_text = f"\033[0;32mAktif ({gpu_name})\033[0m" if gpu_ok else "\033[1;33mTidak aktif (Mode CPU)\033[0m"
 print(f"\n  Akselerasi GPU : {gpu_text}")
 print(f"  Model Default  : {data.get('defaultModel', '-')}")
 

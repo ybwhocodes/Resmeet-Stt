@@ -43,14 +43,28 @@ export default function ProcessingSettings({ token, apiBaseUrl = "", processing 
   return <section aria-labelledby="processing-title" className="rounded-2xl border border-[#1e2330] bg-[#151821] p-6 space-y-4">
     <div className="flex items-center justify-between gap-3">
       <div><h3 id="processing-title" className="flex items-center gap-2 font-semibold text-white"><Cpu size={18} />Pemrosesan Transkripsi</h3>
-        <p className="mt-1 text-xs text-slate-400">GPU akselerasi otomatis menjadi pilihan utama saat terdeteksi. CPU tetap tersedia sebagai secondary.</p></div>
+        <p className="mt-1 text-xs text-slate-400">GPU hasil pemindaian otomatis menjadi pilihan utama saat tersedia. CPU tetap tersedia sebagai secondary.</p></div>
       <button type="button" aria-label="Pindai ulang GPU" disabled={loading || saving} onClick={() => load()} className="flex items-center gap-2 rounded-lg border border-slate-700 p-2 text-xs text-slate-300 disabled:opacity-40"><RefreshCw size={15} className={loading ? "animate-spin" : ""} />{loading ? "Memindai..." : "Pindai GPU"}</button>
     </div>
     {loading && <p role="status" className="text-xs text-slate-400">Memindai GPU pada mesin backend. Pilihan GPU aktif setelah perangkat terdeteksi dan siap digunakan.</p>}
       <div role="radiogroup" aria-label="Perangkat transkripsi" className="grid gap-3 sm:grid-cols-2">
         {[
         { device: "cpu", title: "CPU · Hemat daya (Secondary)", description: settings ? `${settings.cpuThreads} thread, batch ${settings.batchSize}. Pilihan cadangan bila GPU sedang dipakai komputasi lain.` : "Pemrosesan hemat daya melalui CPU.", Icon: Cpu, available: Boolean(settings) },
-        { device: "gpu", title: "GPU · Akselerasi (Utama / Default)", description: loading ? "Menunggu hasil pemindaian GPU..." : !scanSucceeded ? "Pemindaian GPU belum berhasil. Tekan Pindai GPU untuk mencoba kembali." : !settings?.gpuDetected ? "GPU tidak terdeteksi. Transkripsi menggunakan CPU." : settings.gpuAvailable ? `${settings.gpuName}. Kecepatan maksimal, proses otomatis diprioritaskan di GPU.` : "GPU terdeteksi, tetapi akses Vulkan atau model native belum siap pada backend.", Icon: Zap, available: scanSucceeded && settings?.gpuDetected && settings?.gpuAvailable },
+        {
+          device: "gpu",
+          title: settings?.gpuAvailable && settings?.gpuName ? `GPU · ${settings.gpuName} (Utama)` : "GPU · Akselerasi (Utama / Default)",
+          description: loading
+            ? "Menunggu hasil pemindaian GPU..."
+            : !scanSucceeded
+            ? "Pemindaian GPU belum berhasil. Tekan Pindai GPU untuk mencoba kembali."
+            : !settings?.gpuDetected
+            ? "GPU tidak terdeteksi pada perangkat ini. Transkripsi menggunakan CPU."
+            : settings.gpuAvailable
+            ? `Perangkat terpindai: ${settings.gpuName}. Kecepatan maksimal, proses otomatis diprioritaskan di GPU.`
+            : `${settings.gpuName || "GPU"} terdeteksi, tetapi driver akselerasi atau model native belum siap pada backend.`,
+          Icon: Zap,
+          available: scanSucceeded && settings?.gpuDetected && settings?.gpuAvailable,
+        },
       ].map(({ device, title, description, Icon, available }) => <button key={device} type="button" role="radio" aria-checked={(settings?.effectiveDevice || (settings?.gpuAvailable ? "gpu" : "cpu")) === device}
         disabled={processing || loading || saving || !available} onClick={() => selectDevice(device)}
         className={`rounded-xl border p-4 text-left disabled:cursor-not-allowed disabled:opacity-50 ${(settings?.effectiveDevice || (settings?.gpuAvailable ? "gpu" : "cpu")) === device ? "border-indigo-400 bg-indigo-500/10" : "border-slate-700 bg-[#0c0e14]"}`}>
@@ -61,7 +75,7 @@ export default function ProcessingSettings({ token, apiBaseUrl = "", processing 
     {settings && <>
       {scanSucceeded && !settings.gpuDetected && <p className="text-xs text-slate-400">GPU yang didukung belum terdeteksi pada mesin backend. Transkripsi memakai CPU.</p>}
       {settings.device === "gpu" && settings.effectiveDevice === "cpu" && <p className="text-xs text-amber-300">GPU pilihan sebelumnya tidak tersedia. Transkripsi berikutnya memakai CPU.</p>}
-      <p className="text-xs text-slate-400">Pilihan tersimpan per akun dan berlaku untuk transkripsi berikutnya. {processing ? "Tunggu transkripsi aktif selesai untuk mengganti perangkat." : "GPU yang ditampilkan adalah GPU pada mesin yang menjalankan backend."}</p>
+      <p className="text-xs text-slate-400">Pilihan tersimpan per akun dan berlaku untuk transkripsi berikutnya. {processing ? "Tunggu transkripsi aktif selesai untuk mengganti perangkat." : "GPU yang ditampilkan adalah GPU hasil pemindaian mesin backend."}</p>
     </>}
     {message && <p role="status" className="text-xs text-emerald-300">{message}</p>}
     {error && <p role="alert" className="text-xs text-rose-300">{error}</p>}

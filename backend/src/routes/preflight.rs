@@ -55,6 +55,7 @@ pub async fn preflight_handler(
         }
     }
 
+    let gpu = config.gpu_info();
     let worker_ok=db_ok && crate::jobs::available(&pool,"transcription").await;
     let ai_worker_ok=db_ok && crate::jobs::available(&pool,"ai").await;
     let all_ready = db_ok && ffmpeg_ok && whisper_ok && model_ok && uploads_ok && worker_ok;
@@ -78,8 +79,9 @@ pub async fn preflight_handler(
         "dbType": "postgres",
         "defaultModel": model_path.file_name().and_then(|name| name.to_str()).unwrap_or_default(),
         "availableModels": available_models,
-        "gpuDetected": config.gpu_info().detected,
-        "gpuAvailable": config.gpu_info().available,
+        "gpuDetected": gpu.detected,
+        "gpuAvailable": gpu.available,
+        "gpuName": gpu.name,
         "cpuThreads": config.cpu_threads,
         "transcriptionEngine": if config.faster_available() { "faster-whisper-int8" } else { "whisper.cpp" },
         "vadAvailable": config.faster_available() || (config.vad_enabled && config.vad_model.is_file()),
