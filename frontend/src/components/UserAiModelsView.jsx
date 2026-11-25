@@ -1,18 +1,21 @@
-import React, { useState, useEffect } from "react";
+import ProcessingSettings from "./ProcessingSettings";
+import AiToggle from "./AiToggle";
+import  { useState, useEffect, useCallback } from "react";
 import {
   Brain, Plus, Trash2, CheckCircle2, Star,
-  AlertCircle, RefreshCw, Sparkles, Check, Layers, Save, Zap,
-  ExternalLink, Key, ShieldCheck, Server, HelpCircle, Loader2
+  AlertCircle, RefreshCw, Sparkles, Layers, Save, Zap,
+  Key, ShieldCheck, Server, Loader2
 } from "lucide-react";
 
 export default function UserAiModelsView({
   token,
-  user,
   apiBaseUrl = "http://127.0.0.1:8200",
-  selectedModelId,
   setSelectedModelId,
   paraphraseStyle,
   setParaphraseStyle,
+  aiConfigured,
+  processing,
+  onConfigChange,
   aiCorrection,
   setAiCorrection,
 }) {
@@ -34,16 +37,17 @@ export default function UserAiModelsView({
   const [isDefault, setIsDefault] = useState(false);
   const [adding, setAdding] = useState(false);
 
-  const updateModels = (nextModels) => {
+  const updateModels = useCallback((nextModels) => {
     setModels(nextModels);
+    onConfigChange?.();
     setSelectedModelId((current) =>
       nextModels.some((model) => model.model_id === current)
         ? current
         : nextModels.find((model) => model.is_default)?.model_id || nextModels[0]?.model_id || ""
     );
-  };
+  }, [onConfigChange, setSelectedModelId]);
 
-  const fetchModels = async () => {
+  const fetchModels = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
@@ -58,9 +62,9 @@ export default function UserAiModelsView({
     } finally {
       setLoading(false);
     }
-  };
+  }, [apiBaseUrl, token, updateModels]);
 
-  const fetchGateway = async () => {
+  const fetchGateway = useCallback(async () => {
     try {
       const res = await fetch(`${apiBaseUrl}/api/ai/settings`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -73,14 +77,13 @@ export default function UserAiModelsView({
     } catch (err) {
       console.warn("Gagal memuat konfigurasi gateway AI:", err);
     }
-  };
+  }, [apiBaseUrl, token]);
 
   useEffect(() => {
-    if (token) {
-      fetchModels();
-      fetchGateway();
-    }
-  }, [token]);
+    let active = true;
+    Promise.resolve().then(() => { if (active && token) { fetchModels(); fetchGateway(); } });
+    return () => { active = false; };
+  }, [token, fetchModels, fetchGateway]);
 
   const saveGateway = async (event) => {
     event.preventDefault();
@@ -96,6 +99,7 @@ export default function UserAiModelsView({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Gagal menyimpan gateway AI.");
       setHasApiKey(true);
+      onConfigChange?.();
       setApiKey("");
       setSuccess("Koneksi Gateway AI berhasil disimpan dan dienkripsi.");
       setTimeout(() => setSuccess(""), 4000);
@@ -163,7 +167,7 @@ export default function UserAiModelsView({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Gagal menambahkan model AI.");
 
-      setSuccess(`Model '${modelName}' berhasil didaftarkan ke Laya Decision Engine.`);
+      setSuccess(`Model '${modelName}' berhasil didaftarkan untuk pemrosesan AI.`);
       setTimeout(() => setSuccess(""), 4000);
       setNewModelId("");
       setNewModelName("");
@@ -229,25 +233,17 @@ export default function UserAiModelsView({
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30">
-                Laya Decision Engine Powered
+                Pengaturan
               </span>
-              <a
-                href="https://github.com/NandhaKishorM/laya.git"
-                target="_blank"
-                rel="noreferrer"
-                className="text-[11px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-mono transition-colors"
-              >
-                <span>NandhaKishorM/laya</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
+
             </div>
             <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
               <Brain className="w-6 h-6 text-purple-400" />
-              Pusat Konfigurasi Gateway AI &amp; Multi-Model
+              Pengaturan Transkripsi &amp; AI
             </h2>
             <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
-              Satu pusat kendali terpadu untuk menghubungkan Gateway AI (OpenAI API compatible),
-              mengelola perutean model, dan mengalibrasi keputusan rapat dengan arsitektur Laya.
+              Atur perangkat pemrosesan transkripsi, hubungkan Gateway AI (OpenAI API compatible),
+              memilih model untuk merapikan transkrip dan membuat ringkasan rapat.
             </p>
           </div>
 
@@ -265,6 +261,8 @@ export default function UserAiModelsView({
           </button>
         </div>
       </div>
+
+      <ProcessingSettings token={token} apiBaseUrl={apiBaseUrl} processing={processing} />
 
       {/* Notifications */}
       {error && (
@@ -529,12 +527,12 @@ export default function UserAiModelsView({
           </div>
         </div>
 
-        {/* PART 3: Laya Engine Processing Options */}
+        {/* PART 3: AI Processing Options */}
         <div className="space-y-4 pt-2 border-t border-[#1e2330]">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-white flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-amber-400" />
-              3. Parameter Sintesis &amp; Gaya MoM Laya
+              3. Parameter Sintesis &amp; Gaya MoM
             </h3>
           </div>
 
@@ -548,8 +546,8 @@ export default function UserAiModelsView({
                 onChange={(e) => setParaphraseStyle(e.target.value)}
                 className="w-full bg-[#151821] border border-[#1e2330] rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-indigo-500/50 cursor-pointer"
               >
-                <option value="poin_singkat">Poin-poin Penting &amp; Action Items (Rekomendasi)</option>
-                <option value="detail_deskriptif">Detail &amp; Deskriptif Mendalam</option>
+                <option value="poin_singkat">Poin-poin Penting &amp; Action Items</option>
+                <option value="detail_deskriptif">Detail &amp; Lengkap (Bawaan)</option>
                 <option value="ringkasan_eksekutif">Ringkasan Eksekutif Dewan Direksi</option>
               </select>
               <p className="text-[10px] text-slate-500 mt-1">
@@ -557,23 +555,7 @@ export default function UserAiModelsView({
               </p>
             </div>
 
-            <div className="space-y-2 bg-[#0c0e14] border border-[#1e2330] rounded-xl p-3.5 flex flex-col justify-center">
-              <label className="flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={aiCorrection}
-                  onChange={(e) => setAiCorrection(e.target.checked)}
-                  className="rounded border-[#1e2330] text-indigo-600 focus:ring-0 cursor-pointer w-4 h-4"
-                />
-                <span className="font-semibold text-white">
-                  Aktifkan Context-Smoothing &amp; MoM Otomatis
-                </span>
-              </label>
-              <p className="text-[11px] text-slate-400 leading-relaxed pl-6">
-                Laya Decision Engine akan memprediksi alur giliran pembicara chronologis [MM:SS - MM:SS]
-                dan merapikan tata bahasa lisan tanpa merubah konteks percakapan.
-              </p>
-            </div>
+            <AiToggle configured={aiConfigured} checked={aiCorrection} onChange={setAiCorrection} disabled={processing} />
           </div>
         </div>
       </div>

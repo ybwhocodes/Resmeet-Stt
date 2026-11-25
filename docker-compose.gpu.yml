@@ -1,0 +1,8 @@
+# API inspects availability; only the transcription worker runs GPU inference.
+services:
+  backend:
+    devices:
+      - /dev/dri/renderD128:/dev/dri/renderD128
+  worker:
+    devices:
+      - /dev/dri/renderD128:/dev/dri/renderD128

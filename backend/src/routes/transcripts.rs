@@ -18,6 +18,8 @@ pub struct ListTranscriptsQuery {
     pub search: Option<String>,
     pub limit: Option<i64>,
     pub page: Option<i64>,
+    pub start_date: Option<chrono::NaiveDate>,
+    pub end_date: Option<chrono::NaiveDate>,
 }
 
 pub async fn list_transcripts_handler(
@@ -27,7 +29,10 @@ pub async fn list_transcripts_handler(
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let limit = query.limit.unwrap_or(20).clamp(1, 100);
     let page = query.page.unwrap_or(1).max(1);
-    let offset = (page - 1) * limit;
+    let offset = (page - 1).saturating_mul(limit);
+    if matches!((query.start_date, query.end_date), (Some(start), Some(end)) if start > end) {
+        return Err((StatusCode::BAD_REQUEST, Json(json!({"error":"Tanggal awal harus sebelum atau sama dengan tanggal akhir."}))));
+    }
 
     // Superadmin can view all transcripts, regular user views own
     let user_filter = if user.role == "superadmin" {
@@ -36,7 +41,7 @@ pub async fn list_transcripts_handler(
         Some(user.id)
     };
 
-    let (rows, total) = get_transcripts(&pool, user_filter, query.search, limit, offset)
+    let (rows, total) = get_transcripts(&pool, user_filter, query.search, limit, offset, query.start_date, query.end_date)
         .await
         .map_err(|e| {
             (
@@ -150,6 +155,7 @@ pub async fn public_share_handler(
         "success": true,
         "id": t.id,
         "filename": t.filename,
+        "momTitle": t.mom_title,
         "createdAt": t.created_at.to_string(),
         "durationS": t.duration_s,
         "finalText": t.final_text,

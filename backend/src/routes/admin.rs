@@ -76,6 +76,7 @@ pub async fn create_user_handler(
         ));
     }
 
+    validate_credentials(&payload.username, &payload.password, &payload.role)?;
     let hash = hash_password(&payload.password);
     let new_user_id = Uuid::now_v7();
     let row = sqlx::query(
@@ -86,7 +87,7 @@ pub async fn create_user_handler(
         "#,
     )
     .bind(new_user_id)
-    .bind(&payload.username)
+    .bind(payload.username.trim())
     .bind(&hash)
     .bind(&payload.role)
     .fetch_one(&pool)
@@ -159,7 +160,8 @@ pub async fn update_user_status_handler(
     if user.role != "superadmin" {
         return Err((StatusCode::FORBIDDEN, Json(json!({ "error": "Akses khusus Superadmin" }))));
     }
-    let is_active = payload.get("is_active").and_then(|v| v.as_bool()).unwrap_or(true);
+    let is_active = payload.get("is_active").and_then(|v| v.as_bool())
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, Json(json!({"error":"is_active harus berupa boolean."}))))?;
     if user.id == id && !is_active {
         return Err((StatusCode::BAD_REQUEST, Json(json!({ "error": "Tidak dapat menonaktifkan akun sendiri." }))));
     }
@@ -190,18 +192,19 @@ pub async fn reset_user_password_handler(
             (StatusCode::BAD_REQUEST, Json(json!({ "error": "Password baru wajib diisi." })))
         })?;
 
+    if new_pass.len() < 12 {
+        return Err((StatusCode::BAD_REQUEST, Json(json!({"error":"Password baru minimal 12 karakter."}))));
+    }
     let hash = hash_password(new_pass);
-    let _ = sqlx::query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2")
-        .bind(&hash)
-        .bind(id)
-        .execute(&pool)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": format!("DB error: {}", e) }))))?;
-
-    let _ = sqlx::query("DELETE FROM sessions WHERE user_id = $1")
-        .bind(id)
-        .execute(&pool)
-        .await;
+    let mut tx = pool.begin().await.map_err(admin_db_error)?;
+    let updated = sqlx::query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2")
+        .bind(&hash).bind(id).execute(&mut *tx).await.map_err(admin_db_error)?;
+    if updated.rows_affected() == 0 {
+        return Err((StatusCode::NOT_FOUND, Json(json!({"error":"User tidak ditemukan."}))));
+    }
+    sqlx::query("DELETE FROM sessions WHERE user_id = $1")
+        .bind(id).execute(&mut *tx).await.map_err(admin_db_error)?;
+    tx.commit().await.map_err(admin_db_error)?;
 
     Ok(Json(json!({ "success": true, "message": "Password user berhasil direset." })))
 }
@@ -220,6 +223,7 @@ pub async fn get_database_config(
         name: std::env::var("DB_NAME").unwrap_or_else(|_| "stt_db".to_string()),
         user: std::env::var("DB_USER").unwrap_or_else(|_| "postgres".to_string()),
         password: String::new(),
+        connect_options: None,
     });
     let connected = sqlx::query("SELECT 1").execute(&state.db_pool()).await.is_ok();
     Ok(Json(json!({
@@ -227,4 +231,25 @@ pub async fn get_database_config(
         "dbName": db.name, "dbUser": db.user, "connected": connected,
         "managedViaEnv": true
     })))
+}
+
+fn admin_db_error(error: sqlx::Error) -> (StatusCode, Json<serde_json::Value>) {
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error":format!("Database error: {error}")})))
+}
+fn validate_credentials(username: &str, password: &str, role: &str) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+    if username.trim().is_empty() || username.chars().count() > 100 || username.chars().any(char::is_control) || password.len() < 12 || !["user", "superadmin"].contains(&role) {
+        return Err((StatusCode::BAD_REQUEST, Json(json!({"error":"Username wajib diisi (maksimal 100 karakter), password minimal 12 karakter, dan role harus user atau superadmin."}))));
+    }
+    Ok(())
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn rejects_empty_accounts_weak_passwords_and_unknown_roles() {
+        assert!(validate_credentials("user", "long-password-123", "user").is_ok());
+        assert!(validate_credentials(" ", "long-password-123", "user").is_err());
+        assert!(validate_credentials("user", "123", "user").is_err());
+        assert!(validate_credentials("user", "long-password-123", "root").is_err());
+    }
 }

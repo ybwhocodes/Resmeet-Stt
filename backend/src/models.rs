@@ -59,6 +59,7 @@ pub struct TranscriptRecord {
     pub id: Uuid,
     pub user_id: Option<Uuid>,
     pub filename: String,
+    pub mom_title: Option<String>,
     pub final_text: String,
     pub created_at: NaiveDateTime,
     pub duration_s: Option<f32>,
@@ -82,6 +83,8 @@ pub struct ParaphraseRequest {
     pub style: Option<String>,
     pub model_id: Option<String>,
     pub custom_prompt: Option<String>,
+    #[serde(default)]
+    pub cleanup_transcript: bool,
 }
 
 #[derive(Debug, Deserialize)]

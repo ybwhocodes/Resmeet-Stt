@@ -9,12 +9,17 @@
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",
     "backend:check": "cd backend && cargo check",
-    "backend:dev": "cd backend && cargo run",
+    "backend:dev": "cd backend && APP_ROLE=all cargo run",
     "backend:build": "cd backend && cargo build --release",
     "frontend:dev": "cd frontend && npm run dev",
     "frontend:build": "cd frontend && npm run build",
-    "db:up": "docker compose up -d postgres",
-    "db:down": "docker compose down",
-    "db:logs": "docker compose logs -f postgres"
+    "db:up": "docker start postgres_db",
+    "db:down": "docker stop postgres_db",
+    "db:logs": "docker logs -f postgres_db",
+    "test": "npm test --prefix frontend",
+    "lint": "npm run lint --prefix frontend",
+    "backend:api": "cd backend && APP_ROLE=api cargo run",
+    "backend:worker": "cd backend && APP_ROLE=worker cargo run",
+    "backend:ai-worker": "cd backend && APP_ROLE=ai-worker cargo run"
   }
 }

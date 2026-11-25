@@ -29,11 +29,13 @@ if [ "${1:-}" == "--local" ] || [ "${1:-}" == "--native" ]; then
   echo -e "\n${YELLOW}=== MODE: LOCAL / NATIVE EXECUTION ===${NC}"
 
   # 1. Pastikan PostgreSQL aktif
-  echo -e "${YELLOW}[1/3] Menjalankan database PostgreSQL via Docker...${NC}"
-  (cd "$ROOT_DIR" && docker compose up -d postgres)
-
-  # Tunggu PostgreSQL siap
-  sleep 2
+  echo -e "${YELLOW}[1/3] Memeriksa koneksi database PostgreSQL (port 5433)...${NC}"
+  if ! docker ps --format '{{.Names}}' | grep -q "postgres_db"; then
+    echo -e "${YELLOW}Peringatan: Container 'postgres_db' tidak ditemukan aktif.${NC}"
+    echo -e "${YELLOW}Pastikan container database PostgreSQL Anda sudah berjalan di port 5433.${NC}"
+  else
+    echo -e "${GREEN}✓ Container postgres_db terdeteksi aktif.${NC}"
+  fi
 
   # 2. Build / Check Rust Backend
   echo -e "${YELLOW}[2/3] Memeriksa Rust Backend...${NC}"
@@ -42,19 +44,28 @@ if [ "${1:-}" == "--local" ] || [ "${1:-}" == "--native" ]; then
 
   BACKEND_PID=""
   FRONTEND_PID=""
+  WORKER_PID=""
+  AI_WORKER_PID=""
   cleanup() {
     echo -e "\n${YELLOW}Menghentikan background process...${NC}"
-    kill "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null || true
-    wait "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null || true
+    kill "$BACKEND_PID" "$FRONTEND_PID" "$WORKER_PID" "$AI_WORKER_PID" 2>/dev/null || true
+    wait "$BACKEND_PID" "$FRONTEND_PID" "$WORKER_PID" "$AI_WORKER_PID" 2>/dev/null || true
     echo -e "${GREEN}✓ Selesai.${NC}"
-    exit 0
   }
-  trap cleanup SIGINT SIGTERM EXIT
+  trap cleanup EXIT
+  trap 'exit 130' SIGINT
+  trap 'exit 143' SIGTERM
+
+  (cd "$BACKEND_DIR" && CARGO_BUILD_JOBS=2 cargo build --locked)
 
   # Jalankan Rust backend
   echo -e "${GREEN}Menjalankan Rust backend (http://127.0.0.1:8200)...${NC}"
-  (cd "$BACKEND_DIR" && cargo run) &
+  (cd "$BACKEND_DIR" && APP_ROLE=api exec "$CARGO_TARGET_DIR/debug/resmeet-backend") &
   BACKEND_PID=$!
+  (cd "$BACKEND_DIR" && APP_ROLE=worker exec "$CARGO_TARGET_DIR/debug/resmeet-backend") &
+  WORKER_PID=$!
+  (cd "$BACKEND_DIR" && APP_ROLE=ai-worker exec "$CARGO_TARGET_DIR/debug/resmeet-backend") &
+  AI_WORKER_PID=$!
 
   sleep 2
 
@@ -63,11 +74,11 @@ if [ "${1:-}" == "--local" ] || [ "${1:-}" == "--native" ]; then
   (cd "$FRONTEND_DIR" && npm run dev -- --host) &
   FRONTEND_PID=$!
 
-  wait
+  wait -n "$BACKEND_PID" "$FRONTEND_PID" "$WORKER_PID" "$AI_WORKER_PID"
 
 else
-  echo -e "\n${YELLOW}=== MODE: FULL DOCKER COMPOSE (RECOMMENDED) ===${NC}"
-  echo -e "${GREEN}Membangun dan menjalankan container: PostgreSQL, Rust Backend, Frontend...${NC}"
+  echo -e "\n${YELLOW}=== MODE: DOCKER COMPOSE ===${NC}"
+  echo -e "${GREEN}Membangun dan menjalankan container: Rust Backend, Frontend (DB: postgres_db)...${NC}"
 
   if ! command -v docker >/dev/null 2>&1; then
     echo -e "${RED}Error: Docker tidak ditemukan di sistem!${NC}"
@@ -75,6 +86,7 @@ else
     exit 1
   fi
 
+  export BUILDX_BUILDER="${BUILDX_BUILDER:-resmeet-builder}"
   cd "$ROOT_DIR"
   tar --exclude='._*' --exclude='target' --exclude='models' --exclude='uploads' \
     --exclude='transcripts_md' --exclude='src_ts' --exclude='*.db' \
@@ -83,5 +95,10 @@ else
     -C "$BACKEND_DIR" -cf - . | docker build -t resmeet-stt-backend -
   tar --exclude='._*' --exclude='node_modules' --exclude='dist' \
     -C "$FRONTEND_DIR" -cf - . | docker build -t resmeet-stt-frontend -
-  docker compose up --no-build "$@"
+  compose_options=()
+  if [ "${RESMEET_GPU:-auto}" != "off" ] && [ -c /dev/dri/renderD128 ]; then
+    compose_options=(-f docker-compose.yml -f docker-compose.gpu.yml)
+    echo -e "${GREEN}GPU render tersedia: pilihan CPU/GPU dapat diatur melalui Pengaturan.${NC}"
+  fi
+  docker compose "${compose_options[@]}" up --no-build "$@"
 fi

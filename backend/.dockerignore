@@ -1,7 +1,7 @@
 target/
 node_modules/
 src_ts/
-models/*.bin
+models/
 uploads/*
 transcripts_md/*
 .git/
@@ -17,3 +17,5 @@ resmeet.sqlite
 .DS_Store
 **/.DS_Store
 
+
+**/__pycache__/

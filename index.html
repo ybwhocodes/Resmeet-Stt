@@ -1,0 +1,1840 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Resmeet-STT | Dokumentasi Arsitektur &amp; Panduan Instalasi</title>
+  <meta name="description" content="Resmeet-STT: Sistem transkripsi rapat dan penyusunan notulen (MoM) berbasis Rust Axum, React 19, PostgreSQL, FFmpeg, dan Whisper large-v3-turbo." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-canvas: #0c0e14;
+      --bg-inset: #090b10;
+      --bg-surface: #151821;
+      --bg-surface-hover: #1b202c;
+      --border-subtle: #1e2330;
+      --border-strong: #313a4f;
+      --text-primary: #f8fafc;
+      --text-secondary: #cbd5e1;
+      --text-muted: #94a3b8;
+      --accent-indigo: #6366f1;
+      --accent-indigo-soft: #818cf8;
+      --accent-purple: #c084fc;
+      --status-ready: #10b981;
+      --status-warn: #f59e0b;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --font-sans: "Sora", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
+      line-height: 1.6;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--accent-indigo-soft);
+      outline-offset: 2px;
+    }
+
+    code, pre {
+      font-family: var(--font-mono);
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+
+    /* Header: single intentional frosted accent surface (dose cap R-10) */
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      background: rgba(12, 14, 20, 0.88);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .header-inner {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 14px 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: var(--text-primary);
+    }
+
+    .brand-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+
+    .brand-title span {
+      color: var(--accent-purple);
+    }
+
+    .brand-sub {
+      display: block;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    /* Primary Tab Bar */
+    .main-tabs {
+      display: inline-flex;
+      background: var(--bg-inset);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 4px;
+      gap: 4px;
+    }
+
+    .tab-btn {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: var(--font-sans);
+      font-size: 0.84rem;
+      font-weight: 600;
+      padding: 10px 16px;
+      min-height: 44px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: background-color 0.18s ease, color 0.18s ease;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-primary);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .tab-btn[aria-selected="true"] {
+      background: var(--accent-indigo);
+      color: #ffffff;
+    }
+
+    .header-links {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .nav-anchor {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.8rem;
+      font-weight: 500;
+      padding: 10px 12px;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      transition: border-color 0.18s ease, color 0.18s ease;
+    }
+
+    .nav-anchor:hover {
+      color: #ffffff;
+      border-color: var(--border-strong);
+    }
+
+    /* Main Layout */
+    main {
+      padding: 36px 0 72px;
+    }
+
+    .tab-panel {
+      display: none;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    /* Hero Section */
+    .hero {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 36px;
+      align-items: center;
+      padding: 20px 0 48px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      color: var(--accent-purple);
+      margin-bottom: 14px;
+    }
+
+    .hero-eyebrow::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--status-ready);
+    }
+
+    .hero h1 {
+      margin: 0 0 16px;
+      font-size: clamp(1.85rem, 3.6vw, 2.75rem);
+      font-weight: 700;
+      line-height: 1.15;
+      letter-spacing: -0.03em;
+      color: #ffffff;
+    }
+
+    .hero p.lead {
+      margin: 0 0 26px;
+      font-size: 1rem;
+      color: var(--text-secondary);
+      max-width: 58ch;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .btn-primary,
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 44px;
+      padding: 11px 20px;
+      border-radius: var(--radius-md);
+      font-family: var(--font-sans);
+      font-size: 0.88rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: transform 0.15s ease, background-color 0.18s ease, border-color 0.18s ease;
+    }
+
+    .btn-primary {
+      border: 0;
+      background: var(--accent-indigo);
+      color: #ffffff;
+      box-shadow: 0 10px 28px rgba(99, 102, 241, 0.25);
+    }
+
+    .btn-primary:hover {
+      background: #4f46e5;
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      border: 1px solid var(--border-strong);
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-surface-hover);
+      border-color: var(--accent-indigo-soft);
+    }
+
+    /* Interactive Pipeline Widget in Hero */
+    .pipeline-box {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+    }
+
+    .pipeline-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .pipeline-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .pipeline-hint {
+      font-size: 0.74rem;
+      color: var(--text-muted);
+    }
+
+    .stage-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .stage-btn {
+      width: 100%;
+      text-align: left;
+      background: var(--bg-inset);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      min-height: 44px;
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      transition: border-color 0.16s ease, background-color 0.16s ease;
+    }
+
+    .stage-btn:hover {
+      border-color: var(--border-strong);
+    }
+
+    .stage-btn[aria-pressed="true"] {
+      border-color: var(--accent-indigo);
+      background: rgba(99, 102, 241, 0.12);
+      color: #ffffff;
+    }
+
+    .stage-step {
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      color: var(--accent-indigo-soft);
+      margin-right: 8px;
+    }
+
+    .stage-name {
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .stage-tag {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .stage-detail {
+      margin-top: 14px;
+      padding: 14px;
+      border-radius: var(--radius-md);
+      background: var(--bg-inset);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .stage-detail h3 {
+      margin: 0 0 6px;
+      font-size: 0.9rem;
+      color: #ffffff;
+    }
+
+    .stage-detail p {
+      margin: 0 0 8px;
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+    }
+
+    .stage-detail code {
+      display: block;
+      font-size: 0.76rem;
+      color: var(--accent-purple);
+      background: rgba(192, 132, 252, 0.08);
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      overflow-x: auto;
+    }
+
+    /* Section Headings */
+    .section {
+      padding: 52px 0 0;
+    }
+
+    .section-head {
+      margin-bottom: 24px;
+      max-width: 68ch;
+    }
+
+    .section-kicker {
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      color: var(--accent-indigo-soft);
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    .section-head h2 {
+      margin: 0 0 8px;
+      font-size: clamp(1.35rem, 2.5vw, 1.85rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #ffffff;
+    }
+
+    .section-head p {
+      margin: 0;
+      font-size: 0.94rem;
+      color: var(--text-secondary);
+    }
+
+    /* Topology Architecture Section */
+    .topology-wrap {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 24px;
+      align-items: stretch;
+    }
+
+    .diagram-card,
+    .inspector-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+    }
+
+    .diagram-svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .topo-node {
+      cursor: pointer;
+    }
+
+    .topo-node rect {
+      transition: stroke 0.18s ease, fill 0.18s ease;
+    }
+
+    .topo-node:hover rect {
+      stroke: var(--accent-indigo-soft);
+    }
+
+    .topo-node.selected rect {
+      stroke: var(--accent-indigo);
+      stroke-width: 2.2;
+      fill: #1c2235;
+    }
+
+    .inspector-role {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--accent-purple);
+      margin-bottom: 6px;
+    }
+
+    .inspector-card h3 {
+      margin: 0 0 10px;
+      font-size: 1.15rem;
+      color: #ffffff;
+    }
+
+    .inspector-card p {
+      margin: 0 0 16px;
+      font-size: 0.87rem;
+      color: var(--text-secondary);
+    }
+
+    .spec-kv {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .spec-kv li {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border-subtle);
+      font-size: 0.82rem;
+    }
+
+    .spec-kv .k {
+      color: var(--text-muted);
+    }
+
+    .spec-kv .v {
+      color: #ffffff;
+      font-family: var(--font-mono);
+      text-align: right;
+    }
+
+    .node-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+
+    .node-pill {
+      appearance: none;
+      background: var(--bg-inset);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      border-radius: var(--radius-sm);
+      padding: 8px 11px;
+      min-height: 40px;
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      cursor: pointer;
+    }
+
+    .node-pill[aria-pressed="true"] {
+      border-color: var(--accent-indigo);
+      background: rgba(99, 102, 241, 0.16);
+      color: #ffffff;
+    }
+
+    /* Tables & Models */
+    .table-scroll {
+      overflow-x: auto;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 640px;
+      text-align: left;
+      font-size: 0.85rem;
+    }
+
+    th {
+      background: var(--bg-inset);
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 0.77rem;
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    td {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      vertical-align: top;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    td strong {
+      color: #ffffff;
+    }
+
+    /* Optimization List (asymmetric split, R-05 / R-14 variation) */
+    .opt-split {
+      display: grid;
+      grid-template-columns: 0.9fr 1.1fr;
+      gap: 24px;
+      margin-top: 24px;
+      align-items: start;
+    }
+
+    .opt-highlight {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+    }
+
+    .opt-highlight h3 {
+      margin: 0 0 10px;
+      font-size: 1.05rem;
+      color: #ffffff;
+    }
+
+    .opt-highlight p {
+      margin: 0 0 14px;
+      font-size: 0.86rem;
+      color: var(--text-secondary);
+    }
+
+    .opt-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .opt-item {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+    }
+
+    .opt-item-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+
+    .opt-item h4 {
+      margin: 0;
+      font-size: 0.9rem;
+      color: #ffffff;
+    }
+
+    .opt-item span.param {
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      color: var(--accent-purple);
+    }
+
+    .opt-item p {
+      margin: 0;
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+    }
+
+    /* Feature Showcase (varied hierarchy, not copy-paste cards) */
+    .feature-tracks {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    .track-panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+    }
+
+    .track-panel h3 {
+      margin: 0 0 6px;
+      font-size: 1.08rem;
+      color: #ffffff;
+    }
+
+    .track-panel > p {
+      margin: 0 0 18px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .feature-rows {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .feature-rows li {
+      padding: 12px 0;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .feature-rows strong {
+      display: block;
+      font-size: 0.88rem;
+      color: #ffffff;
+      margin-bottom: 3px;
+    }
+
+    .feature-rows span {
+      display: block;
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+    }
+
+    /* Tab 2: Installation Guide */
+    .install-mode-bar {
+      display: inline-flex;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 4px;
+      gap: 4px;
+      margin-bottom: 24px;
+    }
+
+    .subtab-btn {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: var(--font-sans);
+      font-size: 0.84rem;
+      font-weight: 600;
+      padding: 10px 16px;
+      min-height: 44px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+    }
+
+    .subtab-btn[aria-selected="true"] {
+      background: var(--accent-indigo);
+      color: #ffffff;
+    }
+
+    .install-panel {
+      display: none;
+    }
+
+    .install-panel.active {
+      display: block;
+    }
+
+    .step-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .step-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 20px 22px;
+    }
+
+    .step-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .step-num {
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      font-weight: 500;
+      color: #ffffff;
+      background: var(--accent-indigo);
+      padding: 3px 9px;
+      border-radius: 6px;
+    }
+
+    .step-card h3 {
+      margin: 0;
+      font-size: 1rem;
+      color: #ffffff;
+    }
+
+    .step-card p {
+      margin: 0 0 12px;
+      font-size: 0.86rem;
+      color: var(--text-secondary);
+    }
+
+    .code-wrap {
+      position: relative;
+      background: var(--bg-inset);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      padding-right: 92px;
+      overflow-x: auto;
+    }
+
+    .code-wrap pre {
+      margin: 0;
+      font-size: 0.78rem;
+      line-height: 1.55;
+      color: #e2e8f0;
+      white-space: pre;
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      min-height: 34px;
+      padding: 5px 11px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-strong);
+      background: var(--bg-surface);
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      font-size: 0.74rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .copy-btn:hover {
+      color: #ffffff;
+      border-color: var(--accent-indigo-soft);
+    }
+
+    .copy-btn.copied {
+      border-color: var(--status-ready);
+      color: var(--status-ready);
+    }
+
+    /* Accordion Troubleshooting */
+    .faq-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    details.diag-item {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 0;
+    }
+
+    details.diag-item summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 15px 18px;
+      min-height: 44px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #ffffff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    details.diag-item summary::-webkit-details-marker {
+      display: none;
+    }
+
+    details.diag-item summary::after {
+      content: "+";
+      font-family: var(--font-mono);
+      font-size: 1.1rem;
+      color: var(--accent-indigo-soft);
+    }
+
+    details.diag-item[open] summary::after {
+      content: "-";
+    }
+
+    .diag-body {
+      padding: 0 18px 16px;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      border-top: 1px solid var(--border-subtle);
+      padding-top: 12px;
+    }
+
+    .site-footer {
+      border-top: 1px solid var(--border-subtle);
+      padding: 28px 0 40px;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+
+    .footer-inner {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .footer-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .footer-links button {
+      background: none;
+      border: 0;
+      padding: 6px 0;
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      font-size: 0.8rem;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    .footer-links button:hover {
+      color: #ffffff;
+    }
+
+    @media (max-width: 920px) {
+      .hero,
+      .topology-wrap,
+      .opt-split,
+      .feature-tracks {
+        grid-template-columns: 1fr;
+      }
+
+      .header-links {
+        display: none;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .main-tabs {
+        width: 100%;
+      }
+
+      .tab-btn {
+        flex: 1;
+        text-align: center;
+        padding: 10px 8px;
+        font-size: 0.8rem;
+      }
+
+      .code-wrap {
+        padding-right: 16px;
+        padding-top: 48px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="#top" class="brand" id="top">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="38" height="38" aria-hidden="true">
+          <rect x="24" y="24" width="208" height="208" rx="52" fill="#18181B" stroke="#313a4f" stroke-width="6" />
+          <line x1="66" y1="102" x2="66" y2="154" stroke="#A78BFA" stroke-width="10" stroke-linecap="round" />
+          <line x1="86" y1="80" x2="86" y2="176" stroke="#C084FC" stroke-width="10" stroke-linecap="round" />
+          <line x1="106" y1="62" x2="106" y2="194" stroke="#E879F9" stroke-width="10" stroke-linecap="round" />
+          <circle cx="130" cy="128" r="6" fill="#F43F5E" />
+          <rect x="146" y="82" width="48" height="10" rx="5" fill="#FFFFFF" />
+          <rect x="146" y="106" width="38" height="10" rx="5" fill="#FFFFFF" />
+          <rect x="146" y="130" width="50" height="10" rx="5" fill="#E879F9" />
+          <rect x="146" y="154" width="28" height="10" rx="5" fill="#A78BFA" />
+        </svg>
+        <div>
+          <span class="brand-title">Res<span>meet</span>-STT</span>
+          <span class="brand-sub">Enterprise Speech-to-Text &amp; Notulen Rapat</span>
+        </div>
+      </a>
+
+      <div class="main-tabs" role="tablist" aria-label="Navigasi Dokumentasi Resmeet-STT">
+        <button
+          type="button"
+          class="tab-btn"
+          id="tab-overview"
+          role="tab"
+          aria-selected="true"
+          aria-controls="panel-overview"
+          data-tab="overview"
+        >
+          1. Overview &amp; Arsitektur
+        </button>
+        <button
+          type="button"
+          class="tab-btn"
+          id="tab-install"
+          role="tab"
+          aria-selected="false"
+          aria-controls="panel-install"
+          data-tab="install"
+        >
+          2. Cara Instalasi Lengkap
+        </button>
+      </div>
+
+      <nav class="header-links" aria-label="Tautan Bagian">
+        <a href="#topology" class="nav-anchor" data-jump-tab="overview">Topologi</a>
+        <a href="#models" class="nav-anchor" data-jump-tab="overview">Model &amp; Optimasi</a>
+        <a href="#features" class="nav-anchor" data-jump-tab="overview">Fitur</a>
+        <a href="#gitignore-prep" class="nav-anchor" data-jump-tab="install">Persiapan Git</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- ===================================================================== -->
+    <!-- TAB 1: OVERVIEW, TOPOLOGI, MODEL & FITUR                              -->
+    <!-- ===================================================================== -->
+    <section
+      id="panel-overview"
+      class="tab-panel active"
+      role="tabpanel"
+      aria-labelledby="tab-overview"
+    >
+      <div class="hero">
+        <div>
+          <span class="hero-eyebrow">Self-Hosted Speech-to-Text &amp; Meeting Notetaker</span>
+          <h1>Transkripsi Rapat Presisi Tinggi dengan Kontrol Penuh di Server Anda</h1>
+          <p class="lead">
+            Resmeet-STT menggabungkan backend <strong>Rust (Axum + Tokio)</strong>, frontend
+            <strong>React 19</strong>, antrean persisten <strong>PostgreSQL</strong>, dan mesin
+            <strong>Whisper large-v3-turbo</strong> untuk mengubah rekaman rapat menjadi transkrip dialog,
+            dokumen DOCX siap cetak, dan peta pikiran Markmap.
+          </p>
+          <div class="hero-actions">
+            <button type="button" class="btn-primary" id="cta-to-install">
+              Buka Panduan Instalasi
+            </button>
+            <a href="#topology" class="btn-secondary">
+              Telusuri Topologi Arsitektur
+            </a>
+          </div>
+        </div>
+
+        <aside class="pipeline-box" aria-label="Alur Pemrosesan Audio Resmeet-STT">
+          <div class="pipeline-header">
+            <span class="pipeline-title">Alur Pemrosesan Audio</span>
+            <span class="pipeline-hint">Klik tahap untuk detail</span>
+          </div>
+
+          <div class="stage-list" id="pipeline-stages">
+            <button type="button" class="stage-btn" aria-pressed="true" data-stage="0">
+              <span><span class="stage-step">01</span>Unggah atau Rekam Langsung</span>
+              <span class="stage-tag">HTTP 202 Queue</span>
+            </button>
+            <button type="button" class="stage-btn" aria-pressed="false" data-stage="1">
+              <span><span class="stage-step">02</span>Normalisasi &amp; Filter Suara FFmpeg</span>
+              <span class="stage-tag">16kHz Mono</span>
+            </button>
+            <button type="button" class="stage-btn" aria-pressed="false" data-stage="2">
+              <span><span class="stage-step">03</span>Pemotongan Jeda Napas &amp; Silero VAD</span>
+              <span class="stage-tag">45s Chunks</span>
+            </button>
+            <button type="button" class="stage-btn" aria-pressed="false" data-stage="3">
+              <span><span class="stage-step">04</span>Inferensi Paralel GPU Vulkan / CPU</span>
+              <span class="stage-tag">large-v3-turbo</span>
+            </button>
+            <button type="button" class="stage-btn" aria-pressed="false" data-stage="4">
+              <span><span class="stage-step">05</span>Perapian AI Opsional, DOCX &amp; Markmap</span>
+              <span class="stage-tag">A4 &amp; Mindmap</span>
+            </button>
+          </div>
+
+          <div class="stage-detail" id="pipeline-detail" aria-live="polite">
+            <h3>01. Unggah Streaming &amp; Antrean PostgreSQL</h3>
+            <p>Audio/video (MP3, WAV, M4A, MP4, MPEG, WEBM, OGG, FLAC) diunggah ke API dan langsung dicatat ke tabel <code>transcription_jobs</code> dengan status HTTP 202 tanpa memblokir browser.</p>
+            <code>POST /api/upload-and-transcribe?background=true</code>
+          </div>
+        </aside>
+      </div>
+
+      <!-- Topologi Arsitektur -->
+      <section class="section" id="topology">
+        <div class="section-head">
+          <span class="section-kicker">01 / TOPOLOGI ARSITEKTUR</span>
+          <h2>Empat Service Container dan Satu Database Persisten</h2>
+          <p>
+            Setiap peran dipisahkan agar API tetap responsif saat proses transkripsi audio panjang maupun
+            pembuatan notulen AI berjalan di latar belakang. Klik komponen pada diagram untuk melihat detailnya.
+          </p>
+        </div>
+
+        <div class="topology-wrap">
+          <div class="diagram-card">
+            <svg class="diagram-svg" viewBox="0 0 680 390" role="img" aria-label="Diagram Topologi Arsitektur Resmeet-STT">
+              <defs>
+                <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#6366f1" />
+                </marker>
+              </defs>
+
+              <!-- Connections -->
+              <path d="M 180 75 L 250 75" stroke="#6366f1" stroke-width="2" fill="none" marker-end="url(#arrow)" />
+              <path d="M 355 115 L 355 168" stroke="#6366f1" stroke-width="2" fill="none" marker-end="url(#arrow)" />
+              <path d="M 255 215 L 185 268" stroke="#6366f1" stroke-width="2" fill="none" marker-end="url(#arrow)" />
+              <path d="M 455 215 L 525 268" stroke="#6366f1" stroke-width="2" fill="none" marker-end="url(#arrow)" />
+              <path d="M 190 318 L 485 318" stroke="#313a4f" stroke-width="1.5" stroke-dasharray="5 5" fill="none" />
+
+              <!-- Node: Frontend -->
+              <g class="topo-node selected" data-node="frontend" tabindex="0" role="button" aria-label="Pilih node resmeet_frontend">
+                <rect x="20" y="32" width="160" height="86" rx="12" fill="#0c0e14" stroke="#313a4f" stroke-width="1.5" />
+                <text x="36" y="58" fill="#c084fc" font-family="DM Mono, monospace" font-size="11">PORT 5173</text>
+                <text x="36" y="80" fill="#ffffff" font-family="Sora, sans-serif" font-size="14" font-weight="700">resmeet_frontend</text>
+                <text x="36" y="100" fill="#94a3b8" font-family="Sora, sans-serif" font-size="11">React 19 + Nginx Proxy</text>
+              </g>
+
+              <!-- Node: Backend API -->
+              <g class="topo-node" data-node="backend" tabindex="0" role="button" aria-label="Pilih node resmeet_backend">
+                <rect x="255" y="32" width="200" height="86" rx="12" fill="#0c0e14" stroke="#313a4f" stroke-width="1.5" />
+                <text x="271" y="58" fill="#818cf8" font-family="DM Mono, monospace" font-size="11">APP_ROLE=api · :8200</text>
+                <text x="271" y="80" fill="#ffffff" font-family="Sora, sans-serif" font-size="14" font-weight="700">resmeet_backend</text>
+                <text x="271" y="100" fill="#94a3b8" font-family="Sora, sans-serif" font-size="11">Rust Axum Auth &amp; Queue</text>
+              </g>
+
+              <!-- Node: PostgreSQL -->
+              <g class="topo-node" data-node="postgres" tabindex="0" role="button" aria-label="Pilih node postgres_db">
+                <rect x="235" y="172" width="240" height="84" rx="12" fill="#0c0e14" stroke="#313a4f" stroke-width="1.5" />
+                <text x="251" y="198" fill="#10b981" font-family="DM Mono, monospace" font-size="11">PORT 5433 · stt_db</text>
+                <text x="251" y="220" fill="#ffffff" font-family="Sora, sans-serif" font-size="14" font-weight="700">postgres_db</text>
+                <text x="251" y="240" fill="#94a3b8" font-family="Sora, sans-serif" font-size="11">Job Lock, Checkpoint &amp; Vault</text>
+              </g>
+
+              <!-- Node: STT Worker -->
+              <g class="topo-node" data-node="worker" tabindex="0" role="button" aria-label="Pilih node resmeet_worker">
+                <rect x="20" y="272" width="215" height="92" rx="12" fill="#0c0e14" stroke="#313a4f" stroke-width="1.5" />
+                <text x="36" y="298" fill="#818cf8" font-family="DM Mono, monospace" font-size="11">APP_ROLE=worker · 4 CPU</text>
+                <text x="36" y="320" fill="#ffffff" font-family="Sora, sans-serif" font-size="14" font-weight="700">resmeet_worker</text>
+                <text x="36" y="340" fill="#94a3b8" font-family="Sora, sans-serif" font-size="11">FFmpeg + Vulkan GPU / Whisper</text>
+              </g>
+
+              <!-- Node: AI Worker -->
+              <g class="topo-node" data-node="aiworker" tabindex="0" role="button" aria-label="Pilih node resmeet_ai_worker">
+                <rect x="445" y="272" width="215" height="92" rx="12" fill="#0c0e14" stroke="#313a4f" stroke-width="1.5" />
+                <text x="461" y="298" fill="#c084fc" font-family="DM Mono, monospace" font-size="11">APP_ROLE=ai-worker</text>
+                <text x="461" y="320" fill="#ffffff" font-family="Sora, sans-serif" font-size="14" font-weight="700">resmeet_ai_worker</text>
+                <text x="461" y="340" fill="#94a3b8" font-family="Sora, sans-serif" font-size="11">Perapian Teks &amp; MoM (Opsional)</text>
+              </g>
+            </svg>
+          </div>
+
+          <div class="inspector-card">
+            <div class="node-pills" aria-label="Pilih Komponen Arsitektur">
+              <button type="button" class="node-pill" aria-pressed="true" data-node="frontend">frontend</button>
+              <button type="button" class="node-pill" aria-pressed="false" data-node="backend">backend</button>
+              <button type="button" class="node-pill" aria-pressed="false" data-node="postgres">postgres</button>
+              <button type="button" class="node-pill" aria-pressed="false" data-node="worker">worker</button>
+              <button type="button" class="node-pill" aria-pressed="false" data-node="aiworker">ai-worker</button>
+            </div>
+
+            <div id="topo-inspector" aria-live="polite">
+              <div class="inspector-role">WEB UI &amp; REVERSE PROXY</div>
+              <h3>resmeet_frontend</h3>
+              <p>Menyajikan aplikasi React 19 + Tailwind CSS melalui Nginx. Seluruh permintaan <code>/api</code> dan WebSocket diteruskan otomatis ke container backend tanpa konfigurasi CORS rumit.</p>
+              <ul class="spec-kv">
+                <li><span class="k">Teknologi</span><span class="v">React 19 + Vite + Nginx</span></li>
+                <li><span class="k">Port Publik</span><span class="v">5173</span></li>
+                <li><span class="k">Editor Notulen</span><span class="v">@docx-editor.dev + Markmap</span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Model & Optimasi -->
+      <section class="section" id="models">
+        <div class="section-head">
+          <span class="section-kicker">02 / MODEL &amp; OPTIMASI PERFORMA</span>
+          <h2>Akurasi Whisper large-v3-turbo dengan Pipeline Tanpa Penurunan Kualitas</h2>
+          <p>
+            Resmeet mempertahankan bobot model <strong>large-v3-turbo</strong> secara penuh tanpa menurunkan
+            ukuran model ke base atau small, sambil mempercepat eksekusi melalui pemangkasan keheningan dan paralelisasi.
+          </p>
+        </div>
+
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Komponen Model</th>
+                <th>File / Direktori</th>
+                <th>Peran di Pipeline</th>
+                <th>Target Eksekusi</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Whisper large-v3-turbo (GGML Q5_0)</strong></td>
+                <td><code>backend/models/ggml-large-v3-turbo-q5_0.bin</code></td>
+                <td>Mesin transkripsi utama berkecepatan tinggi dengan akurasi multibahasa dan Indonesia</td>
+                <td>GPU Vulkan (<code>/dev/dri/renderD128</code>) sebagai default atau CPU fallback</td>
+              </tr>
+              <tr>
+                <td><strong>Silero VAD v6.2.0</strong></td>
+                <td><code>backend/models/ggml-silero-v6.2.0.bin</code></td>
+                <td>Mendeteksi segmen ucapan vs keheningan sebelum decoder berjalan</td>
+                <td>Aktif di dalam <code>whisper-server</code> dan <code>faster-whisper</code></td>
+              </tr>
+              <tr>
+                <td><strong>Faster-Whisper large-v3-turbo (INT8)</strong></td>
+                <td><code>backend/models/faster-whisper-large-v3-turbo/</code></td>
+                <td>Mesin cadangan CTranslate2 INT8 ketika perangkat GPU Vulkan tidak tersedia</td>
+                <td>CPU Multi-thread (<code>CPU_THREADS=6</code>)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="opt-split">
+          <div class="opt-highlight">
+            <h3>Prinsip Optimasi Tanpa Kompromi Kualitas</h3>
+            <p>
+              Alih-alih mengganti ke model yang lebih kecil, percepatan dilakukan pada bagian yang tidak
+              membawa informasi ucapan: membuang keheningan panjang, menghilangkan pengulangan decoding
+              saat audio sunyi, membersihkan noise rendah/tinggi sebelum masuk encoder, dan memproses
+              dua potongan audio secara bersamaan.
+            </p>
+            <p>
+              Saat GPU render node (<code>/dev/dri/renderD128</code>) terdeteksi melalui driver Vulkan
+              (<code>libggml-vulkan.so</code>), sistem otomatis menetapkan GPU sebagai perangkat default
+              dengan opsi CPU tetap siap di Pengaturan.
+            </p>
+          </div>
+
+          <div class="opt-list">
+            <div class="opt-item">
+              <div class="opt-item-head">
+                <h4>1. Pemangkasan Hening Agresif (Silero VAD)</h4>
+                <span class="param">-vt 0.50 · -vsd 100 · -vspd 250</span>
+              </div>
+              <p>Melewati segmen diam sehingga Whisper hanya memproses ucapan aktif sambil tetap mempertahankan padding 50 ms agar ujung kata tidak terpotong.</p>
+            </div>
+
+            <div class="opt-item">
+              <div class="opt-item-head">
+                <h4>2. Non-Fallback Decoding</h4>
+                <span class="param">-nf · temperature=0.0</span>
+              </div>
+              <p>Menghentikan loop re-decoding berulang saat menemui jeda nafas atau batuk sehingga waktu proses tidak membengkak.</p>
+            </div>
+
+            <div class="opt-item">
+              <div class="opt-item-head">
+                <h4>3. Chunking 45 Detik Berbasis Jeda Napas</h4>
+                <span class="param">STT_CHUNK_SECONDS=45</span>
+              </div>
+              <p>Mencari titik sunyi terdekat (<code>silencedetect=noise=-35dB:d=0.3</code>) di sekitar detik ke-45 dengan overlap aman +-0.5 detik.</p>
+            </div>
+
+            <div class="opt-item">
+              <div class="opt-item-head">
+                <h4>4. Pembersih Frekuensi Audio FFmpeg</h4>
+                <span class="param">highpass=80 · lowpass=7500 · afftdn</span>
+              </div>
+              <p>Menghilangkan gemuruh AC, dengung mic, dan desis statis sebelum sinyal masuk ke model Whisper.</p>
+            </div>
+
+            <div class="opt-item">
+              <div class="opt-item-head">
+                <h4>5. Paralelisasi Pool Inferensi</h4>
+                <span class="param">STT_CONCURRENCY=2 · EnginePool</span>
+              </div>
+              <p>Ekstraksi chunk audio dan inferensi berjalan paralel di <code>pipeline.rs</code> dengan checkpoint atomik ke PostgreSQL.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Fitur Utama -->
+      <section class="section" id="features">
+        <div class="section-head">
+          <span class="section-kicker">03 / FITUR UTAMA APLIKASI</span>
+          <h2>Alur Lengkap dari Rekaman Suara hingga Dokumen Resmi</h2>
+          <p>
+            Seluruh modul dirancang agar hasil transkrip mentah, dokumen yang dirapikan AI, serta riwayat
+            pekerjaan tetap aman dan dapat ditinjau ulang kapan saja.
+          </p>
+        </div>
+
+        <div class="feature-tracks">
+          <div class="track-panel">
+            <h3>Alur Audio &amp; Keandalan Sistem</h3>
+            <p>Fondasi pemrosesan file besar dan kontrol kesiapan sebelum job dimulai.</p>
+            <ul class="feature-rows">
+              <li>
+                <strong>Preflight Gate &amp; Diagnosa Otomatis</strong>
+                <span>Mengunci tombol transkripsi jika worker, PostgreSQL, FFmpeg, model, atau folder upload belum siap, lengkap dengan penyebab dan langkah perbaikan.</span>
+              </li>
+              <li>
+                <strong>Rekam Mikrofon &amp; Multi-Format Upload</strong>
+                <span>Mendukung unggahan MP3, WAV, M4A, OGG, FLAC, WEBM, MP4, MPEG, MPG, MPE, dan MPGA dengan ekstraksi suara otomatis dari video.</span>
+              </li>
+              <li>
+                <strong>Checkpoint per Chunk &amp; Live Preview</strong>
+                <span>Hasil tiap potongan 45 detik langsung disimpan ke <code>transcription_chunks</code> sehingga progres dapat dipantau real-time dan dilanjutkan otomatis jika restart.</span>
+              </li>
+              <li>
+                <strong>Sakelar GPU Vulkan / CPU Per Akun</strong>
+                <span>Deteksi otomatis GPU render node sebagai pilihan utama dengan opsi fallback CPU INT8 pada menu Pengaturan.</span>
+              </li>
+            </ul>
+          </div>
+
+          <div class="track-panel">
+            <h3>Notulen, Dokumen &amp; Kolaborasi</h3>
+            <p>Alat penyuntingan dan penyajian hasil rapat untuk tim dan pimpinan.</p>
+            <ul class="feature-rows">
+              <li>
+                <strong>Sakelar Model AI ON / OFF Opsional</strong>
+                <span>Transkrip asli Whisper selalu tersimpan. Saat AI diaktifkan, worker terpisah merapikan ejaan tanpa mengubah makna serta menyusun MoM terstruktur.</span>
+              </li>
+              <li>
+                <strong>Editor DOCX Native Standar A4</strong>
+                <span>Menyunting dokumen MoM langsung di browser melalui <code>@docx-editor.dev</code>, mendukung unduhan file <code>.docx</code>, cetak PDF, dan judul MoM kustom.</span>
+              </li>
+              <li>
+                <strong>Peta Pikiran Interaktif (Markmap)</strong>
+                <span>Menyajikan struktur topik dan keputusan rapat sebagai diagram mindmap interaktif yang dapat dieksplorasi.</span>
+              </li>
+              <li>
+                <strong>Tautan Publik, Multi-User &amp; Enkripsi AES-256-GCM</strong>
+                <span>Bagikan MoM secara read-only, kelola akun Superadmin/User dengan autentikasi PBKDF2, serta amankan API Key Gateway AI di database.</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- TAB 2: CARA INSTALASI LENGKAP                                         -->
+    <!-- ===================================================================== -->
+    <section
+      id="panel-install"
+      class="tab-panel"
+      role="tabpanel"
+      aria-labelledby="tab-install"
+    >
+      <div class="section-head">
+        <span class="section-kicker">PANDUAN INSTALASI &amp; KONFIGURASI</span>
+        <h2>Menjalankan Resmeet-STT di Docker maupun Lokal Tanpa Docker</h2>
+        <p>
+          Pilih metode deployment yang sesuai dengan mesin Anda. Kedua script startup
+          (<code>start-docker.sh</code> dan <code>start-non-docker.sh</code>) sudah dilengkapi
+          pemeriksaan prasyarat otomatis dan rekomendasi perbaikan jika ada komponen yang kurang.
+        </p>
+      </div>
+
+      <!-- Bagian Persiapan File yang Tidak Di-upload ke Git -->
+      <section class="section" id="gitignore-prep" style="padding-top: 12px;">
+        <div class="section-head">
+          <span class="section-kicker">PERSIAPAN FILE DI LUAR GIT (.gitignore)</span>
+          <h2>Berkas yang Wajib Disiapkan Secara Lokal</h2>
+          <p>
+            Demi keamanan kredensial dan ukuran repositori, beberapa file penting sengaja dikecualikan di
+            <code>.gitignore</code>. Siapkan berkas berikut sebelum menjalankan aplikasi.
+          </p>
+        </div>
+
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Path Lokal (Di-ignore Git)</th>
+                <th>Fungsi</th>
+                <th>Cara Menyiapkan Sendiri</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>.env</code></td>
+                <td>Konfigurasi Docker Compose (DB, CPU limit, chunk 45s, concurrency)</td>
+                <td>Salin dari template: <code>cp .env.example .env</code> lalu sesuaikan password PostgreSQL.</td>
+              </tr>
+              <tr>
+                <td><code>backend/.env</code></td>
+                <td>Konfigurasi runtime lokal untuk <code>start-non-docker.sh</code></td>
+                <td>Salin dari template: <code>cp backend/.env.example backend/.env</code> (pastikan <code>DB_HOST=127.0.0.1</code>).</td>
+              </tr>
+              <tr>
+                <td><code>frontend/.env</code></td>
+                <td>Override URL API Vite jika API beda origin (opsional)</td>
+                <td>Salin dari template: <code>cp frontend/.env.example frontend/.env</code>.</td>
+              </tr>
+              <tr>
+                <td><code>backend/models/*.bin</code></td>
+                <td>Bobot model Whisper <code>large-v3-turbo</code> (548 MB) &amp; Silero VAD</td>
+                <td>Unduh via <code>curl</code> atau <code>backend/scripts/download_models.py</code> ke folder <code>backend/models/</code>.</td>
+              </tr>
+              <tr>
+                <td><code>backend/uploads/</code> &amp; <code>backend/transcripts_md/</code></td>
+                <td>Penyimpanan sementara audio upload dan ekspor Markdown</td>
+                <td>Folder sudah tersedia via <code>.gitkeep</code>; pastikan writable (<code>chmod -R u+rwX</code>).</td>
+              </tr>
+              <tr>
+                <td><code>backend/.db_secret.key</code></td>
+                <td>Kunci enkripsi AES-256-GCM API Key AI (atau volume <code>resmeet_backend_config</code>)</td>
+                <td>Dibuat otomatis saat backend pertama kali berjalan; cadangkan bersama database.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Mode Switcher: Docker vs Non-Docker -->
+      <section class="section">
+        <div class="section-head">
+          <span class="section-kicker">LANGKAH INSTALASI</span>
+          <h2>Pilih Mode Eksekusi</h2>
+        </div>
+
+        <div class="install-mode-bar" role="tablist" aria-label="Pilih Mode Instalasi">
+          <button
+            type="button"
+            class="subtab-btn"
+            id="subtab-docker"
+            role="tab"
+            aria-selected="true"
+            aria-controls="install-docker"
+            data-subtab="docker"
+          >
+            Mode Docker (Direkomendasikan)
+          </button>
+          <button
+            type="button"
+            class="subtab-btn"
+            id="subtab-nondocker"
+            role="tab"
+            aria-selected="false"
+            aria-controls="install-nondocker"
+            data-subtab="nondocker"
+          >
+            Mode Lokal Tanpa Docker (Native)
+          </button>
+        </div>
+
+        <!-- PANEL DOCKER -->
+        <div id="install-docker" class="install-panel active" role="tabpanel" aria-labelledby="subtab-docker">
+          <div class="step-stack">
+            <article class="step-card">
+              <div class="step-meta">
+                <span class="step-num">LANGKAH 1</span>
+                <h3>Clone Repositori &amp; Siapkan File Environment (.env)</h3>
+              </div>
+              <p>Pastikan Docker Engine, Docker Compose v2, dan PostgreSQL sudah tersedia. Salin <code>.env.example</code> menjadi <code>.env</code>.</p>
+              <div class="code-wrap">
+                <button type="button" class="copy-btn" data-copy>Salin</button>
+                <pre>git clone &lt;url-repositori-resmeet-stt&gt; Resmeet-Stt
+cd Resmeet-Stt
+cp .env.example .env</pre>
+              </div>
+            </article>
+
+            <article class="step-card">
+              <div class="step-meta">
+                <span class="step-num">LANGKAH 2</span>
+                <h3>Siapkan Database PostgreSQL di Port 5433</h3>
+              </div>
+              <p>Jika belum memiliki instance PostgreSQL berjalan, buat container PostgreSQL dengan database <code>stt_db</code>.</p>
+              <div class="code-wrap">
+                <button type="button" class="copy-btn" data-copy>Salin</button>
+                <pre>docker run -d --name postgres_db \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=password \
+  -e POSTGRES_DB=stt_db \
+  -p 5433:5432 \
+  postgres:16</pre>
+              </div>
+            </article>
+
+            <article class="step-card">
+              <div class="step-meta">
+                <span class="step-num">LANGKAH 3</span>
+                <h3>Unduh Model Whisper large-v3-turbo &amp; Silero VAD</h3>
+              </div>
+              <p>Model tidak disimpan di Git karena ukurannya besar. Unduh kedua file berikut ke <code>backend/models/</code>.</p>
+              <div class="code-wrap">
+                <button type="button" class="copy-btn" data-copy>Salin</button>
+                <pre>mkdir -p backend/models
+curl -L -o backend/models/ggml-large-v3-turbo-q5_0.bin \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin
+curl -L -o backend/models/ggml-silero-v6.2.0.bin \
+  https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin</pre>
+              </div>
+            </article>
+
+            <article class="step-card">
+              <div class="step-meta">
+                <span class="step-num">LANGKAH 4</span>
+                <h3>Jalankan dengan start-docker.sh</h3>
+              </div>
+              <p>Script akan mengaudit <code>.env</code>, Docker daemon, PostgreSQL, file model, GPU Vulkan <code>/dev/dri/renderD128</code>, lalu memverifikasi <code>/api/preflight</code> secara otomatis.</p>
+              <div class="code-wrap">
+                <button type="button" class="copy-btn" data-copy>Salin</button>
+                <pre>chmod +x start-docker.sh
+./start-docker.sh --build</pre>
+              </div>
+            </article>
+
+            <article class="step-card">
+              <div class="step-meta">
+                <span class="step-num">LANGKAH 5</span>
+                <h3>Buka Aplikasi &amp; Buat Akun Superadmin</h3>
+              </div>
+              <p>Akses <code>http://localhost:5173</code>. Pada database kosong, isi pop-up setup awal dengan password minimal 12 karakter, lalu cek badge status hijau <strong>Ready</strong> di kiri atas.</p>
+              <div class="code-wrap">
+                <button type="button" class="copy-btn" data-copy>Salin</button>
+                <pre>curl -s http://localhost:8200/api/preflight
+# Untuk menghentikan seluruh container:
+./start-docker.sh --down</pre>
+              </div>
+            </article>
+          </div>
+        </div>
+
+        <!-- PANEL NON-DOCKER -->
+        <div id="install-nondocker" class="install-panel" role="tabpanel" aria-labelledby="subtab-nondocker">
+          <div class="step-stack">
+            <article class="step-card">
+              <div class="step-meta">
+                <span class="step-num">LANGKAH 1</span>
+                <h3>Pasang Dependensi Sistem (Rust, Node.js, FFmpeg, Compiler)</h3>
+              </div>
+              <p>Mode native mengompilasi backend Rust langsung di host dan menjalankan Vite frontend tanpa container aplikasi.</p>
+              <div class="code-wrap">
+                <button type="button" class="copy-btn" data-copy>Salin</button>
+                <pre>sudo apt update
+sudo apt install -y build-essential pkg-config libssl-dev ffmpeg curl git python3 python3-venv
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+# Pastikan Node.js v20+ / v22 LTS dan PostgreSQL (port 5432 atau 5433) aktif</pre>
+              </div>
+            </article>
+
+            <article class="step-card">
+              <div class="step-meta">
+                <span class="step-num">LANGKAH 2</span>
+                <h3>Siapkan Mesin Inferensi Whisper (Pilih Vulkan GPU atau CPU INT8)</h3>
+              </div>
+              <p>Anda dapat mengompilasi <code>whisper-server</code> (mendukung GPU Vulkan/CPU) atau menggunakan venv Python <code>faster-whisper</code>.</p>
+              <div class="code-wrap">
+                <button type="button" class="copy-btn" data-copy>Salin</button>
+                <pre># Opsi A: Kompilasi whisper-server (tambahkan -DGGML_VULKAN=1 jika ada GPU Vulkan)
+git clone https://github.com/ggml-org/whisper.cpp /tmp/whisper.cpp
+cmake -S /tmp/whisper.cpp -B /tmp/whisper.cpp/build -DGGML_VULKAN=1
+cmake --build /tmp/whisper.cpp/build -j"$(nproc)" --target whisper-server
+sudo cp /tmp/whisper.cpp/build/bin/whisper-server /usr/local/bin/
+
+# Opsi B: Faster-Whisper CPU INT8 via virtualenv
+python3 -m venv backend/.venv
+backend/.venv/bin/pip install faster-whisper==1.2.1 av==18.1.0</pre>
+              </div>
+            </article>
+
+            <article class="step-card">
+              <div class="step-meta">
+                <span class="step-num">LANGKAH 3</span>
+                <h3>Siapkan backend/.env &amp; Unduh Model ke backend/models/</h3>
+              </div>
+              <p>Pastikan <code>DB_HOST=127.0.0.1</code> di <code>backend/.env</code> (bukan <code>host.docker.internal</code>).</p>
+              <div class="code-wrap">
+                <button type="button" class="copy-btn" data-copy>Salin</button>
+                <pre>cp backend/.env.example backend/.env
+mkdir -p backend/models backend/uploads backend/transcripts_md
+curl -L -o backend/models/ggml-large-v3-turbo-q5_0.bin \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin
+curl -L -o backend/models/ggml-silero-v6.2.0.bin \
+  https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin</pre>
+              </div>
+            </article>
+
+            <article class="step-card">
+              <div class="step-meta">
+                <span class="step-num">LANGKAH 4</span>
+                <h3>Jalankan Aplikasi dengan start-non-docker.sh</h3>
+              </div>
+              <p>Script memeriksa Rust, Node, FFmpeg, Whisper, model, koneksi PostgreSQL, dan port 8200/5173 sebelum memulai 4 proses lokal (API, Worker, AI-Worker, Vite).</p>
+              <div class="code-wrap">
+                <button type="button" class="copy-btn" data-copy>Salin</button>
+                <pre>chmod +x start-non-docker.sh
+./start-non-docker.sh</pre>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- Troubleshooting Preflight -->
+      <section class="section">
+        <div class="section-head">
+          <span class="section-kicker">DIAGNOSA &amp; TROUBLESHOOTING</span>
+          <h2>Penanganan Status "Transkripsi Belum Dapat Dimulai"</h2>
+          <p>
+            Jika sistem menampilkan komponen belum siap pada UI atau saat menjalankan script startup,
+            periksa penyebab spesifik berikut.
+          </p>
+        </div>
+
+        <div class="faq-list">
+          <details class="diag-item">
+            <summary>Worker Transkripsi berstatus Belum Siap (transcriptionWorker: false)</summary>
+            <div class="diag-body">
+              Worker belum mengirim heartbeat aktif ke tabel <code>worker_heartbeats</code> atau container worker mati.
+              Jalankan <code>docker compose up -d worker</code> atau periksa log via <code>docker logs resmeet_worker --tail 40</code>.
+            </div>
+          </details>
+
+          <details class="diag-item">
+            <summary>PostgreSQL Database gagal terhubung (database: false)</summary>
+            <div class="diag-body">
+              Pastikan container <code>postgres_db</code> berjalan pada port <code>5433</code> dan database <code>stt_db</code> tersedia.
+              Untuk mode Docker gunakan <code>DB_HOST=host.docker.internal</code> di <code>.env</code>; untuk mode non-Docker gunakan <code>DB_HOST=127.0.0.1</code> di <code>backend/.env</code>.
+            </div>
+          </details>
+
+          <details class="diag-item">
+            <summary>Model Whisper GGML belum terdeteksi (whisperModel: false)</summary>
+            <div class="diag-body">
+              Pastikan file bobot model sesuai <code>WHISPER_MODEL</code> (default <code>ggml-large-v3-turbo-q5_0.bin</code>)
+              tersedia dan tidak kosong di folder <code>backend/models/</code>.
+            </div>
+          </details>
+
+          <details class="diag-item">
+            <summary>Port 8200 atau 5173 bentrok saat menjalankan start-non-docker.sh</summary>
+            <div class="diag-body">
+              Container Docker Resmeet kemungkinan masih berjalan dan mengikat port tersebut. Hentikan mode Docker terlebih dahulu dengan <code>./start-docker.sh --down</code> sebelum menjalankan mode lokal.
+            </div>
+          </details>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <span>Resmeet-STT Enterprise • Rust Axum • React 19 • PostgreSQL • Whisper large-v3-turbo</span>
+      <div class="footer-links">
+        <button type="button" data-switch-tab="overview">Overview &amp; Arsitektur</button>
+        <button type="button" data-switch-tab="install">Panduan Instalasi</button>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      // 1. Primary Tab Switcher (Overview vs Instalasi)
+      const tabButtons = Array.from(document.querySelectorAll(".tab-btn"));
+      const tabPanels = {
+        overview: document.getElementById("panel-overview"),
+        install: document.getElementById("panel-install"),
+      };
+
+      function activateTab(tabName) {
+        tabButtons.forEach((btn) => {
+          const active = btn.dataset.tab === tabName;
+          btn.setAttribute("aria-selected", active ? "true" : "false");
+        });
+        Object.keys(tabPanels).forEach((key) => {
+          tabPanels[key].classList.toggle("active", key === tabName);
+        });
+      }
+
+      tabButtons.forEach((btn, idx) => {
+        btn.addEventListener("click", () => activateTab(btn.dataset.tab));
+        btn.addEventListener("keydown", (e) => {
+          if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+            const nextIdx = (idx + 1) % tabButtons.length;
+            tabButtons[nextIdx].focus();
+            activateTab(tabButtons[nextIdx].dataset.tab);
+          }
+        });
+      });
+
+      document.getElementById("cta-to-install").addEventListener("click", () => {
+        activateTab("install");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+
+      document.querySelectorAll("[data-jump-tab]").forEach((link) => {
+        link.addEventListener("click", () => {
+          activateTab(link.dataset.jumpTab);
+        });
+      });
+
+      document.querySelectorAll("[data-switch-tab]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          activateTab(btn.dataset.switchTab);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        });
+      });
+
+      // 2. Hero Interactive Pipeline Stage Inspector
+      const stageData = [
+        {
+          title: "01. Unggah Streaming & Antrean PostgreSQL",
+          desc: "Audio/video (MP3, WAV, M4A, MP4, MPEG, WEBM, OGG, FLAC) diunggah ke API dan langsung dicatat ke tabel transcription_jobs dengan status HTTP 202 tanpa memblokir browser.",
+          code: "POST /api/upload-and-transcribe?background=true",
+        },
+        {
+          title: "02. Normalisasi & Pembersih Frekuensi FFmpeg",
+          desc: "Audio dikonversi ke WAV PCM 16 kHz mono sekaligus melewati filter bandpass dan denoise untuk membuang gemuruh rendah dan desis statis.",
+          code: '-af "highpass=f=80,lowpass=f=7500,afftdn=nf=-25" -ar 16000 -ac 1',
+        },
+        {
+          title: "03. Pemotongan Jeda Napas & Silero VAD",
+          desc: "Sistem mencari titik sunyi terdekat sekitar 45 detik dan memangkas segmen hening menggunakan Silero VAD v6.2.0 sebelum decoding.",
+          code: 'STT_CHUNK_SECONDS=45 · silencedetect=noise=-35dB:d=0.3 · -vt 0.50',
+        },
+        {
+          title: "04. Inferensi Paralel GPU Vulkan / CPU INT8",
+          desc: "EnginePool menjalankan inferensi paralel tanpa re-decoding loop (-nf, temperature=0.0) dan menyimpan checkpoint atomik per bagian.",
+          code: "STT_CONCURRENCY=2 · whisper-server (Vulkan) / faster-whisper (INT8)",
+        },
+        {
+          title: "05. Perapian AI Opsional, Editor DOCX & Markmap",
+          desc: "Worker AI terpisah merapikan transkrip dan menyusun MoM jika sakelar AI ON. Hasil dapat disunting pada editor DOCX A4 dan ditampilkan sebagai mindmap.",
+          code: "APP_ROLE=ai-worker · @docx-editor.dev + Markmap",
+        },
+      ];
+
+      const stageButtons = Array.from(document.querySelectorAll(".stage-btn"));
+      const stageDetail = document.getElementById("pipeline-detail");
+
+      stageButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const item = stageData[Number(btn.dataset.stage)];
+          if (!item) return;
+          stageButtons.forEach((b) => b.setAttribute("aria-pressed", b === btn ? "true" : "false"));
+          stageDetail.innerHTML =
+            `<h3>${item.title}</h3><p>${item.desc}</p><code>${item.code}</code>`;
+        });
+      });
+
+      // 3. Topology Node Inspector (Diagram SVG + Pills)
+      const nodeDetails = {
+        frontend: {
+          role: "WEB UI & REVERSE PROXY",
+          name: "resmeet_frontend",
+          desc: "Menyajikan aplikasi React 19 + Tailwind CSS melalui Nginx. Seluruh permintaan /api dan WebSocket diteruskan otomatis ke container backend.",
+          specs: [
+            ["Teknologi", "React 19 + Vite + Nginx"],
+            ["Port Publik", "5173"],
+            ["Editor Notulen", "@docx-editor.dev + Markmap"],
+          ],
+        },
+        backend: {
+          role: "API SERVER & PREFLIGHT GATE",
+          name: "resmeet_backend",
+          desc: "Server HTTP Rust Axum yang menangani autentikasi PBKDF2, upload streaming, API riwayat & dokumen DOCX, serta endpoint audit /api/preflight.",
+          specs: [
+            ["Peran", "APP_ROLE=api"],
+            ["Port API", "8200"],
+            ["Limit CPU", "0.5 Core (default)"],
+          ],
+        },
+        postgres: {
+          role: "DATABASE & DURABLE QUEUE",
+          name: "postgres_db",
+          desc: "Menyimpan pengguna, antrean atomik FOR UPDATE SKIP LOCKED, heartbeat worker, checkpoint chunk transkripsi, serta vault API Key terenkripsi AES-256-GCM.",
+          specs: [
+            ["Port", "5433 (host) -> 5432"],
+            ["Database", "stt_db"],
+            ["Heartbeat Timeout", "60 detik / lease aktif"],
+          ],
+        },
+        worker: {
+          role: "SPEECH-TO-TEXT ENGINE WORKER",
+          name: "resmeet_worker",
+          desc: "Menjalankan normalisasi FFmpeg, chunking 45 detik, Silero VAD, dan EnginePool paralel untuk inferensi Whisper large-v3-turbo pada Vulkan GPU atau CPU INT8.",
+          specs: [
+            ["Peran", "APP_ROLE=worker"],
+            ["GPU Device", "/dev/dri/renderD128 (Vulkan)"],
+            ["Concurrency", "STT_CONCURRENCY=2 · 4.0 CPU"],
+          ],
+        },
+        aiworker: {
+          role: "ASYNCHRONOUS AI NOTETAKER",
+          name: "resmeet_ai_worker",
+          desc: "Worker terpisah khusus untuk merapikan teks hasil transkrip dan menyusun Minutes of Meeting (MoM) ke Gateway AI saat sakelar Model AI ON.",
+          specs: [
+            ["Peran", "APP_ROLE=ai-worker"],
+            ["Sifat", "Opsional (tidak menghalangi STT)"],
+            ["Keamanan Key", "AES-256-GCM Vault"],
+          ],
+        },
+      };
+
+      const topoNodes = Array.from(document.querySelectorAll(".topo-node"));
+      const nodePills = Array.from(document.querySelectorAll(".node-pill"));
+      const topoInspector = document.getElementById("topo-inspector");
+
+      function selectTopoNode(key) {
+        const info = nodeDetails[key];
+        if (!info) return;
+        topoNodes.forEach((n) => n.classList.toggle("selected", n.dataset.node === key));
+        nodePills.forEach((p) => p.setAttribute("aria-pressed", p.dataset.node === key ? "true" : "false"));
+        const rows = info.specs
+          .map(([k, v]) => `<li><span class="k">${k}</span><span class="v">${v}</span></li>`)
+          .join("");
+        topoInspector.innerHTML =
+          `<div class="inspector-role">${info.role}</div><h3>${info.name}</h3><p>${info.desc}</p><ul class="spec-kv">${rows}</ul>`;
+      }
+
+      topoNodes.forEach((n) => {
+        n.addEventListener("click", () => selectTopoNode(n.dataset.node));
+        n.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            selectTopoNode(n.dataset.node);
+          }
+        });
+      });
+
+      nodePills.forEach((p) => {
+        p.addEventListener("click", () => selectTopoNode(p.dataset.node));
+      });
+
+      // 4. Installation Mode Sub-tabs (Docker vs Non-Docker)
+      const subtabBtns = Array.from(document.querySelectorAll(".subtab-btn"));
+      const installPanels = {
+        docker: document.getElementById("install-docker"),
+        nondocker: document.getElementById("install-nondocker"),
+      };
+
+      subtabBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const mode = btn.dataset.subtab;
+          subtabBtns.forEach((b) => b.setAttribute("aria-selected", b === btn ? "true" : "false"));
+          Object.keys(installPanels).forEach((k) => {
+            installPanels[k].classList.toggle("active", k === mode);
+          });
+        });
+      });
+
+      // 5. Copy-to-Clipboard Buttons
+      document.querySelectorAll("[data-copy]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const pre = btn.parentElement.querySelector("pre");
+          if (!pre) return;
+          try {
+            await navigator.clipboard.writeText(pre.textContent);
+            const oldText = btn.textContent;
+            btn.textContent = "Tersalin";
+            btn.classList.add("copied");
+            setTimeout(() => {
+              btn.textContent = oldText;
+              btn.classList.remove("copied");
+            }, 1600);
+          } catch {
+            btn.textContent = "Pilih manual";
+          }
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

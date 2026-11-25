@@ -1,9 +1,8 @@
-import React, { useState, useMemo } from "react";
+import  { useState, useMemo } from "react";
 import {
   FileText, Target, CheckCircle2, ListTodo, Download,
-  Copy, Check, Calendar, Clock, Sparkles, User, Users,
-  ShieldCheck, MapPin, CheckSquare, Square, ChevronRight,
-  AlertCircle, FileAudio, ExternalLink, Bookmark
+  Copy, Check, Calendar, Clock, Sparkles, User, Users, CheckSquare, Square,
+  AlertCircle, Bookmark
 } from "lucide-react";
 
 /**

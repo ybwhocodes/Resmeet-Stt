@@ -5,3 +5,6 @@ pub mod preflight;
 pub mod setup;
 pub mod transcripts;
 pub mod upload;
+
+pub mod documents;
+pub mod processing;

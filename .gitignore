@@ -1,18 +1,32 @@
-# Environment variables & secrets
+# ==============================================================================
+# Resmeet-STT .gitignore
+# ==============================================================================
+# Prinsip:
+#   - Semua kode sumber, Dockerfile, script startup, dan .env.example di-upload ke Git.
+#   - Semua rahasia (.env, *.key), database lokal, bobot model AI (>500MB),
+#     rekaman audio/video pengguna, cache, dan artefak build tidak di-upload.
+#   - Folder kosong yang dibutuhkan runtime dipertahankan melalui file .gitkeep.
+
+# 1. Environment variables & encryption secrets (wajib disiapkan lokal dari .env.example)
 .env
 *.env
 .env.*
 !.env.example
 backend/.env
+frontend/.env
+backend/.db_secret.key
+backend/ai-encryption.key
 
-# macOS system files
+# 2. macOS & OS artifacts
 .DS_Store
 **/.DS_Store
 ._*
 **/._*
+Thumbs.db
 
-# Python & Virtual Environments
+# 3. Python & Virtual Environments
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -20,16 +34,37 @@ __pycache__/
 backend/whisperx-env/
 venv/
 .venv/
+**/.venv/
 env/
 
-# Model binaries & lock files (large binaries should be downloaded via scripts)
-backend/models/
+# 4. Model binaries & lock files (unduh manual atau via backend/scripts/download_models.py)
+backend/models/*
+!backend/models/.gitkeep
 backend/.locks/
 backend/models--*
 *.bin
 *.onnx
+*.pt
+*.safetensors
 
-# Node & Package Managers
+# 5. Media recordings & uploads (jangan pernah upload rekaman rapat privat ke Git)
+backend/uploads/*
+!backend/uploads/.gitkeep
+*.m4a
+*.mp3
+*.wav
+*.ogg
+*.flac
+*.aac
+*.mp4
+*.mkv
+*.webm
+*.mpeg
+*.mpg
+*.mpe
+*.mpga
+
+# 6. Node, Rust & Package Manager builds
 node_modules/
 backend/node_modules/
 frontend/node_modules/
@@ -37,20 +72,22 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-
-# Frontend builds
 frontend/dist/
 backend/dist/
 frontend/dist-ssr/
 frontend/*.local
+target/
+backend/target/
 
-# Local application state & uploads
+# 7. Local databases, state & legacy artifacts
 backend/settings.json
 backend/transcription_cache.json
 backend/transcription_cache.json.tmp
-backend/transcripts_md/*.md
-backend/uploads/*
-!backend/uploads/.gitkeep
+backend/database.json
+backend/database.json.tmp
+backend/transcripts_md/*
+!backend/transcripts_md/.gitkeep
+*.db
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
@@ -59,26 +96,18 @@ desktop/dist/
 desktop/node_modules/
 desktop/bin/
 backend/bin/
+backend/src_ts/
 
-# Logs
+# 8. Logs
 *.log
 logs/
 frontend/logs/
 
-# IDE & Editor files
+# 9. IDE, Editor & Agent local files
 .vscode/*
 !.vscode/extensions.json
 .idea/
 *.swp
 *.swo
-
-# Task scratch
 task.md
-backend/.db_secret.key
-backend/database.json
-backend/database.json.tmp
-backend/ai-encryption.key
-backend/transcripts.db
-backend/src_ts/
-**/._*
-target/
+skills/

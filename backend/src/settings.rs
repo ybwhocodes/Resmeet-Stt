@@ -9,10 +9,25 @@ pub struct DatabaseSettings {
     pub name: String,
     pub user: String,
     pub password: String,
+    #[serde(skip)]
+    pub connect_options: Option<PgConnectOptions>,
 }
 
 impl DatabaseSettings {
+    pub fn from_url(url: &str) -> Result<Self, String> {
+        let parsed = reqwest::Url::parse(url).map_err(|e| format!("DATABASE_URL tidak valid: {e}"))?;
+        let options: PgConnectOptions = url.parse().map_err(|e| format!("DATABASE_URL tidak valid: {e}"))?;
+        Ok(Self {
+            host: options.get_host().to_string(), port: options.get_port(),
+            name: options.get_database().unwrap_or("postgres").to_string(),
+            user: options.get_username().to_string(),
+            password: decode_url_password(parsed.password().unwrap_or_default())?,
+            connect_options: Some(options),
+        })
+    }
+
     fn options(&self) -> PgConnectOptions {
+        if let Some(options) = &self.connect_options { return options.clone(); }
         PgConnectOptions::new()
             .host(&self.host).port(self.port).database(&self.name)
             .username(&self.user).password(&self.password)
@@ -63,4 +78,31 @@ pub fn save_database(path: &Path, settings: &DatabaseSettings) -> io::Result<()>
         fs::set_permissions(&temp, fs::Permissions::from_mode(0o600))?;
     }
     fs::rename(temp, path)
+}
+
+fn decode_url_password(value: &str) -> Result<String, String> {
+    let mut bytes = Vec::new();
+    let mut input = value.as_bytes().iter().copied();
+    while let Some(byte) = input.next() {
+        if byte == b'%' {
+            let pair = [input.next().ok_or("Password URL tidak valid")?, input.next().ok_or("Password URL tidak valid")?];
+            let hex = std::str::from_utf8(&pair).map_err(|_| "Password URL tidak valid")?;
+            bytes.push(u8::from_str_radix(hex, 16).map_err(|_| "Password URL tidak valid")?);
+        } else { bytes.push(byte); }
+    }
+    String::from_utf8(bytes).map_err(|_| "Password URL bukan UTF-8".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn reads_database_url_with_encoded_password() {
+        let settings = DatabaseSettings::from_url("postgres://user:p%40ss%3Aword%2B@localhost:5433/meetings").unwrap();
+        assert_eq!(settings.password, "p@ss:word+");
+        assert_eq!(settings.host, "localhost");
+        assert_eq!(settings.port, 5433);
+        assert_eq!(settings.name, "meetings");
+        assert!(DatabaseSettings::from_url("invalid").is_err());
+    }
 }

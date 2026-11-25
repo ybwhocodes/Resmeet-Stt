@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from "react";
+import  { useState, useMemo } from "react";
 import {
-  MessageSquare, Clock, Users, Copy, Check, Download,
-  Search, Filter, Sparkles, Volume2, UserCheck
+  MessageSquare, Clock, Copy, Check, Download,
+  Search, Filter, Sparkles, UserCheck
 } from "lucide-react";
 
 /**
@@ -161,7 +161,7 @@ export default function DialogTranscriptView({ item, filename, durationS }) {
   };
 
   const downloadTxt = () => {
-    const text = `# Transkrip Percakapan / Menit (Terkoreksi AI)
+    const text = `# Transkrip Percakapan / Menit
 File: ${filename || item?.filename || "Audio"}
 Tanggal: ${new Date().toLocaleString("id-ID")}
 Durasi: ${fmtTimer(durationS || item?.duration_s || 0)}
@@ -177,7 +177,25 @@ ${turns.map((t) => `[${t.time}] ${t.speaker}:\n${t.text}`).join("\n\n")}
     URL.revokeObjectURL(url);
   };
 
-  return (
+  // New results show the exact stored transcript, without inferred speakers or timestamps.
+if (item?.ai_correction_status === "disabled" || item?.ai_correction_status === "failed" || typeof item?.ai_data?.ai_enabled === "boolean") {
+const corrected = item.ai_correction_status === "completed";
+const pending = item.ai_correction_status === "pending";
+const transcribing = item.ai_correction_status === "transcribing";
+const text = item.final_text || item.raw_text || "";
+return <div className="space-y-4">
+<div className="bg-[#0c0e14] border border-[#1e2330] rounded-xl p-4">
+<h3 className="text-sm font-semibold text-white">{corrected ? "Transkrip Dirapikan AI" : transcribing ? "Transkrip Sementara · Sedang Diproses" : pending ? "Transkrip Asli · Menunggu Hasil AI" : "Transkrip Asli · Tanpa Perapian AI"}</h3>
+<p className="text-xs text-slate-400 mt-1">{corrected ? "Ejaan, tanda baca, dan paragraf dirapikan dengan mempertahankan makna ucapan." : transcribing ? "Teks sementara bertambah mengikuti ucapan yang selesai diproses. Transkrip lengkap akan disimpan setelah pemrosesan audio selesai." : pending ? "Transkrip asli sudah tersimpan dan bisa dibaca. Hasil AI akan diperbarui otomatis." : "Hasil Whisper ditampilkan apa adanya."}</p>
+{item.ai_correction_status === "failed" && <p role="alert" className="text-xs text-amber-300 mt-2">Perapian AI gagal. Hasil transkripsi asli tetap tersedia. {item.ai_data?.ai_error}</p>}
+<div className="flex gap-3 mt-3 text-xs text-indigo-300">
+<button onClick={() => { navigator.clipboard.writeText(text); setCopiedAll(true); setTimeout(() => setCopiedAll(false), 2000); }}>{copiedAll ? "Tersalin" : "Salin Transkrip"}</button>
+<button onClick={() => { const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" })); const a = document.createElement("a"); a.href = url; a.download = `transkrip-${filename || item.filename || "audio"}.txt`; a.click(); URL.revokeObjectURL(url); }}>Unduh .txt</button>
+</div></div>
+<pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-slate-200 bg-[#0c0e14] border border-[#1e2330] rounded-xl p-5">{text}</pre>
+</div>;
+}
+return (
     <div className="space-y-4">
       {/* Top Banner & Controls */}
       <div className="bg-[#0c0e14] border border-[#1e2330] rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
@@ -189,11 +207,11 @@ ${turns.map((t) => `[${t.time}] ${t.speaker}:\n${t.text}`).join("\n\n")}
             </h3>
             <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
               <Sparkles className="w-2.5 h-2.5 text-amber-400" />
-              Fitur Baru • Rapi AI
+              Transkrip Tersimpan
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-            Menampilkan alur ucapan setiap orang secara urut per menit dengan timestamp waktu audio [MM:SS - MM:SS] yang sudah dirapikan AI serta cuma memperjelas konteks tidak merubah konteks obrolan.
+            Menampilkan transkrip tersimpan. Label pembicara dan waktu pada data lama dapat berupa perkiraan.
           </p>
         </div>
 
@@ -243,7 +261,7 @@ ${turns.map((t) => `[${t.time}] ${t.speaker}:\n${t.text}`).join("\n\n")}
           >
             Semua ({turns.length})
           </button>
-          {speakersList.map((spk, idx) => {
+          {speakersList.map((spk) => {
             const count = turns.filter((t) => t.speaker === spk).length;
             return (
               <button
@@ -327,7 +345,7 @@ ${turns.map((t) => `[${t.time}] ${t.speaker}:\n${t.text}`).join("\n\n")}
         </span>
         <span className="flex items-center gap-1 text-slate-400">
           <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-          Koreksi ejaan & diksi aktif (Objektif tanpa hiperbola)
+          Arsip transkripsi
         </span>
       </div>
     </div>

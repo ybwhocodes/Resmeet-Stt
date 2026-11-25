@@ -1,31 +1,31 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { io } from "socket.io-client";
+import { MEDIA_ACCEPT, MEDIA_EXTENSIONS, MEDIA_FORMAT_LABEL, isSupportedMediaFile } from "./mediaFormats";
+import { readTranscriptionResponse, pollTranscriptionJob, transcriptionErrorMessage } from "./transcriptionStream";
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from "react";
 import {
-  Upload, FileAudio, Download, Database,
+  Upload, FileAudio, Download, Database, Settings,
   RefreshCw, AlertCircle, FileText, CheckCircle,
-  Trash2, Mic, Zap, Brain,
-  Settings, Eye, EyeOff, Save, Target, Check,
-  ArrowLeft, ChevronRight, Search, Layers, X,
-  Layout, GitBranch, Copy, Sparkles, Server, HardDrive, Star,
-  Square, Pause, Play, Radio, MicOff, Lock, ShieldAlert, MessageSquare, Loader2,
-  Users, LogOut, Calendar, Filter, Share2, FileDown
+  Trash2, Mic, Zap,
+  ArrowLeft, ChevronRight, Search, X, GitBranch, Sparkles, Server,
+  Square, Pause, Play, MessageSquare, Loader2,
+  Users, LogOut, Filter
 } from "lucide-react";
 import MarkmapView from "./components/MarkmapView";
 import DialogTranscriptView from "./components/DialogTranscriptView";
-import TiptapDocxEditor from "./components/TiptapDocxEditor";
+import AiToggle from "./components/AiToggle";
+const LazyDocxEditor = lazy(() => import("./components/MeetingDocxEditor"));
+function MeetingDocxEditor(props) {
+  return <Suspense fallback={<div role="status" className="rounded-xl bg-[#151821] p-8 text-slate-300">Menyiapkan editor DOCX...</div>}><LazyDocxEditor {...props} /></Suspense>;
+}
 import LoginView from "./components/LoginView";
 import UserManagementView from "./components/UserManagementView";
 import PreflightStatusView from "./components/PreflightStatusView";
 import UserAiModelsView from "./components/UserAiModelsView";
 import resmeetSymbol from "./assets/resmeet_symbol.svg";
 
-const defaultOrigin = typeof window !== "undefined" && window.location.hostname
-  ? `${window.location.protocol}//${window.location.hostname}:8200`
-  : "http://localhost:8200";
-const API = import.meta.env.VITE_API_BASE_URL || `${defaultOrigin}/api`;
+const API = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/+$/, "");
 const SOCKET_URL = API.replace(/\/api\/?$/, "");
 
-const fmt = (iso) => iso ? new Date(iso).toLocaleString("id-ID", {
+const fmt = (iso) => iso ? new Date(/(?:Z|[+-]\d{2}:\d{2})$/i.test(iso) ? iso : `${iso.replace(" ", "T")}Z`).toLocaleString("id-ID", {
   day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
 }) : "-";
 
@@ -41,25 +41,49 @@ const fmtTimer = (s) => {
   return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 };
 
+function normalizeTranscript(data) {
+  return ({
+          ...data,
+          final_text: data.finalText || "",
+          raw_text: data.rawText || "",
+          markdown_text: data.aiSummary || data.finalText || "",
+          ai_summary: data.aiSummary,
+ai_correction_status: data.aiCorrectionStatus,
+          duration_s: data.durationS || 0,
+          created_at: data.createdAt,
+          word_timestamps: data.segments || [],
+          ai_data: {
+            ai_enabled: data.aiEnabled,
+ai_error: data.aiError,
+          },
+          share_slug: data.shareSlug,
+          mom_title: data.momTitle || null,
+        });
+}
+
 function ProgressPanel({ progress }) {
-  const { percent, stage, elapsed_s, current_text } = progress;
+  const { percent, stage, elapsed_s, current_text, audio_processed_s, audio_duration_s } = progress;
   return (
     <div className="space-y-3">
       <div className="relative h-2.5 bg-[#0c0e14] rounded-full overflow-hidden border border-[#1e2330]">
         <div
           className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
-          style={{ width: `${percent}%`, background: "linear-gradient(90deg, #6366f1, #818cf8)", boxShadow: "0 0 10px #6366f180" }}
+          style={{ width: percent == null ? "15%" : `${percent}%`, background: "linear-gradient(90deg, #6366f1, #818cf8)", boxShadow: "0 0 10px #6366f180" }}
         />
       </div>
       <div className="flex items-center justify-between">
-        <span className="text-indigo-400 font-bold text-lg tabular-nums">{percent}%</span>
+        <span className="text-indigo-400 font-bold text-lg tabular-nums">{percent == null ? "Mengunggah..." : `${percent}%`}</span>
         <span className="text-slate-300 text-xs text-right max-w-[340px] truncate font-medium">{stage}</span>
       </div>
       {elapsed_s > 0 && (
         <p className="text-slate-500 text-xs">
-          Audio diproses: <span className="text-slate-300 font-mono">{fmtDur(elapsed_s)}</span>
+          Waktu berjalan: <span className="text-slate-300 font-mono">{fmtDur(elapsed_s)}</span>
         </p>
       )}
+      {audio_duration_s > 0 && (
+        <p className="text-xs text-slate-400">Posisi audio: {fmtDur(audio_processed_s || 0)} / {fmtDur(audio_duration_s)}</p>
+      )}
+      <p className="text-xs text-slate-500">Progres mengikuti pemrosesan backend. Audio panjang dapat memerlukan beberapa menit.</p>
       {current_text && (
         <div className="bg-[#0c0e14] border border-indigo-500/20 rounded-lg px-3 py-2">
           <p className="text-[11px] text-slate-500 mb-0.5">Segmen audio realtime:</p>
@@ -72,15 +96,20 @@ function ProgressPanel({ progress }) {
 
 export default function App() {
   // Public Share MoM State (Requirement 6: tanggal-menit-UUID, No Login Required)
-  const [publicShareSlug, setPublicShareSlug] = useState(null);
+  const [publicShareSlug] = useState(() => {
+    const { pathname, search, hash } = window.location;
+    if (pathname.startsWith("/share/")) return pathname.slice(7).split("/")[0].trim() || null;
+    return new URLSearchParams(search).get("share")?.trim() || (hash.startsWith("#share=") ? hash.slice(7).trim() : null);
+  });
   const [publicShareData, setPublicShareData] = useState(null);
-  const [publicShareLoading, setPublicShareLoading] = useState(false);
+  const [publicShareLoading, setPublicShareLoading] = useState(Boolean(publicShareSlug));
   const [publicShareError, setPublicShareError] = useState("");
 
   // Auth state
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
-  const [authChecking, setAuthChecking] = useState(true);
+  const [savedToken] = useState(() => localStorage.getItem("resmeet_auth_token") || sessionStorage.getItem("resmeet_auth_token"));
+  const [authChecking, setAuthChecking] = useState(Boolean(savedToken));
 
   // Navigation: "transcribe" | "history" | "detail" | "models" | "users"
   const [nav, setNav] = useState("transcribe");
@@ -89,24 +118,31 @@ export default function App() {
   // Transcribe State
   const [file, setFile] = useState(null);
   const [audioUrl, setAudioUrl] = useState(null);
-  const [selectedCombo, setSelectedCombo] = useState("1");
+  const [selectedCombo] = useState("1");
   const [selectedModelId, setSelectedModelId] = useState("");
-  const [jobId, setJobId] = useState(null);
+  const [, setJobId] = useState(null);
   const [processing, setProcessing] = useState(false);
+  const processingController = useRef(null);
+  const historyController = useRef(null);
+  const aiController = useRef(null);
   const [progress, setProgress] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
-  const [socketStatus, setSocketStatus] = useState("connecting");
   const [preflightStatus, setPreflightStatus] = useState("checking"); // "ready" | "not_connected" | "not_ready" | "checking"
   const [preflightChecks, setPreflightChecks] = useState(null);
-  const [preflightLastChecked, setPreflightLastChecked] = useState(null);
+  const [, setPreflightLastChecked] = useState(null);
 
-  // Output Tabs: "dialog" (Transkrip) | "mom" (Tiptap DOCX Editor) | "mindmap" (Markmap)
+  // Output Tabs: "dialog" (Transkrip) | "mom" (DOCX Editor) | "mindmap" (Markmap)
   const [resultTab, setResultTab] = useState("dialog");
   const [detailTab, setDetailTab] = useState("dialog");
 
   // History State & Date Filter
   const [history, setHistory] = useState([]);
+  const [failedJobs, setFailedJobs] = useState([]);
+  const [retryingJob, setRetryingJob] = useState(null);
+  const retryRequest = useRef(0);
+  const retryJobToMonitor = useRef(null);
+  const [resumeCounter, setResumeCounter] = useState(0);
   const [loadingH, setLoadingH] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [historySearch, setHistorySearch] = useState("");
@@ -116,8 +152,18 @@ export default function App() {
   const [quickDateFilter, setQuickDateFilter] = useState("all");
 
   // Settings State
-  const [aiCorrection, setAiCorrection] = useState(true);
-  const [paraphraseStyle, setParaphraseStyle] = useState("poin_singkat");
+  const [aiPreference, setAiPreference] = useState(null);
+  const aiCorrection = aiPreference?.userId === user?.id
+    ? aiPreference?.enabled === true
+    : Boolean(user?.id && localStorage.getItem(`resmeet-ai-enabled:${user.id}`) === "true");
+  const [aiConfigured, setAiConfigured] = useState(false);
+  const aiConfigRequest = useRef(0);
+  const setAiCorrection = useCallback((enabled) => {
+    setAiPreference({ userId: user?.id, enabled: Boolean(enabled) });
+    if (user?.id) localStorage.setItem(`resmeet-ai-enabled:${user.id}`, String(Boolean(enabled)));
+  }, [user]);
+  const effectiveAi = aiConfigured && aiCorrection;
+  const [paraphraseStyle, setParaphraseStyle] = useState("detail_deskriptif");
   const [paraphrasing, setParaphrasing] = useState(false);
 
   // Audio Recording State
@@ -125,7 +171,7 @@ export default function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
-  const [micPermission, setMicPermission] = useState("prompt");
+  const [, setMicPermission] = useState("prompt");
   const [micError, setMicError] = useState("");
   const [checkingMic, setCheckingMic] = useState(false);
 
@@ -134,28 +180,21 @@ export default function App() {
   const timerRef = useRef(null);
   const streamRef = useRef(null);
   const fileRef = useRef(null);
-  const socketRef = useRef(null);
+  useEffect(() => () => { if (audioUrl) URL.revokeObjectURL(audioUrl); }, [audioUrl]);
+  useEffect(() => () => {
+    processingController.current?.abort();
+    aiController.current?.abort();
+    historyController.current?.abort();
+    if (timerRef.current) clearInterval(timerRef.current);
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
 
   // =========================================================================
   // 1. Check Public Share Link on Mount (No Login Required)
   // =========================================================================
   useEffect(() => {
-    const pathname = window.location.pathname;
-    const searchParams = new URLSearchParams(window.location.search);
-    const hash = window.location.hash;
-
-    let slug = null;
-    if (pathname.startsWith("/share/")) {
-      slug = pathname.replace("/share/", "").split("/")[0].trim();
-    } else if (searchParams.get("share")) {
-      slug = searchParams.get("share").trim();
-    } else if (hash.startsWith("#share=")) {
-      slug = hash.replace("#share=", "").trim();
-    }
-
+    const slug = publicShareSlug;
     if (slug) {
-      setPublicShareSlug(slug);
-      setPublicShareLoading(true);
       fetch(`${API}/public/transcripts/share/${slug}`)
         .then((res) => res.json())
         .then((data) => {
@@ -172,17 +211,13 @@ export default function App() {
           setPublicShareLoading(false);
         });
     }
-  }, []);
+  }, [publicShareSlug]);
 
   // =========================================================================
   // 2. Auth Verification on Page Load (Remember Me Cache)
   // =========================================================================
   useEffect(() => {
-    const savedToken = localStorage.getItem("resmeet_auth_token") || sessionStorage.getItem("resmeet_auth_token");
-    if (!savedToken) {
-      setAuthChecking(false);
-      return;
-    }
+    if (!savedToken) return;
 
     fetch(`${API}/auth/me`, {
       headers: { Authorization: `Bearer ${savedToken}` },
@@ -206,9 +241,18 @@ export default function App() {
       .finally(() => {
         setAuthChecking(false);
       });
-  }, []);
+  }, [savedToken]);
 
   const handleLogout = async () => {
+    processingController.current?.abort();
+    aiController.current?.abort();
+    historyController.current?.abort();
+    cancelRecording();
+    setProcessing(false);
+    setProgress(null);
+    setFile(null);
+    setAudioUrl(null);
+    setError("");
     try {
       if (token) {
         await fetch(`${API}/auth/logout`, {
@@ -216,7 +260,7 @@ export default function App() {
           headers: { Authorization: `Bearer ${token}` },
         });
       }
-    } catch {}
+    } catch { /* Local logout still completes when the server is unavailable. */ }
 
     localStorage.removeItem("resmeet_auth_token");
     localStorage.removeItem("resmeet_auth_user");
@@ -225,62 +269,143 @@ export default function App() {
     setUser(null);
     setToken(null);
     setNav("transcribe");
+    ++retryRequest.current; retryJobToMonitor.current = null; setRetryingJob(null); setFailedJobs([]);
     setHistory([]);
     setResult(null);
     setSelectedItem(null);
   };
 
   // Fetch User's Registered Multi-Model Array
-  const fetchUserAiModels = useCallback(async () => {
-    if (!token) return;
+  const refreshAiConfiguration = useCallback(async () => {
+    const request = ++aiConfigRequest.current;
+    if (!token) { setAiConfigured(false); return false; }
     try {
-      const res = await fetch(`${API}/user/ai-models`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (res.ok && Array.isArray(data.models)) {
-        const def = data.models.find((m) => m.is_default);
-        if (def) setSelectedModelId(def.model_id);
-        else if (data.models.length > 0) setSelectedModelId(data.models[0].model_id);
-      }
-    } catch (err) {
-      console.warn("Gagal memuat model AI user:", err);
+      const headers = { Authorization: `Bearer ${token}` };
+      const [settingsRes, modelsRes] = await Promise.all([
+        fetch(`${API}/ai/settings`, { headers }), fetch(`${API}/user/ai-models`, { headers }),
+      ]);
+      if (!settingsRes.ok || !modelsRes.ok) throw new Error("Konfigurasi AI belum dapat dibaca.");
+      const [settings, data] = await Promise.all([settingsRes.json(), modelsRes.json()]);
+      if (request !== aiConfigRequest.current) return false;
+      const models = Array.isArray(data.models) ? data.models.filter((m) => m.model_id?.trim()) : [];
+      const ready = settings.configured === true && models.length > 0;
+      setAiConfigured(ready);
+      setSelectedModelId((current) => models.some((m) => m.model_id === current) ? current : models.find((m) => m.is_default)?.model_id || models[0]?.model_id || "");
+      if (!ready) setAiCorrection(false);
+      return ready;
+    } catch (error) {
+      if (request === aiConfigRequest.current) setAiConfigured(false);
+      console.warn(error.message);
+      return false;
     }
-  }, [token]);
-
+  }, [token, setAiCorrection]);
   useEffect(() => {
-    if (token) fetchUserAiModels();
-  }, [token, fetchUserAiModels]);
+    let active = true;
+    Promise.resolve().then(() => { if (active) { setAiConfigured(false); refreshAiConfiguration(); } });
+    const refresh = () => refreshAiConfiguration();
+    window.addEventListener("focus", refresh);
+    return () => { active = false; window.removeEventListener("focus", refresh); };
+  }, [refreshAiConfiguration]);
 
   // Fetch History with Isolation
   const fetchHistory = useCallback(async (start = startDate, end = endDate) => {
     if (!token) return;
+    historyController.current?.abort();
+    const controller = new AbortController();
+    historyController.current = controller;
     setLoadingH(true);
     try {
-      let query = `${API}/transcripts?`;
+      let query = `${API}/transcripts?limit=100&`;
       if (start) query += `start_date=${encodeURIComponent(start)}&`;
       if (end) query += `end_date=${encodeURIComponent(end)}&`;
 
-      const res = await fetch(query, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      const rows = Array.isArray(data) ? data : (data.transcripts || []);
+      const rows = [];
+      let page = 1;
+      while (true) {
+        const res = await fetch(`${query}page=${page}`, { signal: controller.signal, headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Gagal memuat riwayat.");
+        const batch = Array.isArray(data) ? data : (data.transcripts || []);
+        rows.push(...batch);
+        if (!batch.length || Array.isArray(data) || rows.length >= data.total) break;
+        page += 1;
+      }
+      if (controller.signal.aborted) return;
       setHistory(rows.map((item) => ({
         ...item,
         markdown_text: item.ai_summary || item.final_text || "",
       })));
+      const failedResponse = await fetch(`${API}/transcription-jobs?failed=true`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal });
+      if (failedResponse.ok) { const failures = await failedResponse.json(); if (!controller.signal.aborted) setFailedJobs(failures.jobs || []); }
     } catch (err) {
+      if (controller.signal.aborted) return;
       console.error("Gagal memuat riwayat:", err);
       setHistory([]);
     } finally {
-      setLoadingH(false);
+      if (!controller.signal.aborted) setLoadingH(false);
     }
   }, [token, startDate, endDate]);
 
   useEffect(() => {
-    if (token) fetchHistory();
+    const controller = new AbortController();
+    Promise.resolve().then(() => { if (token && !controller.signal.aborted) fetchHistory(); });
+    return () => controller.abort();
   }, [token, fetchHistory]);
+
+  // Reattach to a durable job after a page reload or API/worker restart.
+  useEffect(() => {
+    if (!token) return;
+    const controller = new AbortController();
+    const requestedJob = retryJobToMonitor.current;
+    retryJobToMonitor.current = null;
+    let monitoring = false;
+    let elapsedTimer;
+    (async () => {
+      const response = await fetch(`${API}/transcription-jobs`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal });
+      if (!response.ok) return;
+      const data = await response.json();
+      let job = requestedJob ? data.jobs?.find((item) => item.jobId === requestedJob) : data.jobs?.[0];
+      if (!job && requestedJob) {
+        const requested = await fetch(`${API}/transcription-jobs/${requestedJob}`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal });
+        if (requested.ok) job = await requested.json();
+      }
+      if (!job || processingController.current) return;
+      monitoring = true; processingController.current = controller;
+      const started = Date.now();
+      const elapsed = Number(job.progress?.elapsed_s) || 0;
+      elapsedTimer = setInterval(() => { if (!controller.signal.aborted) setProgress((current) => current ? { ...current, elapsed_s: elapsed + Math.floor((Date.now() - started) / 1000) } : current); }, 1000);
+      setProcessing(true); setError("");
+      setProgress({ ...job.progress, stage: "Melanjutkan pemantauan pekerjaan yang tersimpan..." });
+      const result = await pollTranscriptionJob(`${API}/transcription-jobs/${job.jobId}`, {
+        token, signal: controller.signal,
+        onProgress: (event) => { if (!controller.signal.aborted) setProgress(event); },
+        onTranscript: (preview) => { if (!controller.signal.aborted) setResult(normalizeTranscript(preview)); },
+        onReconnect: () => { if (!controller.signal.aborted) setProgress((current) => ({ ...current, stage: "Worker tetap memproses; menyambung kembali..." })); },
+      });
+      if (!controller.signal.aborted) { setResult(normalizeTranscript(result)); setResultTab("dialog"); fetchHistory(); }
+    })().catch((failure) => { if (!controller.signal.aborted && monitoring) { setError(transcriptionErrorMessage(failure)); fetchHistory(); } })
+      .finally(() => {
+        clearInterval(elapsedTimer);
+        if (processingController.current === controller || (monitoring && !processingController.current)) { processingController.current = null; setProcessing(false); setProgress(null); }
+      });
+    return () => { clearInterval(elapsedTimer); controller.abort(); if (processingController.current === controller) processingController.current = null; };
+  }, [token, fetchHistory, resumeCounter]);
+
+  const retryFailedJob = async (job) => {
+    if (processing || retryingJob || !token) return;
+    const request = ++retryRequest.current;
+    setRetryingJob(job.jobId); setError("");
+    try {
+      const response = await fetch(`${API}/transcription-jobs/${job.jobId}/retry`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Pekerjaan belum dapat dilanjutkan.");
+      if (request !== retryRequest.current) return;
+      retryJobToMonitor.current = data.jobId;
+      setFailedJobs((current) => current.filter((item) => item.jobId !== job.jobId));
+      setResult(null); setNav("transcribe"); setResumeCounter((current) => current + 1);
+    } catch (failure) { if (request === retryRequest.current) setError(failure.message); }
+    finally { if (request === retryRequest.current) setRetryingJob(null); }
+  };
 
   // Quick Date Filter Presets
   const applyQuickDateFilter = (preset) => {
@@ -292,26 +417,26 @@ export default function App() {
     if (preset === "all") {
       setStartDate("");
       setEndDate("");
-      fetchHistory("", "");
+
     } else if (preset === "today") {
       const ymd = toYMD(today);
       setStartDate(ymd);
       setEndDate(ymd);
-      fetchHistory(ymd, ymd);
+
     } else if (preset === "7d") {
       const past = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
       const start = toYMD(past);
       const end = toYMD(today);
       setStartDate(start);
       setEndDate(end);
-      fetchHistory(start, end);
+
     } else if (preset === "30d") {
       const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const start = toYMD(past);
       const end = toYMD(today);
       setStartDate(start);
       setEndDate(end);
-      fetchHistory(start, end);
+
     }
   };
 
@@ -333,14 +458,15 @@ export default function App() {
       setPreflightChecks(data.checks);
       setPreflightLastChecked(new Date().toLocaleTimeString("id-ID"));
 
-      const { database, ffmpeg, whisperCli, whisperModel, uploadsWritable, aiGateway } = data.checks;
+      const { database, ffmpeg, whisperCli, whisperModel, uploadsWritable, transcriptionWorker } = data.checks;
       const allPassed =
+        data.ready === true &&
         database === true &&
         ffmpeg === true &&
         whisperCli === true &&
         whisperModel === true &&
         uploadsWritable === true &&
-        aiGateway === true;
+        transcriptionWorker !== false;
 
       setPreflightStatus(allPassed ? "ready" : "not_ready");
     } catch {
@@ -349,52 +475,17 @@ export default function App() {
   }, [token]);
 
   useEffect(() => {
-    checkPreflight();
+    let active = true;
+    Promise.resolve().then(() => { if (active) checkPreflight(); });
     const interval = setInterval(checkPreflight, 20000);
     const handleFocus = () => checkPreflight();
     window.addEventListener("focus", handleFocus);
     return () => {
+      active = false;
       clearInterval(interval);
       window.removeEventListener("focus", handleFocus);
     };
   }, [checkPreflight]);
-
-  // Socket.io Connection
-  useEffect(() => {
-    if (!token) return;
-    const socket = io(SOCKET_URL, {
-      transports: ["polling", "websocket"],
-      reconnectionAttempts: 5,
-    });
-    socketRef.current = socket;
-
-    socket.on("connect", () => {
-      setSocketStatus("connected");
-      checkPreflight();
-    });
-    socket.on("disconnect", () => {
-      setSocketStatus("disconnected");
-      setPreflightStatus("not_connected");
-    });
-    socket.on("progress", (data) => {
-      setProgress((prev) => ({
-        percent: data.percent ?? prev?.percent ?? 0,
-        stage: data.stage ?? prev?.stage ?? "",
-        elapsed_s: data.elapsed_s ?? prev?.elapsed_s ?? 0,
-        current_text: data.current_text !== undefined ? data.current_text : (prev?.current_text ?? ""),
-      }));
-    });
-    socket.on("done", (data) => {
-      setProcessing(false);
-      setProgress({ percent: 100, stage: "Selesai", elapsed_s: data.duration_s, current_text: "" });
-      setResult(data);
-      fetchHistory();
-    });
-
-    return () => {
-      socket.disconnect();
-    };
-  }, [token, checkPreflight, fetchHistory]);
 
   // Stop media tracks
   const stopRecordingTracks = () => {
@@ -539,7 +630,7 @@ export default function App() {
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.ondataavailable = null;
       mediaRecorderRef.current.onstop = null;
-      try { mediaRecorderRef.current.stop(); } catch {}
+      try { mediaRecorderRef.current.stop(); } catch { /* Recorder may already be inactive. */ }
     }
     stopRecordingTracks();
     setIsRecording(false);
@@ -549,10 +640,9 @@ export default function App() {
   };
 
   const acceptFile = (f) => {
-    const validExts = [".mp3", ".wav", ".ogg", ".flac", ".m4a", ".webm", ".mp4", ".mpeg", ".mpg", ".m4v", ".aac"];
     const ext = "." + f.name.split(".").pop().toLowerCase();
-    if (!validExts.includes(ext)) {
-      setError(`Format ${ext} tidak didukung. Format yang didukung: ${validExts.join(", ")}`);
+    if (!isSupportedMediaFile(f)) {
+      setError(`Format ${ext} tidak didukung. Format yang didukung: ${MEDIA_EXTENSIONS.join(", ")}`);
       return;
     }
     setFile(f);
@@ -572,73 +662,88 @@ export default function App() {
 
   const handleProcess = async () => {
     if (!file || processing || !token) return;
+    const controller = new AbortController();
+    processingController.current = controller;
     if (preflightStatus !== "ready") {
-      setError("Transkripsi tidak dapat dijalankan: Sistem belum siap atau Gateway AI belum dikonfigurasi.");
+      setError("Transkripsi tidak dapat dijalankan: Komponen transkripsi belum siap.");
       return;
     }
 
     setProcessing(true);
     setError("");
     setResult(null);
-    setProgress({ percent: 5, stage: "Mengunggah file & validasi audio...", elapsed_s: 0, current_text: "" });
+    setProgress({ percent: null, stage: "Mengunggah file & validasi audio...", elapsed_s: 0, current_text: "" });
 
     const startTime = Date.now();
+    // Only elapsed time uses a timer. Percent and stage come from the backend.
     const progressTimer = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      setProgress((prev) => {
-        let stage = "Mengunggah file audio...";
-        let pct = 5;
-        if (elapsed >= 2 && elapsed < 6) {
-          stage = "Konversi audio ke 16 kHz WAV via FFmpeg...";
-          pct = 15;
-        } else if (elapsed >= 6 && elapsed < 20) {
-          stage = "Menjalankan model Whisper AI (inferensi suara)...";
-          pct = Math.min(80, 20 + Math.floor((elapsed - 6) * 3));
-        } else if (elapsed >= 20) {
-          stage = "Laya Decision Engine: Perapian konteks dialog & pembuatan MoM...";
-          pct = Math.min(95, 65 + Math.floor(elapsed - 20));
-        }
-        return {
-          percent: prev?.percent ? Math.max(prev.percent, pct) : pct,
-          stage,
-          elapsed_s: elapsed,
-          current_text: prev?.current_text || "",
-        };
-      });
+      setProgress((prev) => prev ? { ...prev, elapsed_s: Math.floor((Date.now() - startTime) / 1000) } : prev);
     }, 1000);
 
     try {
+      const configured = await refreshAiConfiguration();
+      controller.signal.throwIfAborted();
+      const useAi = configured && aiCorrection;
       const form = new FormData();
       form.append("audioFile", file);
       form.append("combo", selectedCombo);
-      form.append("ai_correction", aiCorrection ? "true" : "false");
+      form.append("ai_correction", useAi ? "true" : "false");
       form.append("paraphrase_style", paraphraseStyle);
       if (selectedModelId) form.append("model_id", selectedModelId);
 
-      const res = await fetch(`${API}/upload-and-transcribe`, {
+      const res = await fetch(`${API}/upload-and-transcribe?stream=true&background=true`, {
+        signal: controller.signal,
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: form,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload gagal");
+      const draftSegments = [];
+      const draftKeys = new Set();
+      let completeTranscriptAvailable = false;
+      const updateProgress = (event) => {
+        if (controller.signal.aborted) return;
+        if (!completeTranscriptAvailable && event.current_text) {
+          const key = `${event.audio_processed_s}:${event.current_text}`;
+          if (!draftKeys.has(key)) {
+            draftKeys.add(key);
+            draftSegments.push(event.current_text);
+            setResult({
+              filename: file.name, final_text: draftSegments.join(" "),
+              raw_text: draftSegments.join(" "), ai_correction_status: "transcribing",
+              ai_data: { ai_enabled: useAi },
+            });
+            if (draftSegments.length === 1) setResultTab("dialog");
+          }
+        }
+        setProgress((prev) => ({
+          ...prev, ...event,
+          percent: Math.max(prev?.percent || 0, event.percent || 0),
+          audio_processed_s: Math.max(prev?.audio_processed_s || 0, event.audio_processed_s || 0),
+          elapsed_s: Math.floor((Date.now() - startTime) / 1000),
+          current_text: event.current_text || prev?.current_text || "",
+        }));
+      };
+      let previewId;
+      const showTranscript = (data) => {
+        if (controller.signal.aborted) return;
+        completeTranscriptAvailable = true;
+        setResult(normalizeTranscript(data));
+        if (previewId !== data.id) {
+          previewId = data.id;
+          setResultTab("dialog");
+          fetchHistory();
+        }
+      };
+      const pollJob = (id) => pollTranscriptionJob(`${API}/transcription-jobs/${id}`, {
+        signal: controller.signal, token, onProgress: updateProgress, onTranscript: showTranscript,
+        onReconnect: () => setProgress((current) => current ? { ...current, stage: "Menghubungkan kembali status transkripsi; pemrosesan tetap berjalan..." } : current),
+      });
+      const data = await readTranscriptionResponse(res, updateProgress, pollJob, showTranscript, true);
 
+      controller.signal.throwIfAborted();
       if (data.success && data.id) {
         setJobId(null);
-        setResult({
-          ...data,
-          final_text: data.finalText || "",
-          raw_text: data.rawText || "",
-          markdown_text: data.aiSummary || data.finalText || "",
-          ai_summary: data.aiSummary,
-          duration_s: data.durationS || 0,
-          created_at: data.createdAt,
-          word_timestamps: data.segments || [],
-          ai_data: {
-            dialog_transcript: data.dialogTranscript,
-          },
-          share_slug: data.shareSlug,
-        });
+        setResult(normalizeTranscript(data));
         setResultTab("dialog");
         setProgress(null);
         setProcessing(false);
@@ -647,23 +752,29 @@ export default function App() {
         throw new Error("Respons transkripsi tidak lengkap.");
       }
     } catch (e) {
+      if (controller.signal.aborted) return;
       setProcessing(false);
       setProgress(null);
-      setError(e.message);
+      setError(transcriptionErrorMessage(e));
+      fetchHistory();
     } finally {
+      if (processingController.current === controller) processingController.current = null;
       clearInterval(progressTimer);
     }
   };
 
   // AI Re-Paraphrase with Custom User Prompt (Requirement 3)
   const handleParaphrase = async (item, customPromptText = null) => {
-    if (!item?.id || paraphrasing || !token) return;
+    if (!item?.id || paraphrasing || !token || !effectiveAi) return;
     setParaphrasing(true);
     setError("");
+    const controller = new AbortController();
+    aiController.current = controller;
 
     try {
-      const res = await fetch(`${API}/paraphrase`, {
+      const res = await fetch(`${API}/paraphrase?background=true`, {
         method: "POST",
+        signal: controller.signal,
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -675,8 +786,9 @@ export default function App() {
           custom_prompt: customPromptText || undefined,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Gagal memparafrase.");
+      const data = await readTranscriptionResponse(res, () => {}, (id) => pollTranscriptionJob(`${API}/transcription-jobs/${id}`, { token, signal: controller.signal }));
+      controller.signal.throwIfAborted();
+      if (data.aiCorrectionStatus === "failed") throw new Error(data.aiError || "AI belum dapat menyusun dokumen.");
 
       const updatedMom = data.aiSummary;
       if (selectedItem && selectedItem.id === item.id) {
@@ -695,27 +807,20 @@ export default function App() {
       }
       fetchHistory();
     } catch (err) {
-      setError(err.message);
+      if (!controller.signal.aborted) setError(err.message);
     } finally {
-      setParaphrasing(false);
+      if (aiController.current === controller) { aiController.current = null; setParaphrasing(false); }
     }
   };
 
-  // Save MoM from Tiptap Editor directly
-  const handleSaveMom = async (item, newContent) => {
-    if (!item?.id || !token) return;
-    try {
-      const res = await fetch(`${API}/transcripts/${item.id}/mom`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ content: newContent }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Gagal menyimpan MoM.");
+  const handleSaveMomTitle = (item, title) => {
+    setSelectedItem((current) => current?.id === item.id ? { ...current, mom_title: title } : current);
+    setResult((current) => current?.id === item.id ? { ...current, mom_title: title } : current);
+    setHistory((current) => current.map((entry) => entry.id === item.id ? { ...entry, mom_title: title } : entry));
+  };
 
+  // Update local MoM after native DOCX persistence
+  const handleSaveMom = (item, newContent) => {
       if (selectedItem && selectedItem.id === item.id) {
         setSelectedItem((prev) => ({
           ...prev,
@@ -731,9 +836,6 @@ export default function App() {
         }));
       }
       fetchHistory();
-    } catch (err) {
-      console.error("Gagal simpan MoM:", err);
-    }
   };
 
   const downloadTxt = (item) => {
@@ -779,6 +881,7 @@ export default function App() {
       const s = historySearch.toLowerCase();
       return (
         item.filename.toLowerCase().includes(s) ||
+        (item.mom_title && item.mom_title.toLowerCase().includes(s)) ||
         (item.final_text && item.final_text.toLowerCase().includes(s)) ||
         (item.ai_summary && item.ai_summary.toLowerCase().includes(s))
       );
@@ -836,9 +939,11 @@ export default function App() {
             </div>
           ) : publicShareData ? (
             <div className="space-y-4">
-              <TiptapDocxEditor
+              <MeetingDocxEditor
+                publicDocumentUrl={`${API}/public/transcripts/share/${publicShareSlug}/document`}
                 content={publicShareData.aiSummary || publicShareData.finalText || ""}
                 filename={publicShareData.filename}
+                momTitle={publicShareData.momTitle}
                 isReadOnly={true}
               />
             </div>
@@ -898,9 +1003,7 @@ export default function App() {
                 {/* Preflight Live Indicator (Requirement 8) */}
                 <button
                   type="button"
-                  onClick={() => {
-                    if (isSuperadmin) setShowPreflightModal(true);
-                  }}
+                  onClick={() => setShowPreflightModal(true)}
                   className={`flex items-center gap-1.5 text-[11px] font-medium mt-0.5 transition-all text-left ${
                     isSuperadmin ? "cursor-pointer hover:underline" : "cursor-default"
                   }`}
@@ -932,7 +1035,7 @@ export default function App() {
                       <span className="text-amber-400 font-semibold tracking-wide">Not Ready</span>
                       <span className="text-slate-600">•</span>
                       <span className="text-amber-300/80">
-                        {preflightChecks && !preflightChecks.aiGateway ? "Gateway AI Diperlukan" : "Perlu Perhatian"}
+                        Perlu Perhatian
                       </span>
                     </>
                   )}
@@ -994,8 +1097,8 @@ export default function App() {
                       : "text-slate-400 hover:text-slate-200 hover:bg-[#141722]"
                   }`}
                 >
-                  <Brain className="w-3.5 h-3.5 text-purple-400" />
-                  <span>Model AI</span>
+                  <Settings className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Pengaturan</span>
                 </button>
 
                 {/* 4. User (Superadmin Only) */}
@@ -1123,7 +1226,7 @@ export default function App() {
                   <input
                     ref={fileRef}
                     type="file"
-                    accept="audio/*,video/*"
+                    accept={MEDIA_ACCEPT}
                     onChange={(e) => {
                       if (e.target.files?.[0]) acceptFile(e.target.files[0]);
                     }}
@@ -1151,7 +1254,7 @@ export default function App() {
                           Seret &amp; lepas file audio ke sini, atau klik untuk memilih
                         </p>
                         <p className="text-[11px] text-slate-500 mt-1">
-                          Mendukung WAV, MP3, M4A, FLAC, OGG, WebM, MP4 (hingga 1 GB)
+                          Mendukung {MEDIA_FORMAT_LABEL} (hingga 1 GB)
                         </p>
                       </div>
                     </div>
@@ -1231,32 +1334,136 @@ export default function App() {
                 </div>
               )}
 
-              {/* Preflight Gate Warning if Not Ready (Requirement 8) */}
+              {/* Preflight Gate Warning if Not Ready */}
               {preflightStatus !== "ready" && (
-                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3.5 flex items-start gap-3 text-xs text-amber-300 animate-in fade-in duration-300">
-                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <p className="font-bold text-white">Transkripsi Belum Dapat Dimulai (Sistem Belum Siap)</p>
-                    <p className="text-amber-200/90 leading-relaxed text-[11px]">
-                      {preflightChecks && !preflightChecks.aiGateway ? (
-                        <>
-                          Koneksi Gateway AI wajib dikonfigurasi sebelum menjalankan transkripsi.
-                          Buka tab <button type="button" onClick={() => setNav("models")} className="underline font-bold text-amber-100 hover:text-white">Model AI</button> untuk mengisi Base URL dan API Key.
-                        </>
-                      ) : (
-                        "Komponen sistem (Whisper CLI, model, atau PostgreSQL) sedang belum siap. Periksa status sistem di navbar."
-                      )}
-                    </p>
+                <div className="bg-gradient-to-b from-amber-500/15 to-amber-950/20 border border-amber-500/35 rounded-2xl p-4 sm:p-5 space-y-3.5 text-xs animate-in fade-in duration-300 shadow-lg shadow-amber-950/20">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-xl bg-amber-500/20 border border-amber-500/30 text-amber-400 shrink-0 mt-0.5">
+                        <AlertCircle className="w-5 h-5" />
+                      </div>
+                      <div className="space-y-0.5">
+                        <p className="font-bold text-white text-sm">
+                          Transkripsi Belum Dapat Dimulai (Sistem Belum Siap)
+                        </p>
+                        <p className="text-amber-200/90 text-[11px] leading-relaxed">
+                          {preflightStatus === "checking"
+                            ? "Sedang memverifikasi kesiapan layanan (database, worker transkripsi, model audio)..."
+                            : preflightStatus === "not_connected"
+                            ? "Koneksi ke backend Resmeet-STT terputus. Pastikan container backend aktif di port 8200."
+                            : "Komponen berikut belum siap. Lakukan langkah perbaikan di bawah agar proses transkripsi dapat dijalankan:"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={checkPreflight}
+                      className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 hover:text-white rounded-xl text-xs font-medium transition-all cursor-pointer"
+                      title="Periksa ulang kesiapan sistem"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${preflightStatus === "checking" ? "animate-spin" : ""}`} />
+                      <span className="hidden sm:inline">Periksa Ulang</span>
+                    </button>
+                  </div>
+
+                  {preflightStatus === "not_ready" && preflightChecks && (
+                    <div className="space-y-2 pt-1 border-t border-amber-500/20">
+                      {[
+                        {
+                          key: "transcriptionWorker",
+                          label: "Worker Transkripsi",
+                          issue: "Worker pemrosesan latar belakang belum aktif atau heartbeat terputus.",
+                          step: "Jalankan 'docker compose up -d worker' atau restart worker dengan 'docker compose restart worker'.",
+                        },
+                        {
+                          key: "database",
+                          label: "Database PostgreSQL",
+                          issue: "Backend tidak terhubung ke PostgreSQL (port 5433).",
+                          step: "Periksa container 'postgres_db' ('docker compose up -d postgres') dan pastikan DATABASE_URL sesuai.",
+                        },
+                        {
+                          key: "whisperModel",
+                          label: "Model Whisper GGML",
+                          issue: "File bobot model audio tidak ditemukan.",
+                          step: "Pastikan file model seperti 'ggml-large-v3-turbo-q5_0.bin' ada di folder ./models/.",
+                        },
+                        {
+                          key: "whisperCli",
+                          label: "Mesin Transkripsi (Whisper)",
+                          issue: "Binary runtime whisper-server atau faster-whisper tidak dapat dieksekusi.",
+                          step: "Pastikan binary whisper terpasang di container atau periksa variabel WHISPER_CLI_PATH di .env.",
+                        },
+                        {
+                          key: "ffmpeg",
+                          label: "FFmpeg Converter",
+                          issue: "FFmpeg tidak terdeteksi untuk konversi audio 16kHz mono.",
+                          step: "Pastikan FFmpeg terinstall di dalam container backend.",
+                        },
+                        {
+                          key: "uploadsWritable",
+                          label: "Penyimpanan Upload",
+                          issue: "Direktori penyimpanan file audio ('uploads/') tidak memiliki izin tulis.",
+                          step: "Jalankan 'chmod -R 777 uploads' pada terminal host.",
+                        },
+                      ]
+                        .filter((item) => preflightChecks[item.key] === false)
+                        .map((item) => (
+                          <div
+                            key={item.key}
+                            className="bg-black/30 border border-rose-500/30 rounded-xl p-3 flex flex-col sm:flex-row sm:items-start justify-between gap-2.5 text-[11px]"
+                          >
+                            <div className="space-y-1 w-full">
+                              <div className="flex items-center gap-2">
+                                <span className="inline-block w-2 h-2 rounded-full bg-rose-400 shrink-0" />
+                                <span className="font-semibold text-rose-200">{item.label}</span>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-medium">Belum Siap</span>
+                              </div>
+                              <p className="text-slate-300">{item.issue}</p>
+                              <p className="text-amber-200/90 font-mono text-[10px] bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20">
+                                💡 Langkah Perbaikan: {item.step}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+
+                  {preflightStatus === "not_connected" && (
+                    <div className="bg-black/30 border border-rose-500/30 rounded-xl p-3 text-[11px] text-slate-300 space-y-1">
+                      <p className="text-rose-200 font-semibold flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-rose-400" />
+                        Gagal Menghubungi API Backend
+                      </p>
+                      <p className="text-amber-200/90 font-mono text-[10px] bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20">
+                        💡 Langkah: Jalankan 'docker compose up -d backend' atau cek logs dengan 'docker logs resmeet_backend'.
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 text-[11px]">
+                    <span className="text-slate-400">
+                      Tombol transkripsi akan otomatis aktif segera setelah seluruh komponen di atas siap.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowPreflightModal(true)}
+                      className="text-indigo-400 hover:text-indigo-300 underline font-medium cursor-pointer text-left sm:text-right"
+                    >
+                      Buka Audit Status Lengkap
+                    </button>
                   </div>
                 </div>
               )}
 
-              {/* Action Bar: Mulai Transkripsi */}
+              <AiToggle configured={aiConfigured} checked={effectiveAi} onChange={setAiCorrection} disabled={processing} />
+
+{/* Action Bar: Mulai Transkripsi */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
                 <div className="text-xs text-slate-400 flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-purple-400" />
                   <span>
-                    Pemrosesan otomatis menyusun giliran dialog [MM:SS] dan ringkasan MoM DOCX.
+                    {effectiveAi ? "Hasil transkripsi dirapikan AI dan dibuatkan ringkasan MoM." : "Hasil transkripsi asli tanpa perapian AI."}
                   </span>
                 </div>
 
@@ -1271,7 +1478,7 @@ export default function App() {
                   ) : (
                     <Zap className="w-4 h-4" />
                   )}
-                  <span>{processing ? "Memproses Audio & MoM..." : "Mulai Transkripsi Audio"}</span>
+                  <span>{processing ? "Memproses Audio..." : "Mulai Transkripsi Audio"}</span>
                 </button>
               </div>
 
@@ -1317,6 +1524,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setResultTab("mom")}
+                      disabled={processing}
                       className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
                         resultTab === "mom"
                           ? "bg-indigo-600 text-white font-semibold shadow"
@@ -1330,6 +1538,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setResultTab("mindmap")}
+                      disabled={processing}
                       className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
                         resultTab === "mindmap"
                           ? "bg-indigo-600 text-white font-semibold shadow"
@@ -1351,16 +1560,20 @@ export default function App() {
                   />
                 )}
 
-                {/* Tab 2: Tiptap DOCX Editor */}
+                {/* Tab 2: DOCX Editor */}
                 {resultTab === "mom" && (
-                  <TiptapDocxEditor
+                  <MeetingDocxEditor
                     content={result.ai_summary || result.markdown_text || result.final_text || ""}
                     filename={result.filename || file?.name || "Rapat"}
+                    momTitle={result.mom_title}
+                    onTitleSaved={(title) => handleSaveMomTitle(result, title)}
                     itemId={result.id}
+                    aiEnabled={effectiveAi}
                     shareSlug={result.share_slug}
+                    isPublic={result.is_public}
                     apiBaseUrl={SOCKET_URL}
                     token={token}
-                    onSave={(newContent) => handleSaveMom(result, newContent)}
+                    onSaved={(newContent) => handleSaveMom(result, newContent)}
                     onParaphraseCustom={(promptText) => handleParaphrase(result, promptText)}
                     paraphrasing={paraphrasing}
                   />
@@ -1411,6 +1624,15 @@ export default function App() {
                 </button>
               </div>
 
+              {failedJobs.length > 0 && <section aria-label="Pemrosesan yang belum selesai" className="space-y-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+                <h3 className="text-sm font-semibold text-amber-200">Pemrosesan yang belum selesai</h3>
+                <p className="text-xs text-slate-400">Pekerjaan yang terputus dapat dilanjutkan dari bagian terakhir yang tersimpan. Berkas pemrosesan disimpan hingga tujuh hari.</p>
+                {failedJobs.map((job) => <div key={job.jobId} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-700 bg-[#0c0e14] p-3">
+                  <div className="min-w-0"><p className="break-all text-xs font-medium text-slate-200">{job.filename}</p><p className="mt-1 text-[11px] text-slate-400">{job.canRetry ? "Bagian yang sudah selesai tetap tersimpan." : "Periksa rekaman dan unggah kembali bila diperlukan."}</p></div>
+                  {job.canRetry && <button type="button" disabled={processing || Boolean(retryingJob)} onClick={() => retryFailedJob(job)} className="flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-40"><RefreshCw size={13} className={retryingJob === job.jobId ? "animate-spin" : ""} />{retryingJob === job.jobId ? "Menyiapkan..." : "Coba lanjutkan"}</button>}
+                </div>)}
+              </section>}
+
               {/* Date Filter & Search */}
               <div className="bg-[#0c0e14] border border-[#1e2330] rounded-xl p-4 space-y-3">
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
@@ -1458,7 +1680,7 @@ export default function App() {
                         onChange={(e) => {
                           setStartDate(e.target.value);
                           setQuickDateFilter("custom");
-                          fetchHistory(e.target.value, endDate);
+
                         }}
                         className="bg-transparent text-slate-200 outline-none text-xs cursor-pointer"
                       />
@@ -1472,7 +1694,7 @@ export default function App() {
                         onChange={(e) => {
                           setEndDate(e.target.value);
                           setQuickDateFilter("custom");
-                          fetchHistory(startDate, e.target.value);
+
                         }}
                         className="bg-transparent text-slate-200 outline-none text-xs cursor-pointer"
                       />
@@ -1518,7 +1740,7 @@ export default function App() {
                           <div className="flex items-center gap-2.5">
                             <FileAudio className="w-4 h-4 text-indigo-400 shrink-0" />
                             <span className="text-white hover:text-indigo-300 font-semibold truncate max-w-xs">
-                              {item.filename}
+                              {item.mom_title || item.filename}
                             </span>
                           </div>
                         </td>
@@ -1662,17 +1884,20 @@ export default function App() {
               />
             )}
 
-            {/* Tab 2: Tiptap DOCX Editor */}
+            {/* Tab 2: DOCX Editor */}
             {detailTab === "mom" && (
-              <TiptapDocxEditor
+              <MeetingDocxEditor
                 content={selectedItem.ai_summary || selectedItem.markdown_text || selectedItem.final_text || ""}
                 filename={selectedItem.filename}
+                momTitle={selectedItem.mom_title}
+                onTitleSaved={(title) => handleSaveMomTitle(selectedItem, title)}
                 itemId={selectedItem.id}
+                aiEnabled={effectiveAi}
                 shareSlug={selectedItem.share_slug}
                 isPublic={selectedItem.is_public}
                 apiBaseUrl={SOCKET_URL}
                 token={token}
-                onSave={(newContent) => handleSaveMom(selectedItem, newContent)}
+                onSaved={(newContent) => handleSaveMom(selectedItem, newContent)}
                 onParaphraseCustom={(promptText) => handleParaphrase(selectedItem, promptText)}
                 paraphrasing={paraphrasing}
               />
@@ -1689,7 +1914,7 @@ export default function App() {
         )}
 
         {/* ========================================================================= */}
-        {/* PAGE 4: USER AI MODELS & GATEWAY (LAYA DECISION ENGINE CONSOLIDATED)      */}
+        {/* PAGE 4: USER AI MODELS & GATEWAY      */}
         {/* ========================================================================= */}
         {nav === "models" && (
           <UserAiModelsView
@@ -1700,7 +1925,10 @@ export default function App() {
             setSelectedModelId={setSelectedModelId}
             paraphraseStyle={paraphraseStyle}
             setParaphraseStyle={setParaphraseStyle}
-            aiCorrection={aiCorrection}
+            aiConfigured={aiConfigured}
+            aiCorrection={effectiveAi}
+            processing={processing}
+            onConfigChange={refreshAiConfiguration}
             setAiCorrection={setAiCorrection}
           />
         )}
@@ -1719,7 +1947,7 @@ export default function App() {
         {/* ========================================================================= */}
         {/* SUPERADMIN PREFLIGHT INSPECTION MODAL (Requirement 8)                    */}
         {/* ========================================================================= */}
-        {showPreflightModal && isSuperadmin && (
+        {showPreflightModal && (
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-[#151821] border border-[#1e2330] rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-4">
               <div className="flex items-center justify-between border-b border-[#1e2330] pb-3">
@@ -1749,7 +1977,7 @@ export default function App() {
         {/* Footer */}
         <footer className="text-center text-xs text-slate-500 py-6 border-t border-[#1e2330]/50">
           <p>
-            Resmeet STT Enterprise • Laya Decision Engine • PostgreSQL Native • Tiptap DOCX Standard
+            Resmeet STT Enterprise • PostgreSQL Native • Editor DOCX
           </p>
         </footer>
       </div>
@@ -1801,8 +2029,8 @@ export default function App() {
               : "text-slate-400 hover:text-slate-200"
           }`}
         >
-          <Brain className="w-5 h-5 text-purple-400" />
-          <span className="text-[10px]">Model AI</span>
+          <Settings className="w-5 h-5 text-purple-400" />
+          <span className="text-[10px]">Pengaturan</span>
         </button>
 
         {/* 4. User (Admin only) */}

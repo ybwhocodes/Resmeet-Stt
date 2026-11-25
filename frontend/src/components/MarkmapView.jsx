@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
+import  { useEffect, useRef, useState, useCallback } from "react";
+import DOMPurify from "dompurify";
 import { Transformer } from "markmap-lib";
 import { Markmap } from "markmap-view";
 import { ZoomIn, ZoomOut, Maximize2, Download, Copy, Check, Sun, Moon } from "lucide-react";
@@ -16,7 +17,7 @@ export default function MarkmapView({ markdown, title = "Mindmap Rapat" }) {
   const [theme, setTheme] = useState("dark");
 
   // Clean or convert markdown for optimal markmap visualization
-  const getMindmapMarkdown = () => {
+  const getMindmapMarkdown = useCallback(() => {
     if (!markdown) return "# Tidak ada data diskusi";
     // If text doesn't start with a heading, add one
     let text = markdown.trim();
@@ -24,7 +25,7 @@ export default function MarkmapView({ markdown, title = "Mindmap Rapat" }) {
       text = `# ${title}\n` + text;
     }
     return text;
-  };
+  }, [markdown, title]);
 
   useEffect(() => {
     if (!svgRef.current) return;
@@ -33,12 +34,17 @@ export default function MarkmapView({ markdown, title = "Mindmap Rapat" }) {
 
     try {
       const { root } = transformer.transform(cleanMd);
+      const sanitizeNode = (node) => {
+        node.content = DOMPurify.sanitize(node.content, { FORBID_TAGS: ["iframe", "object", "embed"] });
+        node.children?.forEach(sanitizeNode);
+      };
+      sanitizeNode(root);
       if (markmapRef.current) {
         try {
           if (typeof markmapRef.current.destroy === "function") {
             markmapRef.current.destroy();
           }
-        } catch {}
+        } catch { /* A stale visualization may already be destroyed. */ }
         if (svgRef.current) svgRef.current.innerHTML = "";
       }
 
@@ -55,7 +61,11 @@ export default function MarkmapView({ markdown, title = "Mindmap Rapat" }) {
     } catch (err) {
       console.warn("[Markmap] Error creating mindmap:", err);
     }
-  }, [markdown, title, theme]);
+    return () => {
+      markmapRef.current?.destroy();
+      markmapRef.current = null;
+    };
+  }, [getMindmapMarkdown, theme]);
 
   const handleZoomIn = () => {
     if (markmapRef.current) {

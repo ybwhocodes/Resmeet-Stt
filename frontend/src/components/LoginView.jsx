@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { Lock, User, Eye, EyeOff, LogIn, Sparkles, AlertCircle, ShieldCheck } from "lucide-react";
+import  { useEffect, useState } from "react";
+import { Lock, User, Eye, EyeOff, LogIn, AlertCircle } from "lucide-react";
 import resmeetSymbol from "../assets/resmeet_symbol.svg";
 
 export default function LoginView({ onLoginSuccess, apiBaseUrl = "http://127.0.0.1:8200" }) {

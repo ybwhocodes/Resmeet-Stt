@@ -4,7 +4,7 @@ use sqlx::postgres::PgConnectOptions;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use crate::auth::{generate_session_token, hash_password};
+use crate::auth::generate_session_token;
 use crate::models::{TranscriptRecord, UserAiModelDto};
 use crate::secrets::SecretCipher;
 
@@ -14,6 +14,9 @@ pub fn placeholder_pool() -> PgPool {
 }
 
 pub async fn ensure_pg_schema(pool: &PgPool) -> Result<(), sqlx::Error> {
+    // A detached connection releases the session lock by closing on every return path.
+    let mut migration_lock=pool.acquire().await?.detach();
+    sqlx::query("SELECT pg_advisory_lock(hashtextextended('resmeet-schema',0))").execute(&mut migration_lock).await?;
     sqlx::query(r#"CREATE EXTENSION IF NOT EXISTS "pgcrypto";"#).execute(pool).await?;
 
     // 1. Users table
@@ -32,6 +35,9 @@ pub async fn ensure_pg_schema(pool: &PgPool) -> Result<(), sqlx::Error> {
     )
     .execute(pool)
     .await?;
+
+    sqlx::query("CREATE TABLE IF NOT EXISTS user_transcription_settings (user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, device TEXT NOT NULL DEFAULT 'cpu' CHECK (device IN ('cpu', 'gpu')))")
+        .execute(pool).await?;
 
     // 2. User AI models table
     sqlx::query(
@@ -62,6 +68,14 @@ pub async fn ensure_pg_schema(pool: &PgPool) -> Result<(), sqlx::Error> {
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         )"#,
     ).execute(pool).await?;
+
+    // Existing installations may still have only the legacy plaintext api_key column.
+    sqlx::query("ALTER TABLE user_ai_settings ADD COLUMN IF NOT EXISTS api_key_hash TEXT NOT NULL DEFAULT ''")
+        .execute(pool).await?;
+    sqlx::query("ALTER TABLE user_ai_settings ADD COLUMN IF NOT EXISTS api_key_ciphertext TEXT NOT NULL DEFAULT ''")
+        .execute(pool).await?;
+    sqlx::query("ALTER TABLE user_ai_settings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP")
+        .execute(pool).await?;
 
     // 3. Sessions table
     sqlx::query(
@@ -115,9 +129,14 @@ pub async fn ensure_pg_schema(pool: &PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    sqlx::query("ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS document_docx BYTEA").execute(pool).await?;
+    sqlx::query("ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS mom_title VARCHAR(200)").execute(pool).await?;
+
+    sqlx::query("ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS document_revision BIGINT NOT NULL DEFAULT 0").execute(pool).await?;
+
     // Ensure new columns exist for existing databases
-    let _ = sqlx::query("ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS share_slug VARCHAR(150) UNIQUE DEFAULT NULL").execute(pool).await;
-    let _ = sqlx::query("ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT FALSE").execute(pool).await;
+    sqlx::query("ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS share_slug VARCHAR(150) UNIQUE DEFAULT NULL").execute(pool).await?;
+    sqlx::query("ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT FALSE").execute(pool).await?;
 
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_transcripts_user ON transcripts(user_id)")
         .execute(pool)
@@ -152,58 +171,7 @@ pub async fn ensure_pg_schema(pool: &PgPool) -> Result<(), sqlx::Error> {
         .execute(pool)
         .await?;
 
-    Ok(())
-}
-
-pub async fn seed_initial_superadmin(pool: &PgPool) -> Result<(), sqlx::Error> {
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
-        .fetch_one(pool)
-        .await?;
-
-    if count == 0 {
-        tracing::info!("[DB] Belum ada user terdaftar. Membuat akun Superadmin default (admin / admin123)...");
-        let hash = hash_password("admin123");
-        let new_user_id = Uuid::now_v7();
-        let row = sqlx::query(
-            r#"
-            INSERT INTO users (id, username, password_hash, role, is_active)
-            VALUES ($1, $2, $3, 'superadmin', true)
-            RETURNING id
-            "#,
-        )
-        .bind(new_user_id)
-        .bind("admin")
-        .bind(&hash)
-        .fetch_one(pool)
-        .await?;
-
-        let user_id: Uuid = row.get("id");
-
-        let default_models = vec![
-            ("9R-Gemini", "9R-Gemini (Laya Decision Engine)", true),
-            ("9R-Chatgpt", "9R-Chatgpt (Fast)", false),
-            ("claude-fable", "Claude Fable", false),
-        ];
-
-        for (m_id, m_name, is_def) in default_models {
-            let _ = sqlx::query(
-                r#"
-                INSERT INTO user_ai_models (id, user_id, model_id, model_name, is_default)
-                VALUES ($1, $2, $3, $4, $5)
-                "#,
-            )
-            .bind(Uuid::now_v7())
-            .bind(user_id)
-            .bind(m_id)
-            .bind(m_name)
-            .bind(is_def)
-            .execute(pool)
-            .await;
-        }
-
-        tracing::info!("[DB] Superadmin 'admin' (UUID v7: {}) berhasil dibuat dengan default AI models.", user_id);
-    }
-
+    crate::jobs::ensure_schema(pool).await?;
     Ok(())
 }
 
@@ -260,21 +228,25 @@ pub async fn get_transcripts(
     search: Option<String>,
     limit: i64,
     offset: i64,
+    start_date: Option<chrono::NaiveDate>,
+    end_date: Option<chrono::NaiveDate>,
 ) -> Result<(Vec<TranscriptRecord>, i64), sqlx::Error> {
     let search_pattern = search.map(|s| format!("%{}%", s));
 
     let rows = sqlx::query_as::<_, TranscriptRecord>(
         r#"
-        SELECT 
-            id, user_id, filename, final_text, 
-            created_at, duration_s, generation_time_s, 
-            language, word_timestamps, raw_text, 
-            ai_corrected_text, ai_summary, md_path, 
+        SELECT
+            id, user_id, filename, mom_title, final_text,
+            created_at, duration_s, generation_time_s,
+            language, word_timestamps, raw_text,
+            ai_corrected_text, ai_summary, md_path,
             ai_correction_status, directed_topics, ai_data,
             share_slug, is_public
         FROM transcripts
         WHERE ($1::UUID IS NULL OR user_id = $1)
-          AND ($2::TEXT IS NULL OR filename ILIKE $2 OR final_text ILIKE $2)
+          AND ($2::TEXT IS NULL OR filename ILIKE $2 OR mom_title ILIKE $2 OR final_text ILIKE $2)
+          AND ($5::DATE IS NULL OR created_at >= $5::DATE)
+          AND ($6::DATE IS NULL OR created_at < $6::DATE + INTERVAL '1 day')
         ORDER BY created_at DESC
         LIMIT $3 OFFSET $4
         "#,
@@ -283,6 +255,8 @@ pub async fn get_transcripts(
     .bind(&search_pattern)
     .bind(limit)
     .bind(offset)
+    .bind(start_date)
+    .bind(end_date)
     .fetch_all(pool)
     .await?;
 
@@ -291,11 +265,15 @@ pub async fn get_transcripts(
         SELECT COUNT(*) as count
         FROM transcripts
         WHERE ($1::UUID IS NULL OR user_id = $1)
-          AND ($2::TEXT IS NULL OR filename ILIKE $2 OR final_text ILIKE $2)
+          AND ($2::TEXT IS NULL OR filename ILIKE $2 OR mom_title ILIKE $2 OR final_text ILIKE $2)
+          AND ($3::DATE IS NULL OR created_at >= $3::DATE)
+          AND ($4::DATE IS NULL OR created_at < $4::DATE + INTERVAL '1 day')
         "#,
     )
     .bind(user_id)
     .bind(&search_pattern)
+    .bind(start_date)
+    .bind(end_date)
     .fetch_one(pool)
     .await?;
 
@@ -310,11 +288,11 @@ pub async fn get_transcript_by_id(
 ) -> Result<Option<TranscriptRecord>, sqlx::Error> {
     sqlx::query_as::<_, TranscriptRecord>(
         r#"
-        SELECT 
-            id, user_id, filename, final_text, 
-            created_at, duration_s, generation_time_s, 
-            language, word_timestamps, raw_text, 
-            ai_corrected_text, ai_summary, md_path, 
+        SELECT
+            id, user_id, filename, mom_title, final_text,
+            created_at, duration_s, generation_time_s,
+            language, word_timestamps, raw_text,
+            ai_corrected_text, ai_summary, md_path,
             ai_correction_status, directed_topics, ai_data,
             share_slug, is_public
         FROM transcripts
@@ -332,11 +310,11 @@ pub async fn get_transcript_by_share_slug(
 ) -> Result<Option<TranscriptRecord>, sqlx::Error> {
     sqlx::query_as::<_, TranscriptRecord>(
         r#"
-        SELECT 
-            id, user_id, filename, final_text, 
-            created_at, duration_s, generation_time_s, 
-            language, word_timestamps, raw_text, 
-            ai_corrected_text, ai_summary, md_path, 
+        SELECT
+            id, user_id, filename, mom_title, final_text,
+            created_at, duration_s, generation_time_s,
+            language, word_timestamps, raw_text,
+            ai_corrected_text, ai_summary, md_path,
             ai_correction_status, directed_topics, ai_data,
             share_slug, is_public
         FROM transcripts
@@ -382,7 +360,8 @@ pub async fn get_ai_gateway(pool: &PgPool, cipher: &SecretCipher, user_id: Uuid,
     let sealed: String = row.get("api_key_ciphertext");
     if sealed.is_empty() { return Ok(None); }
     let api_key = cipher.open(user_id, &hash, &sealed)?;
-    let models = get_user_ai_models(pool, user_id).await.map_err(|e| e.to_string())?;
+    let models = get_user_ai_models(pool, user_id).await.map_err(|e| e.to_string())?
+        .into_iter().filter(|model| !model.model_id.trim().is_empty()).collect::<Vec<_>>();
     let selected = requested_model.and_then(|id| models.iter().find(|model| model.model_id == id))
         .or_else(|| models.iter().find(|model| model.is_default))
         .or_else(|| models.first());

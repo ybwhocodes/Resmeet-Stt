@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import  { useState, useEffect, useCallback } from "react";
 import {
   Users, UserPlus, KeyRound, Trash2, CheckCircle2,
   XCircle, Shield, User, AlertCircle, RefreshCw, X, Check
@@ -21,7 +21,7 @@ export default function UserManagementView({ token, currentUserId, apiBaseUrl = 
   const [resetNewPassword, setResetNewPassword] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
@@ -36,11 +36,13 @@ export default function UserManagementView({ token, currentUserId, apiBaseUrl = 
     } finally {
       setLoading(false);
     }
-  };
+  }, [apiBaseUrl, token]);
 
   useEffect(() => {
-    fetchUsers();
-  }, [token]);
+    let active = true;
+    Promise.resolve().then(() => { if (active) fetchUsers(); });
+    return () => { active = false; };
+  }, [fetchUsers]);
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
@@ -370,7 +372,7 @@ export default function UserManagementView({ token, currentUserId, apiBaseUrl = 
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Min. 6 karakter"
+                  placeholder="Min. 12 karakter"
                   className="w-full bg-[#0c0e14] border border-[#1e2330] rounded-xl px-3.5 py-2.5 text-slate-200 outline-none focus:border-indigo-500/50"
                   required
                 />
@@ -459,7 +461,7 @@ export default function UserManagementView({ token, currentUserId, apiBaseUrl = 
                   type="password"
                   value={resetNewPassword}
                   onChange={(e) => setResetNewPassword(e.target.value)}
-                  placeholder="Min. 6 karakter"
+                  placeholder="Min. 12 karakter"
                   className="w-full bg-[#0c0e14] border border-[#1e2330] rounded-xl px-3.5 py-2.5 text-slate-200 outline-none focus:border-indigo-500/50"
                   autoFocus
                   required

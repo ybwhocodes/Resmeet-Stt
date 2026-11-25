@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -8,106 +8,32 @@ use serde_json::json;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use crate::ai::call_ai_paraphrase;
 use crate::auth::Authenticated;
 use crate::db::{get_user_ai_models, get_ai_gateway};
 use crate::models::{ParaphraseRequest, UpdateMomRequest, UserAiModelDto};
 use crate::AppState;
 
+#[derive(serde::Deserialize)]
+pub struct AiOptions { #[serde(default)] background:bool }
 pub async fn paraphrase_handler(
-    Authenticated(user): Authenticated,
-    State(state): State<AppState>,
-    Json(payload): Json<ParaphraseRequest>,
-) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let pool = state.db_pool();
-    let row = sqlx::query(
-        r#"
-        SELECT id, user_id, final_text, raw_text
-        FROM transcripts
-        WHERE id = $1
-        "#,
-    )
-    .bind(payload.id)
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": format!("DB error: {}", e) })),
-        )
+    Authenticated(user):Authenticated,State(state):State<AppState>,Query(options):Query<AiOptions>,Json(payload):Json<ParaphraseRequest>,
+)->Result<axum::response::Response,(StatusCode,Json<serde_json::Value>)>{
+    let pool=state.db_pool();
+    let transcript=crate::db::get_transcript_by_id(&pool,payload.id).await.map_err(database_error)?
+        .ok_or_else(||(StatusCode::NOT_FOUND,Json(json!({"error":"Notulen tidak ditemukan."}))))?;
+    if user.role!="superadmin" && transcript.user_id!=Some(user.id){return Err((StatusCode::FORBIDDEN,Json(json!({"error":"Akses ditolak."}))));}
+    let document_revision:i64=sqlx::query_scalar("SELECT document_revision FROM transcripts WHERE id=$1").bind(transcript.id).fetch_one(&pool).await.map_err(database_error)?;
+    let job_options=crate::jobs::JobOptions{device:super::processing::Device::Cpu,ai_correction:true,
+        style:payload.style.unwrap_or_else(||"detail_deskriptif".into()),custom_prompt:payload.custom_prompt,model_id:payload.model_id,cleanup_transcript:payload.cleanup_transcript,document_revision};
+    let preview=json!({"success":true,"id":transcript.id,"filename":transcript.filename,"momTitle":transcript.mom_title,
+        "finalText":transcript.final_text,"rawText":transcript.raw_text,"segments":transcript.word_timestamps,
+        "aiSummary":transcript.ai_summary,"aiCorrectionStatus":"pending","aiEnabled":true,"aiError":null,
+        "durationS":transcript.duration_s,"generationTimeS":transcript.generation_time_s,"createdAt":transcript.created_at.to_string(),"shareSlug":transcript.share_slug});
+    let id=crate::jobs::enqueue_ai(&pool,user.id,transcript.id,&transcript.filename,job_options,preview).await.map_err(|e|{
+        if e.as_database_error().is_some_and(|e|e.is_unique_violation()) {(StatusCode::CONFLICT,Json(json!({"error":"AI untuk dokumen ini masih diproses."})))}else{database_error(e)}
     })?;
-
-    let transcript = match row {
-        Some(t) => {
-            let user_id: Option<Uuid> = t.get("user_id");
-            if user.role != "superadmin" && user_id != Some(user.id) {
-                return Err((
-                    StatusCode::FORBIDDEN,
-                    Json(json!({ "error": "Akses ditolak" })),
-                ));
-            }
-            t
-        }
-        None => {
-            return Err((
-                StatusCode::NOT_FOUND,
-                Json(json!({ "error": "Notulen tidak ditemukan" })),
-            ));
-        }
-    };
-
-    let style = payload.style.unwrap_or_else(|| "poin_singkat".to_string());
-    let final_text: String = transcript.get("final_text");
-    let raw_text: Option<String> = transcript.get("raw_text");
-    let source_text = if !final_text.is_empty() {
-        final_text
-    } else {
-        raw_text.unwrap_or_default()
-    };
-
-    let gateway = get_ai_gateway(&pool, &state.secret_cipher, user.id, payload.model_id.as_deref()).await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))))?
-        .ok_or_else(|| (StatusCode::BAD_REQUEST, Json(json!({"error": "Konfigurasi Gateway AI atau model belum tersedia di menu Model AI."}))))?;
-    
-    let summary_md = call_ai_paraphrase(
-        &source_text,
-        &style,
-        payload.custom_prompt.as_deref(),
-        &gateway.base_url,
-        &gateway.api_key,
-        &gateway.model_id,
-    )
-    .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": format!("AI error: {}", e) })),
-        )
-    })?;
-
-    sqlx::query(
-        r#"
-        UPDATE transcripts
-        SET ai_summary = $1, ai_correction_status = 'paraphrased'
-        WHERE id = $2
-        "#,
-    )
-    .bind(&summary_md)
-    .bind(payload.id)
-    .execute(&pool)
-    .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": format!("Failed to update DB: {}", e) })),
-        )
-    })?;
-
-    Ok(Json(json!({
-        "success": true,
-        "aiSummary": summary_md,
-        "style": style
-    })))
+    if options.background{return Ok((StatusCode::ACCEPTED,Json(json!({"jobId":id}))).into_response());}
+    Ok(Json(crate::jobs::wait_for_result(&pool,id,user.id).await?).into_response())
 }
 
 pub async fn update_mom_handler(
@@ -133,7 +59,7 @@ pub async fn update_mom_handler(
         return Err((StatusCode::FORBIDDEN, Json(json!({"error": "Akses ditolak."}))));
     }
 
-    sqlx::query("UPDATE transcripts SET ai_summary = $1 WHERE id = $2")
+    sqlx::query("UPDATE transcripts SET ai_summary = $1, document_docx = NULL, document_revision=document_revision+1 WHERE id = $2")
         .bind(&payload.content)
         .bind(id)
         .execute(&pool)
@@ -170,10 +96,17 @@ pub async fn save_ai_models_handler(
     } else if let Some(m) = payload.get("models") {
         m.clone()
     } else {
-        serde_json::json!([])
+        return Err((StatusCode::BAD_REQUEST, Json(json!({"error":"Daftar models wajib diisi."}))));
     };
 
-    let models: Vec<UserAiModelDto> = serde_json::from_value(models_val).unwrap_or_default();
+    let models: Vec<UserAiModelDto> = serde_json::from_value(models_val)
+        .map_err(|e| (StatusCode::BAD_REQUEST, Json(json!({"error": format!("Daftar model tidak valid: {e}")}))))?;
+    let mut ids = std::collections::HashSet::new();
+    if models.len() > 100 || models.iter().filter(|m| m.is_default).count() > 1 || models.iter().any(|m|
+        m.model_id.trim().is_empty() || m.model_id.chars().count() > 255 ||
+        m.model_name.as_ref().is_some_and(|name| name.chars().count() > 255) || !ids.insert(m.model_id.trim().to_string())) {
+        return Err((StatusCode::BAD_REQUEST, Json(json!({"error":"ID model wajib unik, maksimal 255 karakter, dan hanya satu model default."}))));
+    }
 
     let mut tx = pool.begin().await.map_err(|e| {
         (
@@ -182,13 +115,13 @@ pub async fn save_ai_models_handler(
         )
     })?;
 
-    let _ = sqlx::query("DELETE FROM user_ai_models WHERE user_id = $1")
+    sqlx::query("DELETE FROM user_ai_models WHERE user_id = $1")
         .bind(user.id)
         .execute(&mut *tx)
-        .await;
+        .await.map_err(database_error)?;
 
     for m in models {
-        let _ = sqlx::query(
+        sqlx::query(
             r#"
             INSERT INTO user_ai_models (id, user_id, model_id, model_name, is_default)
             VALUES ($1, $2, $3, $4, $5)
@@ -200,7 +133,7 @@ pub async fn save_ai_models_handler(
         .bind(&m.model_name)
         .bind(m.is_default)
         .execute(&mut *tx)
-        .await;
+        .await.map_err(database_error)?;
     }
 
     tx.commit().await.map_err(|e| {
@@ -210,7 +143,7 @@ pub async fn save_ai_models_handler(
         )
     })?;
 
-    let updated = get_user_ai_models(&pool, user.id).await.unwrap_or_default();
+    let updated = get_user_ai_models(&pool, user.id).await.map_err(database_error)?;
     Ok(Json(json!({ "success": true, "message": "Model AI berhasil disimpan.", "models": updated })))
 }
 
@@ -231,7 +164,7 @@ pub async fn delete_user_ai_model_handler(
             )
         })?;
 
-    let updated = get_user_ai_models(&pool, user.id).await.unwrap_or_default();
+    let updated = get_user_ai_models(&pool, user.id).await.map_err(database_error)?;
     Ok(Json(json!({
         "success": res.rows_affected() > 0,
         "message": "Model AI berhasil dihapus.",
@@ -265,18 +198,21 @@ pub async fn set_default_ai_model_handler(
         )
     })?;
 
-    let _ = sqlx::query("UPDATE user_ai_models SET is_default = false WHERE user_id = $1")
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM user_ai_models WHERE user_id = $1 AND model_id = $2)")
+        .bind(user.id).bind(&model_id).fetch_one(&mut *tx).await.map_err(database_error)?;
+    if !exists { return Err((StatusCode::NOT_FOUND, Json(json!({"error":"Model tidak ditemukan pada akun Anda."})))); }
+    sqlx::query("UPDATE user_ai_models SET is_default = false WHERE user_id = $1")
         .bind(user.id)
         .execute(&mut *tx)
-        .await;
+        .await.map_err(database_error)?;
 
-    let _ = sqlx::query(
+    sqlx::query(
         "UPDATE user_ai_models SET is_default = true WHERE user_id = $1 AND model_id = $2",
     )
     .bind(user.id)
     .bind(&model_id)
     .execute(&mut *tx)
-    .await;
+    .await.map_err(database_error)?;
 
     tx.commit().await.map_err(|e| {
         (
@@ -285,7 +221,7 @@ pub async fn set_default_ai_model_handler(
         )
     })?;
 
-    let updated = get_user_ai_models(&pool, user.id).await.unwrap_or_default();
+    let updated = get_user_ai_models(&pool, user.id).await.map_err(database_error)?;
     Ok(Json(json!({
         "success": true,
         "message": format!("Model '{}' berhasil diatur sebagai default akun Anda.", model_id),
@@ -304,12 +240,12 @@ pub async fn get_ai_settings_handler(
         let base_url: String = row.get("base_url");
         let hash: String = row.get("api_key_hash");
         let sealed: String = row.get("api_key_ciphertext");
-        if !sealed.is_empty() {
-            let _ = state.secret_cipher.open(user.id, &hash, &sealed);
-        }
-        (base_url, !sealed.is_empty())
+        (base_url, !sealed.is_empty() && state.secret_cipher.open(user.id, &hash, &sealed).is_ok())
     } else { (String::new(), false) };
+    let models = get_user_ai_models(&state.db_pool(), user.id).await.unwrap_or_default();
+    let configured = has_key && !base_url.trim().is_empty() && models.iter().any(|model| !model.model_id.trim().is_empty());
     Ok(Json(json!({
+        "configured": configured,
         "baseUrl": base_url, "hasApiKey": has_key,
         "aiEnableCorrection": true, "aiEnableRag": true,
         "aiEnableKnowledgeExtraction": true, "aiTimeoutS": 120
@@ -363,4 +299,8 @@ pub async fn test_ai_handler(
         "success": result.is_ok(), "message": result.unwrap_or_else(|error| error),
         "modelId": gateway.model_id, "baseUrl": gateway.base_url
     })))
+}
+
+fn database_error(error: sqlx::Error) -> (StatusCode, Json<serde_json::Value>) {
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error":format!("Database error: {error}")})))
 }

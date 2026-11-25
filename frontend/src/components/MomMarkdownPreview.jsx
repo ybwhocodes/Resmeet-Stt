@@ -1,8 +1,6 @@
-import React, { useState, useEffect } from "react";
+import  { useState } from "react";
 import {
-  FileText, Copy, Check, Download, Eye, Code,
-  Calendar, Clock, Users, Target, CheckCircle2,
-  ArrowRight, Shield, Sparkles, BookOpen, Edit3,
+   Copy, Check, Download, Eye, Code, CheckCircle2, Edit3,
   Save, RotateCcw, X, AlertCircle, RefreshCw
 } from "lucide-react";
 
@@ -31,12 +29,10 @@ function parseMarkdownTable(tableBlock) {
  */
 export default function MomMarkdownPreview({
   markdown = "",
-  filename = "Dokumen MoM",
   onCopy,
   onDownloadMd,
   onDownloadTxt,
   copied = false,
-  itemId = null,
   onSave = null,
 }) {
   const [viewMode, setViewMode] = useState("formatted"); // "formatted" | "raw" | "edit"
@@ -47,13 +43,13 @@ export default function MomMarkdownPreview({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState(null);
 
-  // Sync content when markdown prop updates from parent
-  useEffect(() => {
-    if (viewMode !== "edit") {
-      setContent(markdown || "");
-      setInitialContent(markdown || "");
-    }
-  }, [markdown, viewMode]);
+  // Synchronize incoming content during render without resetting an active draft.
+  const [sourceMarkdown, setSourceMarkdown] = useState(markdown);
+  if (sourceMarkdown !== markdown && viewMode !== "edit") {
+    setSourceMarkdown(markdown);
+    setContent(markdown || "");
+    setInitialContent(markdown || "");
+  }
 
   const handleStartEdit = () => {
     setInitialContent(content);
@@ -253,11 +249,11 @@ export default function MomMarkdownPreview({
 
                   // Bullet Points (- or *)
                   if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
-                    const items = trimmed.split(/\n(?=[-|\*]\s+)/);
+                    const items = trimmed.split(/\n(?=[-*]\s+)/);
                     return (
                       <ul key={pIdx} className="space-y-1.5 pl-2">
                         {items.map((item, iIdx) => {
-                          const cleanItem = item.replace(/^[-|\*]\s+/, "");
+                          const cleanItem = item.replace(/^[-*]\s+/, "");
                           const isBoldPrefix = cleanItem.startsWith("**");
                           return (
                             <li

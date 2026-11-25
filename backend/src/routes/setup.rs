@@ -20,7 +20,11 @@ pub async fn status_handler(State(state): State<AppState>) -> Json<Value> {
     let connected = if configured {
         sqlx::query("SELECT 1").execute(&state.db_pool()).await.is_ok()
     } else { false };
-    Json(json!({ "configured": configured, "connected": connected,
+    let initialized = if connected {
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users").fetch_one(&state.db_pool()).await
+            .is_ok_and(|count| count > 0)
+    } else { configured };
+    Json(json!({ "configured": configured && initialized, "connected": connected,
         "suggestedHost": std::env::var("DB_SETUP_HOST").unwrap_or_else(|_| "postgres".into()) }))
 }
 
@@ -29,14 +33,20 @@ pub async fn configure_database_handler(
     Json(payload): Json<InitialSetupRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let _guard = state.setup_lock.lock().await;
-    if state.db_settings.read().expect("settings lock poisoned").is_some() {
-        return Err((StatusCode::FORBIDDEN, Json(json!({"error": "Setup awal sudah selesai. Database dikonfigurasi melalui .env."}))));
+    let current = state.db_settings.read().expect("settings lock poisoned").clone();
+    // An environment-configured empty database may be initialized, but an anonymous
+    // caller must never switch an existing installation to a different database.
+    let database = current.clone().unwrap_or_else(|| payload.database.clone());
+    database.validate().map_err(bad_request)?;
+    if payload.admin_username.trim().is_empty() || payload.admin_username.trim().chars().count() > 100 {
+        return Err(bad_request("Username admin wajib diisi, maksimal 100 karakter.".into()));
     }
-    payload.database.validate().map_err(bad_request)?;
-    if payload.admin_username.trim().is_empty() {
-        return Err(bad_request("Username admin wajib diisi.".into()));
+    let pool = database.connect().await.map_err(|e| bad_request(format!("Koneksi PostgreSQL gagal: {e}")))?;
+    if current.is_some() {
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users").fetch_one(&pool).await
+            .map_err(|e| server_error(e.to_string()))?;
+        if count > 0 { return Err((StatusCode::FORBIDDEN, Json(json!({"error":"Setup awal sudah selesai. Database dikonfigurasi melalui .env."})))); }
     }
-    let pool = payload.database.connect().await.map_err(|e| bad_request(format!("Koneksi PostgreSQL gagal: {e}")))?;
     db::ensure_pg_schema(&pool).await.map_err(|e| server_error(format!("Migrasi skema gagal: {e}")))?;
     crate::secrets::migrate_ai_keys(&pool, &state.secret_cipher).await.map_err(server_error)?;
     let user_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
@@ -59,10 +69,10 @@ pub async fn configure_database_handler(
             return Err(bad_request("Database sudah memiliki akun. Masukkan kredensial superadmin yang berlaku.".into()));
         }
     }
-    settings::save_database(&state.settings_path, &payload.database)
+    settings::save_database(&state.settings_path, &database)
         .map_err(|e| server_error(format!("Gagal menyimpan konfigurasi: {e}")))?;
     *state.pool.write().expect("pool lock poisoned") = pool;
-    *state.db_settings.write().expect("settings lock poisoned") = Some(payload.database);
+    *state.db_settings.write().expect("settings lock poisoned") = Some(database);
     Ok(Json(json!({"success": true, "message": "PostgreSQL berhasil dikonfigurasi."})))
 }
 
