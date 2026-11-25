@@ -358,6 +358,12 @@ pub async fn process_ai(
         response["aiCorrectionStatus"] = json!("disabled");
         return finish_ai(state, job, worker, response, false).await;
     };
+    let knowledge_entries = crate::db::get_active_knowledge_for_user(&pool, job.user_id)
+        .await
+        .unwrap_or_else(|error| {
+            tracing::warn!(%error, "Gagal membaca knowledge NLP; melanjutkan tanpa konteks RAG");
+            Vec::new()
+        });
     let source = if job.options.cleanup_transcript {
         base["rawText"]
             .as_str()
@@ -370,14 +376,15 @@ pub async fn process_ai(
     let cleaned = if let Some(cleaned) = job.checkpoint["cleaned"].as_str() {
         cleaned.to_string()
     } else {
-        progress.update(88, "Worker AI merapikan transkrip...");
+        progress.update(88, "Worker AI merapikan transkrip dengan Knowledge NLP...");
         let cleaned = if job.options.cleanup_transcript {
-            crate::ai::clean_transcript_with_progress(
+            crate::ai::clean_transcript_with_knowledge_and_progress(
                 source,
                 &gateway.base_url,
                 &gateway.api_key,
                 &gateway.model_id,
                 Some(progress.clone()),
+                &knowledge_entries,
             )
             .await?
         } else {
@@ -396,13 +403,14 @@ pub async fn process_ai(
         cleaned
     };
     progress.update(94, "Worker AI menyusun notulen rapat...");
-    let summary = crate::ai::call_ai_paraphrase(
+    let summary = crate::ai::call_ai_paraphrase_with_knowledge(
         &cleaned,
         &job.options.style,
         job.options.custom_prompt.as_deref(),
         &gateway.base_url,
         &gateway.api_key,
         &gateway.model_id,
+        &knowledge_entries,
     )
     .await?;
     let mut response = base;

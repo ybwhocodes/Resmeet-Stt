@@ -981,6 +981,7 @@
         <a href="#topology" class="nav-anchor" data-jump-tab="overview">Topologi</a>
         <a href="#models" class="nav-anchor" data-jump-tab="overview">Model &amp; Optimasi</a>
         <a href="#features" class="nav-anchor" data-jump-tab="overview">Fitur</a>
+        <a href="#nlp-knowledge" class="nav-anchor" data-jump-tab="overview">NLP &amp; RAG</a>
         <a href="#gitignore-prep" class="nav-anchor" data-jump-tab="install">Persiapan Git</a>
       </nav>
     </div>
@@ -1040,8 +1041,8 @@
               <span class="stage-tag">large-v3-turbo</span>
             </button>
             <button type="button" class="stage-btn" aria-pressed="false" data-stage="4">
-              <span><span class="stage-step">05</span>Perapian AI Opsional, DOCX &amp; Markmap</span>
-              <span class="stage-tag">A4 &amp; Mindmap</span>
+              <span><span class="stage-step">05</span>Knowledge NLP RAG, Parafrase AI &amp; DOCX</span>
+              <span class="stage-tag">Tanpa Limit Waktu</span>
             </button>
           </div>
 
@@ -1199,9 +1200,9 @@
               dua potongan audio secara bersamaan.
             </p>
             <p>
-              Saat GPU render node (<code>/dev/dri/renderD128</code>) terdeteksi melalui driver Vulkan
-              (<code>libggml-vulkan.so</code>), sistem otomatis menetapkan GPU sebagai perangkat default
-              dengan opsi CPU tetap siap di Pengaturan.
+              Saat perangkat GPU lokal terdeteksi melalui pemindaian hardware (<code>detect_gpu.py</code>) dan driver Vulkan
+              (<code>libggml-vulkan.so</code>), sistem otomatis menetapkan nama GPU yang terdeteksi sebagai perangkat default
+              dengan opsi CPU tetap siap di Pengaturan. Baik proses transkrip maupun parafrase AI berjalan <strong>tanpa batas waktu eksekusi</strong>.
             </p>
           </div>
 
@@ -1244,6 +1245,14 @@
                 <span class="param">STT_CONCURRENCY=2 · EnginePool</span>
               </div>
               <p>Ekstraksi chunk audio dan inferensi berjalan paralel di <code>pipeline.rs</code> dengan checkpoint atomik ke PostgreSQL.</p>
+            </div>
+
+            <div class="opt-item">
+              <div class="opt-item-head">
+                <h4>6. Tanpa Batas Waktu (Unlimited Execution)</h4>
+                <span class="param">No Timeout · Nginx 604800s</span>
+              </div>
+              <p>Batas waktu eksekusi pada Whisper (<code>inference.rs</code>), streaming AI (<code>ai.rs</code>), dan proxy Nginx dibuka penuh agar rapat berdurasi panjang maupun MoM rinci selesai tuntas.</p>
             </div>
           </div>
         </div>
@@ -1289,8 +1298,12 @@
             <p>Alat penyuntingan dan penyajian hasil rapat untuk tim dan pimpinan.</p>
             <ul class="feature-rows">
               <li>
-                <strong>Sakelar Model AI ON / OFF Opsional</strong>
-                <span>Transkrip asli Whisper selalu tersimpan. Saat AI diaktifkan, worker terpisah merapikan ejaan tanpa mengubah makna serta menyusun MoM terstruktur.</span>
+                <strong>Menu NLP (Knowledge &amp; RAG) + Koreksi Istilah</strong>
+                <span>Kelola glosarium istilah baku, alias salah dengar STT (misal <code>Pak Sammut / Pak Samsul</code> → <code>Pak Samsut</code>), dan konteks RAG di tabel PostgreSQL <code>knowledge</code> untuk memandu AI serta menganalisis saran perbaikan teks.</span>
+              </li>
+              <li>
+                <strong>Sakelar Model AI ON / OFF &amp; Tanpa Limit Waktu</strong>
+                <span>Transkrip asli Whisper selalu tersimpan. Saat AI diaktifkan, worker terpisah merapikan ejaan dengan acuan Knowledge NLP dan menyusun MoM terstruktur tanpa batas waktu eksekusi.</span>
               </li>
               <li>
                 <strong>Editor DOCX Native Standar A4</strong>
@@ -1306,6 +1319,79 @@
               </li>
             </ul>
           </div>
+        </div>
+      </section>
+
+      <!-- Menu NLP & Revisi Tabel Knowledge PostgreSQL -->
+      <section class="section" id="nlp-knowledge">
+        <div class="section-head">
+          <span class="section-kicker">04 / MENU NLP &amp; SKEMA TABEL KNOWLEDGE (RAG)</span>
+          <h2>Panduan Istilah Baku, Alias STT, dan Konteks RAG Terstruktur</h2>
+          <p>
+            Menu <strong>NLP</strong> menyimpan basis pengetahuan di tabel PostgreSQL <code>knowledge</code> yang otomatis
+            dibaca <code>resmeet_ai_worker</code> untuk mengarahkan perapian transkrip serta parafrase MoM (contoh:
+            <code>Pak Sammut, Pak Samsul</code> → <code>Pak Samsut</code>) sekaligus menyediakan endpoint
+            <code>POST /api/knowledge/analyze</code> untuk pratinjau rekomendasi NLP.
+          </p>
+        </div>
+
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Kolom Tabel <code>knowledge</code></th>
+                <th>Tipe PostgreSQL</th>
+                <th>Fungsi dalam Pipeline NLP &amp; RAG</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>id</strong></td>
+                <td><code>UUID PRIMARY KEY</code></td>
+                <td>Identitas unik setiap entri knowledge (<code>gen_random_uuid()</code>).</td>
+              </tr>
+              <tr>
+                <td><strong>user_id</strong></td>
+                <td><code>UUID REFERENCES users(id)</code></td>
+                <td>Kepemilikan entri per akun, atau <code>NULL</code> untuk knowledge global (dikelola Superadmin).</td>
+              </tr>
+              <tr>
+                <td><strong>category</strong></td>
+                <td><code>VARCHAR(50) NOT NULL</code></td>
+                <td>Pengelompokan seperti <em>Nama / PIC</em>, <em>Istilah Teknis</em>, <em>Singkatan / Akronim</em>, atau <em>Nama Proyek</em>.</td>
+              </tr>
+              <tr>
+                <td><strong>title</strong></td>
+                <td><code>VARCHAR(255) NOT NULL</code></td>
+                <td>Istilah baku atau nama target perbaikan yang wajib dipakai AI (contoh: <code>Pak Samsut</code>).</td>
+              </tr>
+              <tr>
+                <td><strong>aliases</strong></td>
+                <td><code>TEXT NOT NULL DEFAULT </code></td>
+                <td>Daftar variasi salah dengar STT dipisahkan koma (contoh: <code>Pak Sammut, Pak Samsul</code>) untuk deteksi alias eksak &amp; kemiripan NLP.</td>
+              </tr>
+              <tr>
+                <td><strong>content</strong></td>
+                <td><code>TEXT NOT NULL DEFAULT </code></td>
+                <td>Deskripsi konteks dan arahan RAG agar AI memahami peran atau definisi istilah saat memparafrase MoM.</td>
+              </tr>
+              <tr>
+                <td><strong>source</strong></td>
+                <td><code>VARCHAR(255) DEFAULT NULL</code></td>
+                <td>Referensi asal dokumen, struktur organisasi, atau catatan proyek.</td>
+              </tr>
+              <tr>
+                <td><strong>is_active</strong></td>
+                <td><code>BOOLEAN NOT NULL DEFAULT TRUE</code></td>
+                <td>Sakelar aktif/nonaktif agar entri tertentu dapat dijeda tanpa harus dihapus dari database.</td>
+              </tr>
+              <tr>
+                <td><strong>created_at / updated_at</strong></td>
+                <td><code>TIMESTAMP</code></td>
+                <td>Cap waktu pembuatan dan pembaruan terakhir; indeks unik mencakup <code>(COALESCE(user_id, 0...), LOWER(category), LOWER(title))</code>.</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </section>
     </section>
@@ -1616,7 +1702,7 @@ curl -L -o backend/models/ggml-silero-v6.2.0.bin \
 
   <footer class="site-footer">
     <div class="container footer-inner">
-      <span>Resmeet-STT Enterprise • Rust Axum • React 19 • PostgreSQL • Whisper large-v3-turbo</span>
+      <span>Resmeet-STT Enterprise • Rust Axum • React 19 • PostgreSQL • NLP RAG • <a href="https://ybwhocodes.github.io/Resmeet-Stt/" style="color:#818cf8;text-decoration:none;">GitHub Pages Docs</a></span>
       <div class="footer-links">
         <button type="button" data-switch-tab="overview">Overview &amp; Arsitektur</button>
         <button type="button" data-switch-tab="install">Panduan Instalasi</button>
@@ -1695,9 +1781,9 @@ curl -L -o backend/models/ggml-silero-v6.2.0.bin \
           code: "STT_CONCURRENCY=2 · whisper-server (Vulkan) / faster-whisper (INT8)",
         },
         {
-          title: "05. Perapian AI Opsional, Editor DOCX & Markmap",
-          desc: "Worker AI terpisah merapikan transkrip dan menyusun MoM jika sakelar AI ON. Hasil dapat disunting pada editor DOCX A4 dan ditampilkan sebagai mindmap.",
-          code: "APP_ROLE=ai-worker · @docx-editor.dev + Markmap",
+          title: "05. Knowledge NLP RAG, Parafrase AI Tanpa Limit & DOCX",
+          desc: "Worker AI memuat entri aktif tabel knowledge untuk mengoreksi istilah (mis. Pak Sammut -> Pak Samsut) dan menyusun MoM tanpa batas waktu, siap disunting di DOCX A4 & Markmap.",
+          code: "APP_ROLE=ai-worker · /api/knowledge · Tanpa Limit Waktu",
         },
       ];
 
@@ -1759,7 +1845,7 @@ curl -L -o backend/models/ggml-silero-v6.2.0.bin \
         aiworker: {
           role: "ASYNCHRONOUS AI NOTETAKER",
           name: "resmeet_ai_worker",
-          desc: "Worker terpisah khusus untuk merapikan teks hasil transkrip dan menyusun Minutes of Meeting (MoM) ke Gateway AI saat sakelar Model AI ON.",
+          desc: "Worker terpisah untuk merapikan transkrip dengan acuan Knowledge NLP/RAG (tabel knowledge) dan menyusun MoM ke Gateway AI tanpa batas waktu saat sakelar AI ON.",
           specs: [
             ["Peran", "APP_ROLE=ai-worker"],
             ["Sifat", "Opsional (tidak menghalangi STT)"],

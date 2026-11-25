@@ -177,7 +177,7 @@ export default function MeetingDocxEditor({
       {aiEnabled && !isReadOnly && onParaphraseCustom && <form className="flex flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); onParaphraseCustom(prompt.trim() || null); }}>
         <input value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Arahan tambahan untuk dokumen, misalnya: uraikan pembahasan per topik" className="min-w-48 flex-1 rounded-lg border border-slate-700 bg-[#0c0e14] p-2 text-xs text-white" />
         <button type="submit" className={button} disabled={!loaded || dirty || titleDirty || paraphrasing}><Sparkles size={14} />{paraphrasing ? "Menyusun dokumen..." : "Susun Ulang dengan AI"}</button>
-        <p className="w-full text-[11px] text-slate-400">{dirty ? "Simpan perubahan terlebih dahulu sebelum menjalankan AI." : "AI menyusun ulang dokumen dari transkrip; fakta, angka, PIC, dan tenggat tetap mengikuti sumber."}</p>
+        <p className="w-full text-[11px] text-slate-400">{dirty ? "Simpan perubahan terlebih dahulu sebelum menjalankan AI." : "AI menyusun ulang dokumen dari transkrip dengan acuan Knowledge NLP aktif; fakta, angka, PIC, dan tenggat tetap mengikuti sumber."}</p>
       </form>}
     </div>
     {error && <p role="alert" className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200">{error}</p>}

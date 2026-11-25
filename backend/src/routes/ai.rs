@@ -248,7 +248,7 @@ pub async fn get_ai_settings_handler(
         "configured": configured,
         "baseUrl": base_url, "hasApiKey": has_key,
         "aiEnableCorrection": true, "aiEnableRag": true,
-        "aiEnableKnowledgeExtraction": true, "aiTimeoutS": 120
+        "aiEnableKnowledgeExtraction": true, "aiTimeoutS": 0, "aiUnlimitedTimeout": true
     })))
 }
 

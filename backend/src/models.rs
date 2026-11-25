@@ -77,6 +77,21 @@ pub struct TranscriptRecord {
     pub is_public: Option<bool>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeRecord {
+    pub id: Uuid,
+    pub user_id: Option<Uuid>,
+    pub category: String,
+    pub title: String,
+    pub aliases: String,
+    pub content: String,
+    pub source: Option<String>,
+    pub is_active: bool,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct ParaphraseRequest {
     pub id: Uuid,

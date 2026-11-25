@@ -236,11 +236,8 @@ impl Fast {
         let mut speech = None;
         loop {
             line.clear();
-            let read = tokio::time::timeout(
-                Duration::from_secs(1800),
-                self.output.read_line(&mut line),
-            )
-            .await;
+            // No inference time limit: wait until worker emits line or exits.
+            let read = self.output.read_line(&mut line).await;
             if read.is_err() || line.trim().is_empty() {
                 return Err("Worker INT8 berhenti saat inferensi".into());
             }
@@ -358,10 +355,10 @@ impl Native {
         drain_logs(child.stdout.take().unwrap(), false);
         drain_logs(child.stderr.take().unwrap(), true);
         let url = format!("http://127.0.0.1:{port}");
+        // No overall request timeout: transcription chunks run without an execution time limit.
         let client = reqwest::Client::builder()
             .no_proxy()
             .connect_timeout(Duration::from_secs(5))
-            .timeout(Duration::from_secs(1800))
             .build()
             .map_err(|e| e.to_string())?;
         let loading = Instant::now();

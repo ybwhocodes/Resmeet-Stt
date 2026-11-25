@@ -1,8 +1,20 @@
 # Resmeet STT
 
-Aplikasi web transkripsi rapat dan penyusunan notulen (Minutes of Meeting / MoM) dengan backend **Rust (Axum + Tokio)**, frontend **React 19 (Vite)**, **PostgreSQL**, **FFmpeg**, dan **Whisper `large-v3-turbo`** (`whisper.cpp` Vulkan GPU / `faster-whisper` INT8 CPU).
+Aplikasi web transkripsi rapat dan penyusunan notulen (Minutes of Meeting / MoM) dengan backend **Rust (Axum + Tokio)**, frontend **React 19 (Vite)**, **PostgreSQL**, **FFmpeg**, dan **Whisper `large-v3-turbo`** (`whisper.cpp` GPU Vulkan / `faster-whisper` INT8 CPU).
 
-Untuk tampilan dokumentasi interaktif beserta diagram topologi arsitektur dan panduan instalasi lengkap, buka berkas [`index.html`](index.html) langsung di browser.
+Dokumentasi interaktif beserta diagram topologi arsitektur dan panduan instalasi lengkap tersedia langsung pada [`index.html`](index.html) atau melalui GitHub Pages di **https://ybwhocodes.github.io/Resmeet-Stt/**.
+
+---
+
+## Pembaruan Utama: Menu NLP (Knowledge / RAG) & Tanpa Batas Waktu
+
+- **Menu NLP & Basis Knowledge RAG (Tabel PostgreSQL `knowledge`)**:
+  - Pengguna dapat mendaftarkan istilah baku, nama PIC, proyek, atau singkatan beserta variasi salah dengar STT (contoh: `Pak Sammut, Pak Samsul` -> `Pak Samsut`) dan konteks RAG.
+  - Worker AI otomatis memuat entri `knowledge` aktif untuk memberikan rekomendasi perbaikan kata dan konteks RAG saat merapikan transkrip serta menyusun draf MoM.
+  - Tersedia fitur **Uji Rekomendasi NLP** (`POST /api/knowledge/analyze`) untuk meninjau kecocokan alias eksak maupun kemiripan NLP sebelum parafrase dijalankan.
+  - Skema tabel `knowledge` mendukung kolom: `id`, `user_id` (pribadi per akun atau `NULL` untuk global), `category`, `title` (istilah baku), `aliases` (daftar variasi salah dengar), `content` (konteks/arahan RAG), `source`, `is_active`, `created_at`, dan `updated_at`.
+- **Transkrip & Parafrase AI Tanpa Batas Waktu**:
+  - Seluruh batas waktu eksekusi (`timeout`) pada proses inferensi Whisper (`inference.rs`), pemanggilan AI streaming (`ai.rs`), dan proxy Nginx (`proxy_read_timeout` / `proxy_send_timeout`) telah dibuka agar rekaman rapat berdurasi panjang maupun penyusunan MoM rinci dapat berjalan hingga tuntas.
 
 ---
 
@@ -58,7 +70,7 @@ Skrip `./start-docker.sh` mengaudit `.env`, Docker Engine & Compose, koneksi Pos
    - `./start-docker.sh --down` : hentikan seluruh container Resmeet-STT
    - `RESMEET_GPU=off ./start-docker.sh` : jalankan tanpa passthrough GPU Vulkan
 3. Buka `http://localhost:5173`. API diproksikan melalui `http://localhost:5173/api` dan tersedia langsung di `http://localhost:8200/api`.
-4. Pada database kosong, buat akun superadmin melalui pop-up setup awal (password minimal 12 karakter). Gateway AI dan ID model dapat diatur di menu **Pengaturan**.
+4. Pada database kosong, buat akun superadmin melalui pop-up setup awal (password minimal 12 karakter). Gateway AI dan ID model dapat diatur di menu **Pengaturan**, sedangkan kamus istilah/koreksi NLP dapat diatur di menu **NLP**.
 
 ---
 
@@ -98,16 +110,17 @@ Halaman **Status Sistem & Kesiapan** dan banner peringatan preflight di UI memer
 
 | Service Container | Peran (`APP_ROLE`) | Konfigurasi Bawaan |
 | --- | --- | --- |
-| `resmeet_backend` | API Autentikasi PBKDF2, upload streaming, antrean, DOCX API, preflight | `APP_ROLE=api`, `0.5` CPU, port `8200` |
+| `resmeet_backend` | API Autentikasi PBKDF2, upload streaming, antrean, Knowledge NLP/RAG, DOCX API, preflight | `APP_ROLE=api`, `0.5` CPU, port `8200` |
 | `resmeet_worker` | Normalisasi FFmpeg, VAD, chunking 45 detik, `EnginePool` paralel | `APP_ROLE=worker`, `4.0` CPU, GPU `/dev/dri/renderD128` |
-| `resmeet_ai_worker` | Perapian transkrip & penyusunan MoM terpisah (opsional) | `APP_ROLE=ai-worker`, `0.5` CPU |
-| `resmeet_frontend` | React 19 + `@docx-editor.dev` + Markmap via Nginx reverse proxy | Port `5173` |
+| `resmeet_ai_worker` | Perapian transkrip & penyusunan MoM terpisah dengan konteks `knowledge` (opsional) | `APP_ROLE=ai-worker`, `0.5` CPU |
+| `resmeet_frontend` | React 19 + `@docx-editor.dev` + Markmap + Menu NLP via Nginx reverse proxy | Port `5173` |
 
 Optimasi performa diterapkan tanpa menurunkan kualitas bobot model **`large-v3-turbo`**:
 - **Silero VAD (`ggml-silero-v6.2.0.bin`)**: pemangkasan segmen hening agresif (`-vt 0.50`, `-vspd 250`, `-vsd 100`, `-vp 50`, `-vo 0.10`).
 - **Non-fallback decoding**: `-nf` dan `temperature=0.0` meniadakan re-decoding loop saat jeda kalimat/batuk.
 - **Chunking 45 detik berbasis jeda napas**: `STT_CHUNK_SECONDS=45` memakai `silencedetect=noise=-35dB:d=0.3` dengan overlap aman +-0.5 detik.
 - **Filter audio FFmpeg**: `-af "highpass=f=80,lowpass=f=7500,afftdn=nf=-25"` membersihkan dengung rendah dan desis statis.
-- **GPU Vulkan default & paralelisasi**: otomatis memprioritaskan GPU Vulkan (`/dev/dri/renderD128`) dengan CPU INT8 sebagai cadangan, serta memproses `STT_CONCURRENCY=2` chunk sekaligus lewat `EnginePool` di `pipeline.rs`.
+- **Deteksi GPU otomatis & paralelisasi**: memindai perangkat GPU lokal secara dinamis dengan CPU INT8 sebagai cadangan, serta memproses `STT_CONCURRENCY=2` chunk sekaligus lewat `EnginePool` di `pipeline.rs`.
+- **Eksekusi tanpa batas waktu**: transkrip audio dan parafrase AI berjalan tanpa batasan timeout paksa.
 
 Unggahan memakai `POST /api/upload-and-transcribe?background=true` (HTTP 202) dengan checkpoint atomik di tabel `transcription_chunks` dan penguncian worker di PostgreSQL (`FOR UPDATE SKIP LOCKED` + heartbeat kontinu).

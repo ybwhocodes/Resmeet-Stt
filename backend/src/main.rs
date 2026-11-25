@@ -4,6 +4,7 @@ mod auth;
 mod config;
 mod db;
 mod models;
+mod nlp;
 mod progress;
 mod routes;
 mod secrets;
@@ -240,6 +241,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/transcripts/{id}/mom", put(routes::ai::update_mom_handler))
         .route("/public/transcripts/share/{slug}", get(routes::transcripts::public_share_handler))
         .route("/user/processing-settings", get(routes::processing::get_settings).put(routes::processing::save_settings))
+        // NLP Knowledge / RAG
+        .route("/knowledge", get(routes::knowledge::list_knowledge_handler).post(routes::knowledge::create_knowledge_handler))
+        .route("/knowledge/analyze", post(routes::knowledge::analyze_knowledge_handler))
+        .route("/knowledge/{id}", put(routes::knowledge::update_knowledge_handler).delete(routes::knowledge::delete_knowledge_handler))
         // AI & Models
         .route("/paraphrase", post(routes::ai::paraphrase_handler))
         .route("/ai/test", post(routes::ai::test_ai_handler))

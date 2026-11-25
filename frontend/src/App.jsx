@@ -7,7 +7,7 @@ import {
   Trash2, Mic, Zap,
   ArrowLeft, ChevronRight, Search, X, GitBranch, Sparkles, Server,
   Square, Pause, Play, MessageSquare, Loader2,
-  Users, LogOut, Filter
+  Users, LogOut, Filter, BookOpen
 } from "lucide-react";
 import MarkmapView from "./components/MarkmapView";
 import DialogTranscriptView from "./components/DialogTranscriptView";
@@ -20,6 +20,7 @@ import LoginView from "./components/LoginView";
 import UserManagementView from "./components/UserManagementView";
 import PreflightStatusView from "./components/PreflightStatusView";
 import UserAiModelsView from "./components/UserAiModelsView";
+import NlpKnowledgeView from "./components/NlpKnowledgeView";
 import resmeetSymbol from "./assets/resmeet_symbol.svg";
 
 const API = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/+$/, "");
@@ -111,7 +112,7 @@ export default function App() {
   const [savedToken] = useState(() => localStorage.getItem("resmeet_auth_token") || sessionStorage.getItem("resmeet_auth_token"));
   const [authChecking, setAuthChecking] = useState(Boolean(savedToken));
 
-  // Navigation: "transcribe" | "history" | "detail" | "models" | "users"
+  // Navigation: "transcribe" | "history" | "detail" | "nlp" | "models" | "users"
   const [nav, setNav] = useState("transcribe");
   const [showPreflightModal, setShowPreflightModal] = useState(false);
 
@@ -1087,6 +1088,20 @@ export default function App() {
                   </span>
                 </button>
 
+                {/* 3. NLP Knowledge / RAG */}
+                <button
+                  type="button"
+                  onClick={() => setNav("nlp")}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                    nav === "nlp"
+                      ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-950/40 font-semibold"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-[#141722]"
+                  }`}
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+                  <span>NLP</span>
+                </button>
+
                 {/* 3. Model AI */}
                 <button
                   type="button"
@@ -1914,6 +1929,23 @@ export default function App() {
         )}
 
         {/* ========================================================================= */}
+        {/* PAGE 3B: NLP KNOWLEDGE & RAG BASE        */}
+        {/* ========================================================================= */}
+        {nav === "nlp" && (
+          <NlpKnowledgeView
+            token={token}
+            user={user}
+            apiBaseUrl={SOCKET_URL}
+            history={history}
+            onOpenTranscript={(item) => {
+              setSelectedItem(item);
+              setDetailTab("mom");
+              setNav("detail");
+            }}
+          />
+        )}
+
+        {/* ========================================================================= */}
         {/* PAGE 4: USER AI MODELS & GATEWAY      */}
         {/* ========================================================================= */}
         {nav === "models" && (
@@ -2017,6 +2049,20 @@ export default function App() {
               {history.length > 99 ? "99+" : history.length}
             </span>
           )}
+        </button>
+
+        {/* 3. NLP */}
+        <button
+          type="button"
+          onClick={() => setNav("nlp")}
+          className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all cursor-pointer ${
+            nav === "nlp"
+              ? "text-indigo-400 font-bold"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <BookOpen className="w-5 h-5 text-amber-400" />
+          <span className="text-[10px]">NLP</span>
         </button>
 
         {/* 3. Model AI */}

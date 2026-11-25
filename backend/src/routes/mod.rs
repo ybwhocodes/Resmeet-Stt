@@ -1,10 +1,10 @@
 pub mod admin;
 pub mod ai;
 pub mod auth;
+pub mod documents;
+pub mod knowledge;
 pub mod preflight;
+pub mod processing;
 pub mod setup;
 pub mod transcripts;
 pub mod upload;
-
-pub mod documents;
-pub mod processing;

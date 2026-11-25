@@ -5,7 +5,7 @@ use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 use crate::auth::generate_session_token;
-use crate::models::{TranscriptRecord, UserAiModelDto};
+use crate::models::{KnowledgeRecord, TranscriptRecord, UserAiModelDto};
 use crate::secrets::SecretCipher;
 
 pub fn placeholder_pool() -> PgPool {
@@ -150,29 +150,69 @@ pub async fn ensure_pg_schema(pool: &PgPool) -> Result<(), sqlx::Error> {
         .execute(pool)
         .await?;
 
-    // 5. Knowledge table
+    // 5. Knowledge / NLP RAG table (revised for aliases, RAG guidance, active flag, and user scoping)
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS knowledge (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID REFERENCES users(id) ON DELETE CASCADE,
             category VARCHAR(50) NOT NULL,
             title VARCHAR(255) NOT NULL,
-            content TEXT NOT NULL,
+            aliases TEXT NOT NULL DEFAULT '',
+            content TEXT NOT NULL DEFAULT '',
             source VARCHAR(255) DEFAULT NULL,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            CONSTRAINT uq_knowledge_cat_title UNIQUE (category, title)
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
         "#,
     )
     .execute(pool)
     .await?;
 
+    sqlx::query("ALTER TABLE knowledge ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE CASCADE")
+        .execute(pool).await?;
+    sqlx::query("ALTER TABLE knowledge ADD COLUMN IF NOT EXISTS aliases TEXT NOT NULL DEFAULT ''")
+        .execute(pool).await?;
+    sqlx::query("ALTER TABLE knowledge ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE")
+        .execute(pool).await?;
+    sqlx::query("ALTER TABLE knowledge ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP")
+        .execute(pool).await?;
+    sqlx::query("ALTER TABLE knowledge DROP CONSTRAINT IF EXISTS uq_knowledge_cat_title")
+        .execute(pool).await?;
+
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_knowledge_category ON knowledge(category)")
+        .execute(pool)
+        .await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_knowledge_user ON knowledge(user_id)")
+        .execute(pool)
+        .await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_knowledge_active ON knowledge(is_active)")
+        .execute(pool)
+        .await?;
+    sqlx::query("CREATE UNIQUE INDEX IF NOT EXISTS uq_knowledge_scope_cat_title ON knowledge (COALESCE(user_id, '00000000-0000-0000-0000-000000000000'::uuid), LOWER(category), LOWER(title))")
         .execute(pool)
         .await?;
 
     crate::jobs::ensure_schema(pool).await?;
     Ok(())
+}
+
+pub async fn get_active_knowledge_for_user(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> Result<Vec<KnowledgeRecord>, sqlx::Error> {
+    sqlx::query_as::<_, KnowledgeRecord>(
+        r#"
+        SELECT id, user_id, category, title, aliases, content, source, is_active, created_at, updated_at
+        FROM knowledge
+        WHERE is_active = TRUE AND (user_id = $1 OR user_id IS NULL)
+        ORDER BY CASE WHEN user_id = $1 THEN 0 ELSE 1 END, updated_at DESC, title ASC
+        "#,
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await
 }
 
 pub async fn create_session(

@@ -2,6 +2,8 @@ use reqwest::Client;
 use serde_json::json;
 use std::time::Duration;
 
+use crate::models::KnowledgeRecord;
+
 pub fn normalize_gateway_url(url: &str) -> String {
     let has_docker_host = std::fs::read_to_string("/etc/hosts")
         .map(|s| s.contains("host.docker.internal"))
@@ -23,11 +25,12 @@ pub async fn call_chat_completion(
     user_prompt: &str,
     timeout_s: u64,
 ) -> Result<String, String> {
-    let client = Client::builder()
-        .connect_timeout(Duration::from_secs(15))
-        .read_timeout(Duration::from_secs(timeout_s))
-        // Active streams may run longer than the inactivity timeout on a slow gateway.
-        .timeout(Duration::from_secs(1800))
+    let mut builder = Client::builder().connect_timeout(Duration::from_secs(15));
+    // timeout_s == 0 means unlimited execution/read time for long transcripts & MoM paraphrasing.
+    if timeout_s > 0 {
+        builder = builder.read_timeout(Duration::from_secs(timeout_s));
+    }
+    let client = builder
         .build()
         .map_err(|e| format!("Client error: {}", e))?;
 
@@ -178,12 +181,13 @@ fn transcript_chunks(text: &str, max_chars: usize) -> Vec<&str> {
 pub async fn clean_transcript(
     text: &str, base_url: &str, api_key: &str, model_id: &str,
 ) -> Result<String, String> {
-    clean_transcript_with_progress(text, base_url, api_key, model_id, None).await
+    clean_transcript_with_knowledge_and_progress(text, base_url, api_key, model_id, None, &[]).await
 }
 
-pub async fn clean_transcript_with_progress(
+pub async fn clean_transcript_with_knowledge_and_progress(
     text: &str, base_url: &str, api_key: &str, model_id: &str,
     progress: Option<crate::progress::ProgressReporter>,
+    knowledge: &[KnowledgeRecord],
 ) -> Result<String, String> {
     use futures_util::{stream, StreamExt};
     if text.trim().is_empty() { return Err("Transkrip kosong".to_string()); }
@@ -192,17 +196,26 @@ pub async fn clean_transcript_with_progress(
     if compacted.is_some() { tracing::info!(original_chars = text.chars().count(), input_chars = input.chars().count(), "Pengulangan mekanis disaring dari input AI; teks asli tetap disimpan"); }
     let chunks: Vec<String> = transcript_chunks(input, 3000).into_iter().map(str::to_owned).collect();
     let count = chunks.len();
-    let mut requests = stream::iter(chunks).map(|chunk: String| async move {
-        let cleaned = call_chat_completion(
-            base_url, api_key, model_id,
-            "Rapikan ejaan, tanda baca, dan paragraf bagian transkrip berikut. Pertahankan bahasa, urutan ucapan, seluruh fakta, angka, dan makna asli. Hapus pengulangan mekanis yang jelas berasal dari kesalahan transkripsi. Jangan meringkas isi, menambahkan informasi, menebak identitas pembicara, atau membuat keputusan baru. Balas hanya dengan transkrip yang dirapikan tanpa pengantar.",
-            &chunk, 120,
-        ).await?;
-        if cleaned.trim().is_empty() { return Err("AI mengembalikan transkrip kosong".to_string()); }
-        if chunk.chars().count() > 200 && cleaned.chars().count() * 3 < chunk.chars().count() {
-            return Err("Respons AI terlalu pendek untuk menjadi transkrip lengkap; hasil asli dipertahankan".to_string());
+    let base_instruction = "Rapikan ejaan, tanda baca, dan paragraf bagian transkrip berikut. Pertahankan bahasa, urutan ucapan, seluruh fakta, angka, dan makna asli. Hapus pengulangan mekanis yang jelas berasal dari kesalahan transkripsi. Jangan meringkas isi, menambahkan informasi, menebak identitas pembicara, atau membuat keputusan baru. Balas hanya dengan transkrip yang dirapikan tanpa pengantar.";
+    let rag_note = crate::nlp::build_cleanup_rag_note(input, knowledge);
+    let system_prompt = match rag_note {
+        Some(note) => format!("{base_instruction}{note}"),
+        None => base_instruction.to_string(),
+    };
+    let mut requests = stream::iter(chunks).map(|chunk: String| {
+        let sys = system_prompt.clone();
+        async move {
+            let cleaned = call_chat_completion(
+                base_url, api_key, model_id,
+                &sys,
+                &chunk, 0,
+            ).await?;
+            if cleaned.trim().is_empty() { return Err("AI mengembalikan transkrip kosong".to_string()); }
+            if chunk.chars().count() > 200 && cleaned.chars().count() * 3 < chunk.chars().count() {
+                return Err("Respons AI terlalu pendek untuk menjadi transkrip lengkap; hasil asli dipertahankan".to_string());
+            }
+            Ok(cleaned)
         }
-        Ok(cleaned)
     }).buffered(2);
     let mut cleaned_chunks = Vec::new();
     while let Some(result) = requests.next().await {
@@ -328,6 +341,7 @@ fn format_mom_discussion(markdown: &str) -> String {
     format!("{}{}\n{}", &markdown[..start], formatted, &markdown[end..])
 }
 
+#[cfg(test)]
 pub async fn call_ai_paraphrase(
     dialog_text: &str,
     style: &str,
@@ -336,13 +350,29 @@ pub async fn call_ai_paraphrase(
     api_key: &str,
     model_id: &str,
 ) -> Result<String, String> {
+    call_ai_paraphrase_with_knowledge(dialog_text, style, custom_prompt, base_url, api_key, model_id, &[]).await
+}
+
+pub async fn call_ai_paraphrase_with_knowledge(
+    dialog_text: &str,
+    style: &str,
+    custom_prompt: Option<&str>,
+    base_url: &str,
+    api_key: &str,
+    model_id: &str,
+    knowledge: &[KnowledgeRecord],
+) -> Result<String, String> {
     if dialog_text.trim().is_empty() { return Err("Transkrip kosong".to_string()); }
     let system_prompt = mom_system_prompt(style, custom_prompt);
+    let rag_section = crate::nlp::build_paraphrase_rag_block(dialog_text, knowledge)
+        .map(|block| format!("\n\n{block}"))
+        .unwrap_or_default();
     let user_prompt = format!(
-        "Susun draf MoM sesuai struktur A–I dari TRANSKRIP SUMBER berikut. Catat seluruh agenda tanpa batas jumlah. Setiap topik dalam bagian Pembahasan harus menjelaskan konteks dan minimal 2 paragraf naratif, sedetail informasi yang tersedia dalam sumber. Data yang tidak disebut harus ditandai untuk dikonfirmasi.\n\n<transkrip>\n{}\n</transkrip>",
+        "Susun draf MoM sesuai struktur A–I dari TRANSKRIP SUMBER berikut. Catat seluruh agenda tanpa batas jumlah. Setiap topik dalam bagian Pembahasan harus menjelaskan konteks dan minimal 2 paragraf naratif, sedetail informasi yang tersedia dalam sumber. Data yang tidak disebut harus ditandai untuk dikonfirmasi.\n\n<transkrip>\n{}\n</transkrip>{}",
         dialog_text,
+        rag_section,
     );
-    call_chat_completion(base_url, api_key, model_id, &system_prompt, &user_prompt, 120).await
+    call_chat_completion(base_url, api_key, model_id, &system_prompt, &user_prompt, 0).await
         .map(|output| format_mom_discussion(&output))
 }
 
@@ -378,6 +408,40 @@ mod tests {
         assert_eq!(body["model"], "selected-model");
         assert_eq!(body["messages"][1]["content"], "rapat dimulai pukul 09.00");
         assert!(body["messages"][0]["content"].as_str().unwrap().contains("Jangan meringkas"));
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn cleanup_injects_knowledge_rag_context_when_entries_exist() {
+        let now = chrono::Utc::now().naive_utc();
+        let knowledge = vec![KnowledgeRecord {
+            id: uuid::Uuid::new_v4(),
+            user_id: None,
+            category: "Nama / PIC".to_string(),
+            title: "Pak Samsut".to_string(),
+            aliases: "Pak Sammut, Pak Samsul".to_string(),
+            content: "Kepala Gudang".to_string(),
+            source: None,
+            is_active: true,
+            created_at: now,
+            updated_at: now,
+        }];
+        let (url, request, server) = mock_gateway(axum::http::StatusCode::OK, "Pak Samsut hadir.").await;
+        let result = clean_transcript_with_knowledge_and_progress(
+            "Pak Sammut hadir.",
+            &url,
+            "test-key",
+            "selected-model",
+            None,
+            &knowledge,
+        )
+        .await
+        .unwrap();
+        assert_eq!(result, "Pak Samsut hadir.");
+        let body = request.await.unwrap();
+        let system = body["messages"][0]["content"].as_str().unwrap();
+        assert!(system.contains("Pak Samsut"));
+        assert!(system.contains("Pak Sammut"));
         server.abort();
     }
 
@@ -476,6 +540,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn mom_request_includes_knowledge_rag_recommendations() {
+        let now = chrono::Utc::now().naive_utc();
+        let knowledge = vec![KnowledgeRecord {
+            id: uuid::Uuid::new_v4(),
+            user_id: None,
+            category: "Nama / PIC".to_string(),
+            title: "Pak Samsut".to_string(),
+            aliases: "Pak Sammut, Pak Samsul".to_string(),
+            content: "Kepala Gudang Pusat".to_string(),
+            source: None,
+            is_active: true,
+            created_at: now,
+            updated_at: now,
+        }];
+        let source = "Pak Sammut menjelaskan audit gudang bersama Pak Samsul.";
+        let (url, request, server) = mock_gateway(axum::http::StatusCode::OK, "# Minutes of Meeting (MoM)").await;
+        let output = call_ai_paraphrase_with_knowledge(
+            source, "detail_deskriptif", None, &url, "test-key", "selected-model", &knowledge
+        ).await.unwrap();
+        assert_eq!(output, "# Minutes of Meeting (MoM)");
+        let body = request.await.unwrap();
+        let input = body["messages"][1]["content"].as_str().unwrap();
+        assert!(input.contains("<knowledge_rag>"));
+        assert!(input.contains("Pak Samsut"));
+        assert!(input.contains("Pak Sammut"));
+        server.abort();
+    }
+
+    #[tokio::test]
     async fn mom_rejects_empty_source_before_calling_gateway() {
         assert_eq!(call_ai_paraphrase(" \n ", "detail_deskriptif", None, "invalid", "key", "model").await.unwrap_err(), "Transkrip kosong");
     }
@@ -550,5 +643,12 @@ mod timeout_tests {
         let result = call_chat_completion(&url, "test", "test", "test", "test", 1).await;
         server.abort();
         assert!(result.is_err());
+    }
+    #[tokio::test]
+    async fn unlimited_timeout_zero_allows_long_pause_without_aborting() {
+        let (url, server) = stream_server(1200, 1).await;
+        let result = call_chat_completion(&url, "test", "test", "test", "test", 0).await;
+        server.abort();
+        assert_eq!(result.unwrap(), "x");
     }
 }
